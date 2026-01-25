@@ -7,6 +7,7 @@ import HomePage from './pages/HomePage'
 import FreestylePage from './pages/FreestylePage'
 import LibraryPage from './pages/LibraryPage'
 import DrillsPage from './pages/DrillsPage'
+import ObjectWritingPage from './pages/ObjectWritingPage'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/drills" element={<DrillsPage />} />
+          <Route path="/drills/object-writing" element={<ObjectWritingPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

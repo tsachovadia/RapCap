@@ -1,6 +1,7 @@
 /**
  * Drills Page - Spotify Style
  */
+import { useNavigate } from 'react-router-dom'
 
 const drills = [
     {
@@ -42,6 +43,8 @@ const drills = [
 ]
 
 export default function DrillsPage() {
+    const navigate = useNavigate()
+
     return (
         <div className="pb-8">
             {/* Header with gradient */}
@@ -56,7 +59,8 @@ export default function DrillsPage() {
                 <section className="mb-8">
                     <h2 className="text-base font-bold mb-4">המומלץ היום</h2>
                     <div
-                        className="rounded-lg overflow-hidden"
+                        onClick={() => navigate('/drills/object-writing')}
+                        className="rounded-lg overflow-hidden cursor-pointer transition-transform active:scale-95"
                         style={{ backgroundColor: '#1DB954' }}
                     >
                         <div className="p-6 text-black">
