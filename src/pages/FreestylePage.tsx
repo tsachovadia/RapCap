@@ -5,8 +5,9 @@ import { useState } from 'react'
 
 export default function FreestylePage() {
     const [isRecording, setIsRecording] = useState(false)
-    const [minutes, setMinutes] = useState(0)
-    const [seconds, setSeconds] = useState(0)
+    const [minutes, _setMinutes] = useState(0)
+    const [seconds, _setSeconds] = useState(0)
+
 
     return (
         <div className="pb-8">
