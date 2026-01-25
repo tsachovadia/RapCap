@@ -1,8 +1,6 @@
 /**
  * Dicta Cache Service
- * 3-tier caching: IndexedDB (local) → Supabase (global) → Dicta API
- * 
- * For MVP: Local-only. Supabase integration added when project is set up.
+ * 2-tier caching: IndexedDB (local) + JSON seed file
  */
 
 import type { DictaCacheEntry } from '../types/dicta';
@@ -15,33 +13,56 @@ import {
 } from './db';
 import { fetchWordData } from './dictaApi';
 
-// =========== Supabase Integration (Placeholder) ===========
-// TODO: Add Supabase client when project is created
-// import { supabase } from './supabase';
+// =========== JSON Seed Cache ===========
 
-async function getSupabaseCache(_word: string): Promise<DictaCacheEntry | null> {
-    // TODO: Implement when Supabase is set up
-    // const { data } = await supabase.from('dicta_cache').select('*').eq('vocalized_word', word).single();
-    // return data;
-    return null;
+let jsonCacheLoaded = false;
+
+interface JsonCache {
+    version: number;
+    lastUpdated: string;
+    entries: Record<string, DictaCacheEntry>;
 }
 
-async function saveSupabaseCache(_entry: DictaCacheEntry): Promise<void> {
-    // TODO: Implement when Supabase is set up
-    // await supabase.from('dicta_cache').upsert({ ... });
-}
+/**
+ * Load the JSON seed cache into IndexedDB on first run.
+ */
+async function loadJsonSeedCache(): Promise<void> {
+    if (jsonCacheLoaded) return;
 
-async function incrementSupabaseHitCount(_word: string): Promise<void> {
-    // TODO: Implement when Supabase is set up
+    try {
+        const response = await fetch('/dicta-cache.json');
+        if (!response.ok) {
+            console.warn('No dicta-cache.json found, starting fresh');
+            jsonCacheLoaded = true;
+            return;
+        }
+
+        const data: JsonCache = await response.json();
+
+        // Seed entries into IndexedDB
+        for (const entry of Object.values(data.entries)) {
+            const existing = await getLocalCacheEntry(entry.vocalizedWord);
+            if (!existing) {
+                await saveLocalCacheEntry(entry);
+            }
+        }
+
+        console.log(`Loaded ${Object.keys(data.entries).length} entries from JSON seed cache`);
+        jsonCacheLoaded = true;
+    } catch (error) {
+        console.warn('Failed to load JSON seed cache:', error);
+        jsonCacheLoaded = true;
+    }
 }
 
 // =========== Main Cache Interface ===========
 
 /**
  * Get vocalization options for a raw word.
- * Checks local cache first.
  */
 export async function getCachedVocalizations(rawWord: string): Promise<string[] | null> {
+    await loadJsonSeedCache();
+
     const localEntries = await getLocalCacheByRawWord(rawWord);
     if (localEntries.length > 0) {
         return localEntries[0].vocalizations;
@@ -51,36 +72,25 @@ export async function getCachedVocalizations(rawWord: string): Promise<string[] 
 
 /**
  * Get cached rhyme data for a vocalized word.
- * Uses 3-tier lookup: Local → Supabase → null (cache miss).
  */
 export async function getCachedWord(vocalizedWord: string): Promise<DictaCacheEntry | null> {
-    // 1. Check local IndexedDB
+    await loadJsonSeedCache();
+
     const localEntry = await getLocalCacheEntry(vocalizedWord);
     if (localEntry) {
-        // Update hit count locally
         await updateLocalCacheHit(vocalizedWord);
-        await incrementSupabaseHitCount(vocalizedWord);
         return localEntry;
     }
 
-    // 2. Check Supabase (global cache)
-    const supabaseEntry = await getSupabaseCache(vocalizedWord);
-    if (supabaseEntry) {
-        // Sync to local cache
-        await saveLocalCacheEntry(supabaseEntry);
-        await incrementSupabaseHitCount(vocalizedWord);
-        return supabaseEntry;
-    }
-
-    // 3. Cache miss
     return null;
 }
 
 /**
- * Search for rhymes with full caching.
- * If not cached, fetches from Dicta and caches the result.
+ * Search for rhymes with caching.
  */
 export async function searchWithCache(rawWord: string, vocalizedWord: string): Promise<DictaCacheEntry> {
+    await loadJsonSeedCache();
+
     // Check cache first
     const cached = await getCachedWord(vocalizedWord);
     if (cached) {
@@ -89,25 +99,23 @@ export async function searchWithCache(rawWord: string, vocalizedWord: string): P
 
     // Cache miss: fetch from Dicta API
     const entry = await fetchWordData(rawWord, vocalizedWord);
-
-    // Save to both caches
     await saveLocalCacheEntry(entry);
-    await saveSupabaseCache(entry);
 
     return entry;
 }
 
 /**
- * Get most popular (most searched) words.
+ * Get most popular words.
  */
 export async function getPopularWords(limit: number = 20): Promise<DictaCacheEntry[]> {
+    await loadJsonSeedCache();
     return getPopularWordsLocal(limit);
 }
 
 /**
- * Manually cache a word entry (for preloading/seeding).
+ * Manually cache a word entry.
  */
 export async function cacheWord(entry: DictaCacheEntry): Promise<void> {
     await saveLocalCacheEntry(entry);
-    await saveSupabaseCache(entry);
 }
+
