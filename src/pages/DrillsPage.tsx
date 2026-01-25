@@ -2,43 +2,44 @@
  * Drills Page - Spotify Style
  */
 import { useNavigate } from 'react-router-dom'
+import { Eye, Link2, Waves, BrainCircuit, Play, ChevronLeft } from 'lucide-react'
 
 const drills = [
     {
         id: 'object-writing',
-        title: 'כתיבת אובייקטים',
-        subtitle: 'Object Writing',
+        title: 'Vision', // was Object Writing
+        subtitle: 'התבוננות',
         description: 'שפר את יכולת התיאור והדימויים',
         duration: '10 דק׳',
-        color: '#1DB954',
-        icon: 'psychology'
+        color: 'linear-gradient(135deg, #1DB954 0%, #191414 100%)',
+        icon: Eye
     },
     {
         id: 'rhyme-chains',
-        title: 'שרשרות חרוזים',
-        subtitle: 'Rhyme Chains',
+        title: 'Links', // was Rhyme Chains
+        subtitle: 'שרשרות חרוזים',
         description: 'בנה רצף חרוזים ללא עצירה',
         duration: '5 דק׳',
-        color: '#E91429',
-        icon: 'link'
+        color: 'linear-gradient(135deg, #E91429 0%, #191414 100%)',
+        icon: Link2
     },
     {
         id: 'flow-patterns',
-        title: 'דפוסי פלואו',
-        subtitle: 'Flow Patterns',
+        title: 'Flow', // was Flow Patterns
+        subtitle: 'זרימה',
         description: 'תרגל קצבים ומקצבים שונים',
         duration: '8 דק׳',
-        color: '#1E3264',
-        icon: 'waves'
+        color: 'linear-gradient(135deg, #1E3264 0%, #191414 100%)',
+        icon: Waves
     },
     {
         id: 'word-association',
-        title: 'אסוציאציות',
-        subtitle: 'Word Association',
+        title: 'Spark', // was Word Association
+        subtitle: 'אסוציאציות',
         description: 'קישור מילים מהיר ויצירתי',
         duration: '3 דק׳',
-        color: '#E8115B',
-        icon: 'hub'
+        color: 'linear-gradient(135deg, #E8115B 0%, #191414 100%)',
+        icon: BrainCircuit
     },
 ]
 
@@ -61,28 +62,28 @@ export default function DrillsPage() {
                     <div
                         onClick={() => navigate('/drills/object-writing')}
                         className="rounded-lg overflow-hidden cursor-pointer transition-transform active:scale-95"
-                        style={{ backgroundColor: '#1DB954' }}
+                        style={{ background: 'linear-gradient(135deg, #1DB954 0%, #191414 100%)' }}
                     >
-                        <div className="p-6 text-black">
+                        <div className="p-6 text-white">
                             <div className="flex items-start gap-4">
                                 <div className="w-16 h-16 rounded-lg flex items-center justify-center"
                                     style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                                    <span className="material-symbols-rounded text-4xl">psychology</span>
+                                    <Eye size={32} />
                                 </div>
                                 <div className="flex-1">
-                                    <p className="text-2xs font-bold uppercase tracking-wider opacity-70">יצירתיות</p>
-                                    <h3 className="text-xl font-bold mb-1">כתיבת אובייקטים</h3>
-                                    <p className="text-sm opacity-80">שפר את יכולת התיאור והדימויים</p>
+                                    <p className="text-2xs font-bold uppercase tracking-wider opacity-70">Focus</p>
+                                    <h3 className="text-2xl font-black mb-1 tracking-tight">VISION</h3>
+                                    <p className="text-sm opacity-90 font-medium">שפר את יכולת התיאור</p>
                                 </div>
                             </div>
 
                             <div className="flex items-center justify-between mt-6">
-                                <span className="text-sm font-semibold">10 דקות</span>
+                                <span className="text-sm font-semibold opacity-80">10 דקות</span>
                                 <button
-                                    className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-transform hover:scale-105"
-                                    style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
+                                    className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm text-black transition-transform hover:scale-105"
+                                    style={{ backgroundColor: '#ffffff' }}
                                 >
-                                    <span className="material-symbols-rounded icon-fill">play_arrow</span>
+                                    <Play size={20} fill="currentColor" />
                                     התחל
                                 </button>
                             </div>
@@ -98,18 +99,19 @@ export default function DrillsPage() {
                             <div
                                 key={drill.id}
                                 className="spotify-list-item group cursor-pointer"
+                                onClick={() => navigate(`/drills/${drill.id}`)}
                             >
                                 <div
                                     className="w-12 h-12 rounded flex items-center justify-center shrink-0"
-                                    style={{ backgroundColor: drill.color }}
+                                    style={{ background: drill.color }}
                                 >
-                                    <span className="material-symbols-rounded text-xl">{drill.icon}</span>
+                                    <drill.icon className="text-white" size={24} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold">{drill.title}</p>
-                                    <p className="text-2xs text-subdued">{drill.duration} • {drill.description}</p>
+                                    <p className="text-sm font-bold tracking-wide">{drill.title}</p>
+                                    <p className="text-2xs text-subdued">{drill.subtitle} • {drill.duration}</p>
                                 </div>
-                                <span className="material-symbols-rounded text-subdued">chevron_left</span>
+                                <ChevronLeft className="text-subdued" size={24} />
                             </div>
                         ))}
                     </div>

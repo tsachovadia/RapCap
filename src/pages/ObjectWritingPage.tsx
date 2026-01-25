@@ -5,7 +5,11 @@ import { useState, useEffect } from 'react'
 import { useTimer } from '../hooks/useTimer'
 import { getDrillById, getRandomPrompt, type DrillPrompt } from '../data/drills'
 
+import { useNavigate } from 'react-router-dom'
+import { db } from '../db/db'
+
 export default function ObjectWritingPage() {
+    const navigate = useNavigate()
     const [prompt, setPrompt] = useState<DrillPrompt | null>(null)
     const [showInstructions, setShowInstructions] = useState(true)
     const [text, setText] = useState('')
@@ -24,6 +28,27 @@ export default function ObjectWritingPage() {
     const handleStart = () => {
         setShowInstructions(false)
         start()
+    }
+
+    const handleSave = async () => {
+        try {
+            await db.sessions.add({
+                title: `כתיבת אובייקטים: ${prompt?.word || 'ללא כותרת'}`,
+                createdAt: new Date(),
+                duration: 600 - timeLeft,
+                type: 'drill',
+                subtype: 'object-writing',
+                content: text,
+                metadata: {
+                    prompt: prompt
+                }
+            })
+            alert('האימון נשמר בהצלחה! 💾')
+            navigate('/drills')
+        } catch (e) {
+            console.error('Failed to save drill', e)
+            alert('שגיאה בשמירה')
+        }
     }
 
     return (
@@ -122,8 +147,11 @@ export default function ObjectWritingPage() {
                         <p className="text-subdued mb-8">סיימת 10 דקות של כתיבה יצירתית</p>
 
                         <div className="flex gap-3 w-full max-w-xs">
-                            <button className="flex-1 btn-secondary">
-                                שמור
+                            <button
+                                onClick={handleSave}
+                                className="flex-1 btn-secondary"
+                            >
+                                שמור לארכיון
                             </button>
                             <button className="flex-1 btn-spotify">
                                 שתף

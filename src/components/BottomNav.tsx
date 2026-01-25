@@ -2,12 +2,13 @@
  * Bottom Navigation - Spotify Style
  */
 import { NavLink } from 'react-router-dom'
+import { Home, Mic2, Library, Dumbbell } from 'lucide-react'
 
 const tabs = [
-    { path: '/', icon: 'home', label: 'בית' },
-    { path: '/freestyle', icon: 'mic', label: 'הקלטה' },
-    { path: '/library', icon: 'library_music', label: 'הספריה שלך' },
-    { path: '/drills', icon: 'fitness_center', label: 'אימון' },
+    { path: '/', icon: Home, label: 'בית' },
+    { path: '/freestyle', icon: Mic2, label: 'הקלטה' },
+    { path: '/library', icon: Library, label: 'הספריה שלך' },
+    { path: '/drills', icon: Dumbbell, label: 'אימון' },
 ]
 
 export default function BottomNav() {
@@ -27,14 +28,19 @@ export default function BottomNav() {
                             }`
                         }
                     >
-                        {({ isActive }) => (
-                            <>
-                                <span className={`material-symbols-rounded text-2xl ${isActive ? 'icon-fill' : ''}`}>
-                                    {tab.icon}
-                                </span>
-                                <span className="text-2xs font-medium">{tab.label}</span>
-                            </>
-                        )}
+                        {({ isActive }) => {
+                            const Icon = tab.icon
+                            return (
+                                <>
+                                    <Icon
+                                        size={24}
+                                        strokeWidth={isActive ? 2.5 : 2}
+                                        className={isActive ? 'text-white' : 'text-subdued'}
+                                    />
+                                    <span className="text-2xs font-medium">{tab.label}</span>
+                                </>
+                            )
+                        }}
                     </NavLink>
                 ))}
             </div>

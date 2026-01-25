@@ -1,42 +1,49 @@
-/**
- * Library Page - Spotify Style
- */
 import { useState } from 'react'
-
-const sessions = [
-    { id: 1, title: 'Session מהיום', beat: 'Lo-Fi', bpm: 85, duration: '3:45', date: 'היום', color: '#1DB954' },
-    { id: 2, title: 'Late Night Flow', beat: 'Drill', bpm: 140, duration: '18:20', date: 'אתמול', color: '#535353' },
-    { id: 3, title: 'Morning Practice', beat: 'Old School', bpm: 90, duration: '12:15', date: '22 בינו׳', color: '#E91429' },
-    { id: 4, title: 'Quick Ideas', beat: 'Trap', bpm: 120, duration: '01:45', date: '20 בינו׳', color: '#1E3264' },
-]
+import { useSessions } from '../hooks/useSessions'
+import SessionPlayer from '../components/library/SessionPlayer'
+import { Music, Play, Pause, Trash2 } from 'lucide-react'
 
 export default function LibraryPage() {
+    const { sessions, isLoading, deleteSession } = useSessions()
     const [activeFilter, setActiveFilter] = useState('all')
+    const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
+    const [isPlaying, setIsPlaying] = useState(false)
+
     const filters = [
         { id: 'all', label: 'הכל' },
-        { id: 'recordings', label: 'הקלטות' },
-        { id: 'favorites', label: 'לייקים' },
+        { id: 'freestyle', label: 'הקלטות' },
+        { id: 'drill', label: 'אימונים' },
     ]
 
+    const handlePlayPause = (id: number) => {
+        if (activeSessionId === id) {
+            setIsPlaying(!isPlaying)
+        } else {
+            setActiveSessionId(id)
+            setIsPlaying(true)
+        }
+    }
+
+    const filteredSessions = sessions?.filter(session => {
+        if (activeFilter === 'all') return true
+        return session.type === activeFilter
+    })
+
+    if (isLoading) {
+        return <div className="p-8 text-center text-subdued">טוען ספריה...</div>
+    }
+
     return (
-        <div className="pb-8">
+        <div className="pb-24">
             {/* Header */}
             <header className="sticky top-0 z-40 px-4 py-4" style={{ backgroundColor: '#121212' }}>
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
-                            style={{ backgroundColor: '#535353' }}>
-                            ר
+                            style={{ backgroundColor: '#1DB954', color: '#000' }}>
+                            R
                         </div>
                         <h1 className="text-xl font-bold">הספריה שלך</h1>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button className="w-8 h-8 rounded-full flex items-center justify-center text-subdued hover:text-white transition-colors">
-                            <span className="material-symbols-rounded">search</span>
-                        </button>
-                        <button className="w-8 h-8 rounded-full flex items-center justify-center text-subdued hover:text-white transition-colors">
-                            <span className="material-symbols-rounded">add</span>
-                        </button>
                     </div>
                 </div>
 
@@ -55,46 +62,118 @@ export default function LibraryPage() {
             </header>
 
             <div className="px-4">
-                {/* Sessions List */}
-                <div className="space-y-2">
-                    {sessions.map((session) => (
-                        <div
-                            key={session.id}
-                            className="spotify-list-item group"
-                        >
-                            {/* Thumbnail */}
-                            <div
-                                className="w-12 h-12 rounded flex items-center justify-center shrink-0"
-                                style={{ backgroundColor: session.color }}
-                            >
-                                <span className="material-symbols-rounded text-xl">mic</span>
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold truncate">{session.title}</p>
-                                <p className="text-2xs text-subdued">
-                                    הקלטה • {session.beat} {session.bpm} BPM
-                                </p>
-                            </div>
-
-                            {/* Play Button */}
-                            <button className="btn-play w-10 h-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span className="material-symbols-rounded text-xl icon-fill">play_arrow</span>
-                            </button>
+                {/* Empty State */}
+                {filteredSessions?.length === 0 && (
+                    <div className="text-center py-12">
+                        <div className="w-16 h-16 rounded-full bg-[#282828] mx-auto mb-4 flex items-center justify-center">
+                            <Music className="text-subdued" size={32} />
                         </div>
-                    ))}
-                </div>
-
-                {/* Empty state for playlists */}
-                <div className="mt-8">
-                    <h2 className="text-base font-bold mb-4">צור פלייליסט</h2>
-                    <div className="spotify-card p-5">
-                        <p className="text-subdued text-sm mb-4">קבץ את ההקלטות הטובות שלך לפלייליסט</p>
-                        <button className="btn-spotify text-sm">
-                            צור פלייליסט
-                        </button>
+                        <h3 className="text-lg font-bold mb-1">עדיין אין כאן כלום</h3>
+                        <p className="text-subdued text-sm">התחל להקליט כדי למלא את הספריה שלך</p>
                     </div>
+                )}
+
+                {/* Sessions List */}
+                <div className="space-y-4">
+                    {filteredSessions?.map((session) => {
+                        const isActive = activeSessionId === session.id;
+
+                        return (
+                            <div
+                                key={session.id}
+                                className={`rounded-md p-3 transition-colors ${isActive ? 'bg-[#282828]' : 'hover:bg-[#181818]'}`}
+                            >
+                                <div className="flex items-center gap-3 mb-2" onClick={() => handlePlayPause(session.id)}>
+                                    {/* Thumbnail / Play Button */}
+                                    <div
+                                        className="w-12 h-12 rounded flex items-center justify-center shrink-0 cursor-pointer relative overflow-hidden group"
+                                        style={{ backgroundColor: isActive && isPlaying ? '#1DB954' : '#3E3E3E' }}
+                                    >
+                                        {isActive && isPlaying ? (
+                                            <Pause className="text-black" size={20} fill="currentColor" />
+                                        ) : (
+                                            <Play className="text-white" size={20} fill="currentColor" />
+                                        )}
+                                    </div>
+
+                                    {/* Meta */}
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`text-sm font-semibold truncate ${isActive ? 'text-[#1DB954]' : 'text-white'}`}>
+                                            {session.title}
+                                        </p>
+                                        <div className="flex items-center gap-2 text-2xs text-subdued">
+                                            <span>
+                                                {session.beatId ? 'Freestyle' : 'Drill'} • {new Date(session.createdAt).toLocaleDateString('he-IL')}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteSession(session.id);
+                                        }}
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-subdued hover:text-white"
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                </div>
+
+                                {/* Expanded Content */}
+                                {isActive && (
+                                    <div className="mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        {session.type === 'freestyle' ? (
+                                            <SessionPlayer
+                                                session={session}
+                                                isPlaying={isPlaying}
+                                                onEnded={() => setIsPlaying(false)}
+                                            />
+                                        ) : (
+                                            <div className="bg-[#121212] p-4 rounded border border-[#282828] max-h-60 overflow-y-auto">
+                                                {session.subtype === 'rhyme-chains' ? (
+                                                    <div className="space-y-2">
+                                                        <h4 className="text-xs font-bold uppercase text-subdued mb-2">שרשרת חרוזים</h4>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {(session.content?.split(', ') || []).map((word: string, i: number) => (
+                                                                <span key={i} className="px-3 py-1 bg-[#282828] rounded-full text-sm hover:bg-[#E91429]/20 hover:text-[#E91429] transition-colors cursor-default">
+                                                                    {word}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : session.subtype === 'word-association' ? (
+                                                    <div className="space-y-2">
+                                                        <h4 className="text-xs font-bold uppercase text-subdued mb-2">מסע אסוציאציות</h4>
+                                                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                                                            {(session.content?.split(' → ') || []).map((word: string, i: number, arr: string[]) => (
+                                                                <div key={i} className="flex items-center">
+                                                                    <span className="font-medium text-gray-300">{word}</span>
+                                                                    {i < arr.length - 1 && (
+                                                                        <span className="mx-2 text-subdued">→</span>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : session.subtype === 'flow-patterns' ? (
+                                                    <div className="text-center py-4">
+                                                        <p className="text-lg mb-2">🌊</p>
+                                                        <p className="font-bold text-white">{session.content}</p>
+                                                        <p className="text-xs text-subdued mt-1">
+                                                            {session.metadata?.completed ? 'אימון הושלם בהצלחה' : 'אימון הופסק באמצע'}
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm text-subdued whitespace-pre-wrap">{session.content || 'תוכן האימון חסר'}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         </div>
