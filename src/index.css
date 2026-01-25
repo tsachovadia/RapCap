@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Utilities for PWA */
+@layer utilities {
+  .driver-mode-safe {
+     user-select: none;
+     touch-action: manipulation;
+  }
+}

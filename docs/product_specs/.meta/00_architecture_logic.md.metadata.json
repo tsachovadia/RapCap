@@ -1,0 +1,5 @@
+{
+  "artifactType":  "ARTIFACT_TYPE_IMPLEMENTATION_PLAN",
+  "summary":  "Core architectural decisions including the Session Model and Latency Compensation Logic.",
+  "updatedAt":  "2026-01-09T03:12:21.015956Z"
+}
