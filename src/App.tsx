@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import StudioPage from './pages/StudioPage';
 import LibraryPage from './pages/LibraryPage';
 import NotebookPage from './pages/NotebookPage';
+import { Agentation } from 'agentation';
 
 import { SessionProvider } from './context/SessionContext';
 
@@ -17,9 +18,11 @@ function App() {
           </Routes>
         </div>
       </SessionProvider>
+      {import.meta.env.DEV && <Agentation />}
     </BrowserRouter>
   );
 }
 
 export default App;
+
 
