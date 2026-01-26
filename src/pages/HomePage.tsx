@@ -187,6 +187,11 @@ export default function HomePage() {
                         </button>
                     </div>
                 </section>
+
+                <div className="text-center pb-8 opacity-30 text-[10px] text-subdued font-mono">
+                    <p>RapCap v1.1.0</p>
+                    <p>Last Update: 26/01/26 09:40</p>
+                </div>
             </div>
         </div>
     )
