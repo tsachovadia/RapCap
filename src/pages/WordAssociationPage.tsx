@@ -219,19 +219,31 @@ export default function WordAssociationPage() {
 
                 {/* Finished Overlay */}
                 {isFinished && (
-                    <div className="absolute inset-0 bg-[#121212]/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-50">
-                        <span className="text-6xl mb-4">🧠</span>
-                        <h2 className="text-3xl font-bold mb-2">סשן הסתיים!</h2>
-                        <div className="flex flex-col items-center gap-1 mb-6">
-                            <p className="text-subdued">הגעת לעומק של</p>
-                            <p className="text-5xl font-black text-[#E8115B] my-2">{history.length + 1}</p>
-                            <p className="text-subdued">מחשבות</p>
+                    <div className="absolute inset-0 bg-[#121212]/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-50 animate-in fade-in duration-500">
+                        <span className="text-6xl mb-4 animate-bounce">🧠</span>
+                        <h2 className="text-3xl font-bold mb-1">סשן הסתיים!</h2>
+                        <p className="text-subdued mb-8">המוח שלך עובד מהר היום.</p>
+
+                        <div className="flex gap-6 mb-8">
+                            {/* Score Card 1: Count */}
+                            <div className="bg-[#282828] p-4 rounded-xl min-w-[100px]">
+                                <p className="text-xs text-subdued uppercase">מילים</p>
+                                <p className="text-4xl font-black text-white">{history.length + 1}</p>
+                            </div>
+
+                            {/* Score Card 2: Speed */}
+                            <div className="bg-[#282828] p-4 rounded-xl min-w-[100px] border border-[#E8115B]/30">
+                                <p className="text-xs text-subdued uppercase">קצב (WPM)</p>
+                                <p className="text-4xl font-black text-[#E8115B]">
+                                    {Math.round((history.length + 1) / (180 / 60))}
+                                </p>
+                            </div>
                         </div>
 
                         <div className="flex gap-3 w-full max-w-xs">
                             <button
                                 onClick={handleSave}
-                                className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 px-4 rounded-full flex items-center justify-center gap-2"
+                                className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 px-4 rounded-full flex items-center justify-center gap-2 transition-transform transform hover:scale-105 active:scale-95"
                             >
                                 <Save size={18} />
                                 שמור

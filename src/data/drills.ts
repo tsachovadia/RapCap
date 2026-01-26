@@ -21,35 +21,86 @@ export interface Drill {
     prompts: DrillPrompt[]
 }
 
-// Object Writing prompts - everyday objects for sensory description
+// Object Writing - Sensory Rich
 export const objectWritingPrompts: DrillPrompt[] = [
+    // Original
     { id: 'coffee', word: 'קפה', wordEn: 'Coffee', category: 'object' },
     { id: 'mirror', word: 'מראה', wordEn: 'Mirror', category: 'object' },
     { id: 'keys', word: 'מפתחות', wordEn: 'Keys', category: 'object' },
     { id: 'rain', word: 'גשם', wordEn: 'Rain', category: 'object' },
-    { id: 'phone', word: 'טלפון', wordEn: 'Phone', category: 'object' },
-    { id: 'window', word: 'חלון', wordEn: 'Window', category: 'object' },
-    { id: 'street', word: 'רחוב', wordEn: 'Street', category: 'place' },
-    { id: 'fire', word: 'אש', wordEn: 'Fire', category: 'object' },
-    { id: 'shadow', word: 'צל', wordEn: 'Shadow', category: 'object' },
-    { id: 'clock', word: 'שעון', wordEn: 'Clock', category: 'object' },
-    { id: 'bread', word: 'לחם', wordEn: 'Bread', category: 'object' },
-    { id: 'door', word: 'דלת', wordEn: 'Door', category: 'object' },
-    { id: 'moon', word: 'ירח', wordEn: 'Moon', category: 'object' },
-    { id: 'pen', word: 'עט', wordEn: 'Pen', category: 'object' },
-    { id: 'water', word: 'מים', wordEn: 'Water', category: 'object' },
+
+    // New - Everyday Items
+    { id: 'wallet', word: 'ארנק', wordEn: 'Wallet', category: 'object' },
+    { id: 'shoes', word: 'נעליים', wordEn: 'Shoes', category: 'object' },
+    { id: 'candle', word: 'נר', wordEn: 'Candle', category: 'object' },
+    { id: 'knife', word: 'סכין', wordEn: 'Knife', category: 'object' },
+    { id: 'coin', word: 'מטבע', wordEn: 'Coin', category: 'object' },
+    { id: 'plant', word: 'עציץ', wordEn: 'Potted Plant', category: 'object' },
+    { id: 'ice', word: 'קרח', wordEn: 'Ice', category: 'object' },
+
+    // New - Places / Textures
+    { id: 'sand', word: 'חול', wordEn: 'Sand', category: 'object' },
+    { id: 'rust', word: 'חלודה', wordEn: 'Rust', category: 'object' },
+    { id: 'glass', word: 'זכוכית', wordEn: 'Glass', category: 'object' },
+    { id: 'smoke', word: 'עשן', wordEn: 'Smoke', category: 'object' },
+
+    // New - Nature
+    { id: 'ocean', word: 'אוקיינוס', wordEn: 'Ocean', category: 'place' },
+    { id: 'desert', word: 'מדבר', wordEn: 'Desert', category: 'place' },
+    { id: 'forest', word: 'יער', wordEn: 'Forest', category: 'place' },
+    { id: 'mountain', word: 'הר', wordEn: 'Mountain', category: 'place' },
+
+    // New - Urban
+    { id: 'alley', word: 'סמטה', wordEn: 'Alley', category: 'place' },
+    { id: 'rooftop', word: 'גג', wordEn: 'Rooftop', category: 'place' },
+    { id: 'subway', word: 'רכבת', wordEn: 'Subway', category: 'place' },
+    { id: 'bridge', word: 'גשר', wordEn: 'Bridge', category: 'place' },
 ]
 
-// Word association prompts - abstract concepts
+// Word Association - Abstracts
 export const wordAssociationPrompts: DrillPrompt[] = [
+    // Original
     { id: 'freedom', word: 'חופש', wordEn: 'Freedom', category: 'emotion' },
     { id: 'fear', word: 'פחד', wordEn: 'Fear', category: 'emotion' },
     { id: 'love', word: 'אהבה', wordEn: 'Love', category: 'emotion' },
-    { id: 'power', word: 'כוח', wordEn: 'Power', category: 'emotion' },
+
+    // Concepts
     { id: 'time', word: 'זמן', wordEn: 'Time', category: 'emotion' },
-    { id: 'truth', word: 'אמת', wordEn: 'Truth', category: 'emotion' },
+    { id: 'power', word: 'כוח', wordEn: 'Power', category: 'emotion' },
     { id: 'money', word: 'כסף', wordEn: 'Money', category: 'object' },
-    { id: 'home', word: 'בית', wordEn: 'Home', category: 'place' },
+    { id: 'god', word: 'אלוהים', wordEn: 'God', category: 'emotion' },
+    { id: 'death', word: 'מוות', wordEn: 'Death', category: 'emotion' },
+    { id: 'life', word: 'חיים', wordEn: 'Life', category: 'emotion' },
+    { id: 'war', word: 'מלחמה', wordEn: 'War', category: 'action' },
+    { id: 'peace', word: 'שלום', wordEn: 'Peace', category: 'emotion' },
+
+    // Emotions
+    { id: 'anger', word: 'כעס', wordEn: 'Anger', category: 'emotion' },
+    { id: 'joy', word: 'שמחה', wordEn: 'Joy', category: 'emotion' },
+    { id: 'envy', word: 'קנאה', wordEn: 'Envy', category: 'emotion' },
+    { id: 'regret', word: 'חרטה', wordEn: 'Regret', category: 'emotion' },
+    { id: 'hope', word: 'תקווה', wordEn: 'Hope', category: 'emotion' },
+    { id: 'pride', word: 'גאווה', wordEn: 'Pride', category: 'emotion' },
+
+    // Archetypes
+    { id: 'king', word: 'מלך', wordEn: 'King', category: 'object' },
+    { id: 'soldier', word: 'חייל', wordEn: 'Soldier', category: 'object' },
+    { id: 'child', word: 'ילד', wordEn: 'Child', category: 'object' },
+    { id: 'mother', word: 'אמא', wordEn: 'Mother', category: 'object' },
+]
+
+// Rhyme Chains - Good starters
+export const rhymePrompts: DrillPrompt[] = [
+    { id: 'light', word: 'אור', wordEn: 'Light', category: 'object' },
+    { id: 'hand', word: 'יד', wordEn: 'Hand', category: 'object' },
+    { id: 'game', word: 'משחק', wordEn: 'Game', category: 'object' },
+    { id: 'tomorrow', word: 'מחר', wordEn: 'Tomorrow', category: 'emotion' },
+    { id: 'now', word: 'עכשיו', wordEn: 'Now', category: 'emotion' },
+    { id: 'head', word: 'ראש', wordEn: 'Head', category: 'object' },
+    { id: 'heart', word: 'לב', wordEn: 'Heart', category: 'object' },
+    { id: 'voice', word: 'קול', wordEn: 'Voice', category: 'object' },
+    { id: 'street', word: 'רחוב', wordEn: 'Street', category: 'place' },
+    { id: 'party', word: 'מסיבה', wordEn: 'Party', category: 'action' },
 ]
 
 export const drills: Drill[] = [
@@ -99,7 +150,7 @@ export const drills: Drill[] = [
             'בנה שורה עם החריזה',
             'חזור - מצא חריזה חדשה',
         ],
-        prompts: objectWritingPrompts.slice(0, 6),
+        prompts: rhymePrompts,
     },
     {
         id: 'flow-patterns',

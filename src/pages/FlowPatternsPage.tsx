@@ -1,12 +1,9 @@
-/**
- * Flow Patterns Drill Page
- * Practice different rhyme speeds and patterns over a beat
- */
 import { useState, useEffect } from 'react'
 import { useTimer } from '../hooks/useTimer'
+import { useMetronome } from '../hooks/useMetronome'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
-import { ArrowLeft, Clock, Pause, Play, Waves, Volume2, Save, Share2, SkipForward } from 'lucide-react'
+import { ArrowLeft, Clock, Pause, Play, Waves, Volume2, Save, Share2, SkipForward, Activity } from 'lucide-react'
 import BeatPlayer from '../components/freestyle/BeatPlayer'
 
 // Flow patterns to cycle through
@@ -20,25 +17,26 @@ const FLOW_PATTERNS = [
 export default function FlowPatternsPage() {
     const navigate = useNavigate()
     const [showInstructions, setShowInstructions] = useState(true)
-    const [volume, setVolume] = useState(80)
+    const [beatVolume, setBeatVolume] = useState(80)
     const [isPlayingBeat, setIsPlayingBeat] = useState(false)
     const [currentPatternIndex, setCurrentPatternIndex] = useState(0)
     const [isPlayerReady, setIsPlayerReady] = useState(false)
+
+    // Metronome State
+    const { bpm, setBpm, setIsPlaying: setIsMetronomePlaying } = useMetronome(90)
+    const [useMetronomeMode, setUseMetronomeMode] = useState(false) // Toggle between Beat and Metronome
 
     // Using a classic boom bap beat for flow practice
     // Using 'rNEnT6P4p9U' (Simple Boom Bap) safely.
     const SAFETY_BEAT_ID = 'rNEnT6P4p9U'
 
     // 8 minutes default (480 seconds)
-    const { timeLeft, isRunning, isFinished, start, pause, resume, formatTime } = useTimer(480)
+    const { timeLeft, isRunning, isFinished, start, pause: pauseTimer, resume: resumeTimer, formatTime } = useTimer(480)
 
-    // Change pattern every 60 seconds? Or just manual? 
-    // Let's do auto-change every 30 seconds to keep it dynamic
+    // Change pattern every 45 seconds
     useEffect(() => {
         if (!isRunning || isFinished) return
 
-        // Every 30 seconds of game time (approx), switch pattern
-        // 480 total. 
         const elapsed = 480 - timeLeft
         if (elapsed > 0 && elapsed % 45 === 0) {
             handleSkipPattern()
@@ -48,21 +46,38 @@ export default function FlowPatternsPage() {
     const handleStart = () => {
         setShowInstructions(false)
         setIsPlayingBeat(true)
+        if (useMetronomeMode) setIsMetronomePlaying(true)
         start()
     }
 
     const handlePause = () => {
         setIsPlayingBeat(false)
-        pause()
+        setIsMetronomePlaying(false)
+        pauseTimer()
     }
 
     const handleResume = () => {
         setIsPlayingBeat(true)
-        resume()
+        if (useMetronomeMode) setIsMetronomePlaying(true)
+        resumeTimer()
     }
 
     const handleSkipPattern = () => {
         setCurrentPatternIndex((prev) => (prev + 1) % FLOW_PATTERNS.length)
+    }
+
+    const toggleMetronomeMode = () => {
+        setUseMetronomeMode(!useMetronomeMode)
+        // If we switch, stop the other audio source
+        if (!useMetronomeMode) {
+            // Switching TO Metronome
+            setIsPlayingBeat(false)
+            if (isRunning) setIsMetronomePlaying(true)
+        } else {
+            // Switching TO Beat
+            setIsMetronomePlaying(false)
+            if (isRunning) setIsPlayingBeat(true)
+        }
     }
 
     const handleSave = async () => {
@@ -75,7 +90,9 @@ export default function FlowPatternsPage() {
                 subtype: 'flow-patterns',
                 content: 'אימון פלואו - הושלם',
                 metadata: {
-                    completed: true
+                    completed: true,
+                    usedMetronome: useMetronomeMode,
+                    bpm: bpm
                 }
             })
             navigate('/drills')
@@ -85,14 +102,20 @@ export default function FlowPatternsPage() {
         }
     }
 
-    // Stop beat when component unmounts
+    // Cleanup
     useEffect(() => {
-        return () => setIsPlayingBeat(false)
+        return () => {
+            setIsPlayingBeat(false)
+            setIsMetronomePlaying(false)
+        }
     }, [])
 
-    // Stop beat when finished
+    // Stop all when finished
     useEffect(() => {
-        if (isFinished) setIsPlayingBeat(false)
+        if (isFinished) {
+            setIsPlayingBeat(false)
+            setIsMetronomePlaying(false)
+        }
     }, [isFinished])
 
     const currentPattern = FLOW_PATTERNS[currentPatternIndex]
@@ -147,24 +170,14 @@ export default function FlowPatternsPage() {
                     <div className="absolute opacity-0 pointer-events-none w-1 h-1 overflow-hidden">
                         <BeatPlayer
                             videoId={SAFETY_BEAT_ID}
-                            isPlaying={isPlayingBeat}
-                            volume={volume}
+                            isPlaying={isPlayingBeat && !useMetronomeMode}
+                            volume={beatVolume}
                             onReady={() => setIsPlayerReady(true)}
                         />
                     </div>
 
                     {!showInstructions && !isFinished && (
-                        <div className="w-full max-w-md text-center space-y-12 animate-in fade-in duration-500">
-
-                            {/* Floating Indicators */}
-                            <div className="flex justify-center gap-1 mb-8 opacity-50">
-                                {FLOW_PATTERNS.map((_, idx) => (
-                                    <div
-                                        key={idx}
-                                        className={`h-1 rounded-full transition-all duration-300 ${idx === currentPatternIndex ? 'w-8 bg-white' : 'w-2 bg-gray-600'}`}
-                                    />
-                                ))}
-                            </div>
+                        <div className="w-full max-w-md text-center space-y-8 animate-in fade-in duration-500">
 
                             {/* Main Pattern Instruction */}
                             <div key={currentPatternIndex} className="animate-in zoom-in-90 slide-in-from-bottom-4 duration-500">
@@ -177,8 +190,59 @@ export default function FlowPatternsPage() {
                                 </p>
                             </div>
 
+                            {/* Beat / Metronome Control Panel */}
+                            <div className="bg-[#181818]/80 backdrop-blur-md p-4 rounded-xl border border-[#282828] w-full">
+                                <div className="flex items-center justify-center gap-4 mb-4">
+                                    <button
+                                        onClick={toggleMetronomeMode}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${!useMetronomeMode ? 'bg-white text-black' : 'bg-[#282828] text-subdued'}`}
+                                    >
+                                        <Volume2 size={14} />
+                                        ביט
+                                    </button>
+                                    <button
+                                        onClick={toggleMetronomeMode}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${useMetronomeMode ? 'bg-[#E8115B] text-white' : 'bg-[#282828] text-subdued'}`}
+                                    >
+                                        <Activity size={14} />
+                                        מטרונום
+                                    </button>
+                                </div>
+
+                                {useMetronomeMode ? (
+                                    <div className="flex flex-col gap-2 animate-in fade-in">
+                                        <div className="flex items-center justify-between text-xs text-subdued">
+                                            <span>BPM (קצב)</span>
+                                            <span className="font-mono text-accent text-base">{bpm}</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="60" max="160" step="5"
+                                            value={bpm}
+                                            onChange={(e) => setBpm(Number(e.target.value))}
+                                            className="w-full accent-[#E8115B] h-2 bg-[#282828] rounded-lg appearance-none cursor-pointer"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2 animate-in fade-in">
+                                        <div className="flex items-center justify-between text-xs text-subdued">
+                                            <span>ווליום ביט</span>
+                                            <span>{beatVolume}%</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0" max="100"
+                                            value={beatVolume}
+                                            onChange={(e) => setBeatVolume(Number(e.target.value))}
+                                            className="w-full accent-white h-2 bg-[#282828] rounded-lg appearance-none cursor-pointer"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+
                             {/* Controls */}
-                            <div className="pt-12 flex flex-col items-center gap-6">
+                            <div className="flex flex-col items-center gap-6">
                                 <button
                                     onClick={handleSkipPattern}
                                     className="px-6 py-2 rounded-full border border-gray-700 hover:bg-gray-800 text-sm font-bold flex items-center gap-2 transition-colors"
@@ -186,19 +250,6 @@ export default function FlowPatternsPage() {
                                     <SkipForward size={16} />
                                     החלף תבנית
                                 </button>
-
-                                {/* Volume Slider */}
-                                <div className="w-64 bg-[#282828] rounded-full p-2 flex items-center gap-3">
-                                    <Volume2 size={16} className="text-subdued" />
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        value={volume}
-                                        onChange={(e) => setVolume(Number(e.target.value))}
-                                        className="flex-1 accent-white h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-                                    />
-                                </div>
                             </div>
                         </div>
                     )}
@@ -216,7 +267,7 @@ export default function FlowPatternsPage() {
                         <ul className="text-right space-y-4 mb-8 max-w-xs text-sm">
                             <li className="flex gap-3 items-start">
                                 <span className="bg-[#1E3264] w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5">1</span>
-                                <span className="text-gray-300">הביט יתחיל להתנגן ברקע</span>
+                                <span className="text-gray-300">בחר לעבוד עם ביט או מטרונום</span>
                             </li>
                             <li className="flex gap-3 items-start">
                                 <span className="bg-[#1E3264] w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5">2</span>
@@ -224,7 +275,7 @@ export default function FlowPatternsPage() {
                             </li>
                             <li className="flex gap-3 items-start">
                                 <span className="bg-[#1E3264] w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5">3</span>
-                                <span className="text-gray-300">נסה להתאים את הראפ שלך להנחיה</span>
+                                <span className="text-gray-300">החלף בין מהירויות (Double Time / Half Time)</span>
                             </li>
                         </ul>
 
