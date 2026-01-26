@@ -3,14 +3,17 @@
  */
 import { useNavigate } from 'react-router-dom'
 import { useSessions } from '../hooks/useSessions'
-import { Mic, Eye, Bell, Settings, Music, Play, Link2, BrainCircuit, Waves } from 'lucide-react'
+import { Mic, Eye, Bell, Music, Play, Link2, BrainCircuit, Waves } from 'lucide-react'
 import { drills } from '../data/drills'
 
 
+import { useProfile } from '../hooks/useProfile'
+
 export default function HomePage() {
     const navigate = useNavigate()
-    const greeting = getGreeting()
     const { sessions } = useSessions()
+    const { profile } = useProfile()
+    const greeting = getGreeting(profile.name)
 
     // Get recent items (last 4 sessions)
     const recentSessions = sessions?.slice(0, 4) || []
@@ -38,14 +41,15 @@ export default function HomePage() {
                             <span className="text-lg">🔥</span>
                             <span className="text-sm font-bold font-mono">{streak}</span>
                         </div>
-                        <button className="w-8 h-8 rounded-full flex items-center justify-center text-subdued hover:text-white hover:bg-white/10 transition-colors">
+                        <button className="btn-icon">
                             <Bell size={20} />
                         </button>
                         <button
                             onClick={() => navigate('/settings')}
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-subdued hover:text-white hover:bg-white/10 transition-colors"
+                            className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-black border-2 border-transparent hover:border-white transition-all transform hover:scale-105"
+                            style={{ backgroundColor: profile.avatarColor }}
                         >
-                            <Settings size={20} />
+                            {profile.name[0].toUpperCase()}
                         </button>
                     </div>
                 </div>
@@ -188,12 +192,15 @@ export default function HomePage() {
     )
 }
 
-function getGreeting() {
+function getGreeting(name: string) {
     const hour = new Date().getHours()
-    if (hour < 5) return 'לילה טוב'
-    if (hour < 12) return 'בוקר טוב'
-    if (hour < 18) return 'צהריים טובים'
-    return 'ערב טוב'
+    let timeGreeting = ''
+    if (hour < 5) timeGreeting = 'לילה טוב'
+    else if (hour < 12) timeGreeting = 'בוקר טוב'
+    else if (hour < 18) timeGreeting = 'צהריים טובים'
+    else timeGreeting = 'ערב טוב'
+
+    return `${timeGreeting}, ${name}`
 }
 
 function formatDate(date: Date) {

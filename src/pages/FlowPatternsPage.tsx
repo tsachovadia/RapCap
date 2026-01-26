@@ -103,7 +103,7 @@ export default function FlowPatternsPage() {
             <header className="flex items-center justify-between px-4 py-3 shrink-0 bg-[#121212] border-b border-[#282828]">
                 <button
                     onClick={() => navigate('/drills')}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-subdued hover:text-white transition-colors"
+                    className="btn-icon"
                 >
                     <ArrowLeft size={24} />
                 </button>
@@ -128,7 +128,7 @@ export default function FlowPatternsPage() {
                     {!showInstructions && !isFinished && (
                         <button
                             onClick={isRunning ? handlePause : handleResume}
-                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-[#282828]"
+                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-[#282828] transition-colors"
                         >
                             {isRunning ? <Pause size={24} /> : <Play size={24} />}
                         </button>
@@ -254,7 +254,7 @@ export default function FlowPatternsPage() {
                                 <Save size={18} />
                                 סיים
                             </button>
-                            <button className="flex-1 bg-[#282828] hover:bg-[#3E3E3E] text-white font-bold py-3 px-4 rounded-full flex items-center justify-center gap-2">
+                            <button className="flex-1 btn-secondary">
                                 <Share2 size={18} />
                                 שתף
                             </button>

@@ -2,6 +2,7 @@
  * RapCap - Main App Component
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import AppLayout from './layouts/AppLayout'
 import HomePage from './pages/HomePage'
 import FreestylePage from './pages/FreestylePage'
@@ -18,6 +19,19 @@ import FlowPatternsPage from './pages/FlowPatternsPage'
 
 
 export default function App() {
+  // Request mic permission on app load
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        console.log('Microphone permission granted')
+        // We can stop the tracks immediately; we just wanted the permission grant
+        stream.getTracks().forEach(track => track.stop())
+      })
+      .catch(err => {
+        console.warn('Microphone permission denied or ignored', err)
+      })
+  }, [])
+
   return (
     <BrowserRouter>
       <Routes>

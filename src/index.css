@@ -82,6 +82,57 @@ body {
   background-color: #1ed760;
 }
 
+
+/* Spotify Button - Secondary */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 32px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background-color: #282828;
+  color: #FFFFFF;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: #3E3E3E;
+  transform: scale(1.04);
+}
+
+.btn-secondary:active {
+  transform: scale(1);
+}
+
+/* Spotify Icon Button */
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #B3B3B3;
+  /* text-subdued */
+  transition: all 0.2s;
+  background-color: transparent;
+}
+
+.btn-icon:hover {
+  color: #FFFFFF;
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.05);
+}
+
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
 /* Spotify Card */
 .spotify-card {
   padding: 16px;

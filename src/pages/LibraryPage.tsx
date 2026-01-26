@@ -3,8 +3,11 @@ import { useSessions } from '../hooks/useSessions'
 import SessionPlayer from '../components/library/SessionPlayer'
 import { Music, Play, Pause, Trash2 } from 'lucide-react'
 
+import { useProfile } from '../hooks/useProfile'
+
 export default function LibraryPage() {
     const { sessions, isLoading, deleteSession } = useSessions()
+    const { profile } = useProfile()
     const [activeFilter, setActiveFilter] = useState('all')
     const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -39,10 +42,13 @@ export default function LibraryPage() {
             <header className="sticky top-0 z-40 px-4 py-4" style={{ backgroundColor: '#121212' }}>
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
-                            style={{ backgroundColor: '#1DB954', color: '#000' }}>
-                            R
-                        </div>
+                        <button
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-black border border-transparent hover:scale-105 transition-transform"
+                            style={{ backgroundColor: profile.avatarColor }}
+                            onClick={() => { /* Navigate to settings? */ }}
+                        >
+                            {profile.name[0].toUpperCase()}
+                        </button>
                         <h1 className="text-xl font-bold">הספריה שלך</h1>
                     </div>
                 </div>
@@ -53,7 +59,7 @@ export default function LibraryPage() {
                         <button
                             key={filter.id}
                             onClick={() => setActiveFilter(filter.id)}
-                            className={`spotify-chip shrink-0 ${activeFilter === filter.id ? 'active' : ''}`}
+                            className={`spotify-chip shrink-0 hover:bg-white/20 transition-colors ${activeFilter === filter.id ? 'active' : ''}`}
                         >
                             {filter.label}
                         </button>
@@ -114,9 +120,9 @@ export default function LibraryPage() {
                                             e.stopPropagation();
                                             deleteSession(session.id);
                                         }}
-                                        className="w-8 h-8 rounded-full flex items-center justify-center text-subdued hover:text-white"
+                                        className="btn-icon w-8 h-8"
                                     >
-                                        <Trash2 size={20} />
+                                        <Trash2 size={18} />
                                     </button>
                                 </div>
 

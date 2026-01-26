@@ -180,7 +180,7 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
     }
 
     return (
-        <div className="flex flex-col w-full gap-4">
+        <div className="flex flex-col w-full gap-6 bg-[#181818] p-4 rounded-xl border border-[#282828]">
             {/* Hidden stuff */}
             <audio
                 ref={audioRef}
@@ -204,65 +204,83 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
                 </div>
             )}
 
-            {/* Playback Controls */}
-            <div className="flex items-center gap-2 w-full">
-                <span className="text-2xs text-subdued w-8 text-right font-mono">
-                    {formatTime(currentTime)}
-                </span>
+            {/* TRACK 1: BEAT */}
+            <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs text-subdued uppercase tracking-wider font-bold">
+                    <div className="flex items-center gap-2">
+                        <Music size={14} className="text-[#1DB954]" />
+                        <span>Beat Track</span>
+                    </div>
+                </div>
+                {/* Beat Progress Bar */}
+                <div className="relative w-full h-8 flex items-center group">
+                    {/* We use the same progress for now as they are synced, 
+                         but visually separating them gives the 'studio' feel */}
+                    <div className="absolute inset-0 bg-[#282828] rounded-lg overflow-hidden">
+                        <div
+                            className="h-full bg-[#1DB954]/20 transition-all duration-100 ease-linear"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+                    {/* Beat Volume Inside Track */}
+                    <input
+                        type="range"
+                        min="0" max="100"
+                        value={beatVolume}
+                        onChange={(e) => setBeatVolume(Number(e.target.value))}
+                        className="absolute right-2 w-20 h-1 accent-[#1DB954] bg-white/10 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Beat Volume"
+                    />
+                </div>
+            </div>
 
-                <div className="flex-1 h-8 flex items-center group">
+            {/* TRACK 2: VOCALS */}
+            <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs text-subdued uppercase tracking-wider font-bold">
+                    <div className="flex items-center gap-2">
+                        <Mic size={14} className="text-[#E50914]" />
+                        <span>Vocals</span>
+                    </div>
+                    <span>{formatTime(currentTime)} / {formatTime(session.duration)}</span>
+                </div>
+
+                <div className="relative w-full h-12 flex items-center group">
                     <input
                         type="range"
                         min="0"
                         max="100"
                         value={progress || 0}
                         onChange={handleSeek}
-                        className="w-full h-1 bg-[#535353] rounded-lg appearance-none cursor-pointer accent-white"
-                        style={{
-                            background: `linear-gradient(to right, #1DB954 ${progress}%, #535353 ${progress}%)`
-                        }}
+                        className="relative z-10 w-full h-full opacity-0 cursor-pointer"
                     />
-                </div>
-
-                <span className="text-2xs text-subdued w-8 font-mono">
-                    {formatTime(session.duration)}
-                </span>
-            </div>
-
-            {/* Mixer Controls */}
-            <div className="flex items-center justify-around px-4 py-2 bg-[#181818] rounded-lg border border-[#282828]">
-                {/* Vocals Volume */}
-                <div className="flex flex-col items-center gap-1 w-1/3">
-                    <div className="flex items-center gap-1 text-xs text-subdued mb-1">
-                        <Mic size={16} />
-                        ווקאל
+                    {/* Custom Vocal Visualizer Background */}
+                    <div className="absolute inset-0 bg-[#282828] rounded-lg overflow-hidden flex items-center">
+                        {/* Fake Waveform Pattern */}
+                        <div className="w-full h-1/2 flex items-center justify-center gap-0.5 opacity-30">
+                            {Array.from({ length: 40 }).map((_, i) => (
+                                <div key={i} className="w-1 bg-white rounded-full" style={{ height: `${Math.random() * 100}%` }} />
+                            ))}
+                        </div>
+                        {/* Progress Overlay */}
+                        <div
+                            className="absolute inset-0 bg-[#E50914]/30 border-r-2 border-[#E50914] transition-all duration-100 ease-linear"
+                            style={{ width: `${progress}%` }}
+                        />
                     </div>
+                    {/* Vocal Volume Inside Track */}
                     <input
                         type="range"
                         min="0" max="100"
                         value={vocalVolume}
                         onChange={(e) => setVocalVolume(Number(e.target.value))}
-                        className="w-full accent-white h-1 bg-[#535353] rounded-full"
-                    />
-                </div>
-
-                <div className="w-px h-8 bg-[#3E3E3E]"></div>
-
-                {/* Beat Volume */}
-                <div className="flex flex-col items-center gap-1 w-1/3">
-                    <div className="flex items-center gap-1 text-xs text-subdued mb-1">
-                        <Music size={16} />
-                        ביט
-                    </div>
-                    <input
-                        type="range"
-                        min="0" max="100"
-                        value={beatVolume}
-                        onChange={(e) => setBeatVolume(Number(e.target.value))}
-                        className="w-full accent-white h-1 bg-[#535353] rounded-full"
+                        className="absolute right-2 z-20 w-20 h-1 accent-[#E50914] bg-white/10 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Vocal Volume"
                     />
                 </div>
             </div>
+
+            {/* Global Play/Pause happens via parent button usually, 
+                but here we visualize the tracks */}
         </div>
     )
 }

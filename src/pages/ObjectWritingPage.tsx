@@ -56,7 +56,7 @@ export default function ObjectWritingPage() {
             {/* Header */}
             <header className="flex items-center justify-between px-4 py-3 shrink-0"
                 style={{ backgroundColor: '#121212' }}>
-                <button className="w-10 h-10 rounded-full flex items-center justify-center text-subdued hover:text-white transition-colors">
+                <button className="btn-icon">
                     <span className="material-symbols-rounded">arrow_back</span>
                 </button>
                 <h1 className="text-base font-bold">כתיבת אובייקטים</h1>

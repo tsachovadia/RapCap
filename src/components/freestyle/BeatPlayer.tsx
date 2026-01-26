@@ -17,12 +17,13 @@ export default function BeatPlayer({ videoId, isPlaying, onReady, onStateChange,
         width: '100%',
         playerVars: {
             autoplay: 0,
-            controls: 1, // Show controls so user can scrub if needed
-            disablekb: 1,
+            controls: 0, // Hide controls to force sync via our UI
+            disablekb: 1, // Disable keyboard shortcuts
             fs: 0,
             modestbranding: 1,
-            playsinline: 1, // Critical for mobile
-            origin: window.location.origin, // Important for some restrictions
+            playsinline: 1,
+            origin: window.location.origin,
+            rel: 0, // Don't show related videos on pause
         },
     };
 

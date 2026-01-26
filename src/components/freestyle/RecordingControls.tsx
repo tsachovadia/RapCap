@@ -102,9 +102,9 @@ export default function RecordingControls({ isRecording, isWaiting, onToggleReco
                 {isWaiting ? (
                     <div className="w-8 h-8 border-4 border-[#121212] border-t-transparent rounded-full animate-spin"></div>
                 ) : isRecording ? (
-                    <div className="w-8 h-8 rounded-sm bg-[#121212]" />
+                    <div className="w-8 h-8 rounded-sm bg-[#121212] animate-pulse" />
                 ) : (
-                    <div className="w-8 h-8 rounded-full bg-[#E50914]" />
+                    <div className="w-8 h-8 rounded-full bg-[#E50914] shadow-lg shadow-red-500/20" />
                 )}
             </button>
         </div>
