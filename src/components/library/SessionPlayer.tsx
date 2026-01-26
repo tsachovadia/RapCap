@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import YouTube, { type YouTubeProps } from 'react-youtube'
-import { Mic, Music } from 'lucide-react'
+import YouTube from 'react-youtube'
+import { ChevronLeft, ChevronRight, Download, Share2 } from 'lucide-react'
+import MomentsList from './MomentsList'
+import WaveformTrack from './WaveformTrack'
+import LyricsDisplay from './LyricsDisplay'
 
 interface SessionPlayerProps {
     session: {
@@ -8,6 +11,7 @@ interface SessionPlayerProps {
         beatId?: string
         duration: number
         syncOffset?: number
+        metadata?: any
     }
     isPlaying: boolean
     onEnded: () => void
@@ -18,12 +22,20 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
     const youtubeRef = useRef<any>(null)
 
     // State
-    const [progress, setProgress] = useState(0)
     const [currentTime, setCurrentTime] = useState(0)
-    const [vocalVolume, setVocalVolume] = useState(100)
-    const [beatVolume, setBeatVolume] = useState(30) // Lower beat volume by default so vocals pop
 
-    // Setup Audio
+    // Waveform State
+    const [audioPeaks, setAudioPeaks] = useState<number[]>([])
+    const [isProcessingAudio, setIsProcessingAudio] = useState(false)
+
+    // Sync State
+    const [syncOffset, setSyncOffset] = useState(session.syncOffset || 0) // in ms
+    const [isDraggingSync, setIsDraggingSync] = useState(false)
+    const dragStartX = useRef<number>(0)
+    const dragStartOffset = useRef<number>(0)
+    const trackRef = useRef<HTMLDivElement>(null)
+
+    // Setup Audio & Decode Peaks
     useEffect(() => {
         if (!session.blob) return
 
@@ -31,256 +43,354 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
         if (audioRef.current) {
             audioRef.current.src = url
         }
+
+        // Decode for Waveform
+        const decodeAudio = async () => {
+            setIsProcessingAudio(true)
+            try {
+                const arrayBuffer = await session.blob!.arrayBuffer()
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+                const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+
+                // Extract Peak Data
+                const rawData = audioBuffer.getChannelData(0) // Left channel
+                const samples = 200 // Desired resolution
+                const blockSize = Math.floor(rawData.length / samples)
+                const peaks = []
+
+                for (let i = 0; i < samples; i++) {
+                    const start = i * blockSize
+                    let sum = 0
+                    // Optimization: Skip samples to speed up large files
+                    // Stride of 50-100 is visually indistinguishable for a UI waveform
+                    const stride = Math.floor(blockSize / 50) || 1
+                    let count = 0
+
+                    for (let j = 0; j < blockSize; j += stride) {
+                        sum += Math.abs(rawData[start + j])
+                        count++
+                    }
+                    peaks.push(sum / count)
+                }
+
+                // Normalize
+                const max = Math.max(...peaks)
+                const normalized = peaks.map(p => p / max)
+                setAudioPeaks(normalized)
+            } catch (e) {
+                console.error("Audio Decode Failed", e)
+            } finally {
+                setIsProcessingAudio(false)
+            }
+        }
+
+        decodeAudio()
+
         return () => URL.revokeObjectURL(url)
     }, [session.blob])
 
     if (!session.blob) return null
 
-    // Controls Logic
+    // Volume State
+    const [vocalVolume, setVocalVolume] = useState(1.0)
+    const [beatVolume, setBeatVolume] = useState(100)
+
+    // Apply Volume Changes
     useEffect(() => {
-        const audio = audioRef.current
-        const yt = youtubeRef.current
+        if (audioRef.current) audioRef.current.volume = vocalVolume
+    }, [vocalVolume])
 
-        if (isPlaying) {
-            // Master Strategy:
-            // 1. If we have a beat, PLAY BEAT FIRST.
-            // 2. Wait for beat to actually start (via onStateChange) -> Then play Audio.
-            // 3. If no beat, just play audio.
-
-            if (session.beatId && yt) {
-                try { yt.playVideo() } catch (e) { }
-                // Audio play is handled in onStateChange(1) below
-            } else {
-                // No beat? Just play audio (Skip dead air if any)
-                const offsetSeconds = (session.syncOffset || 0) / 1000
-                if (audio) {
-                    audio.currentTime = offsetSeconds
-                    audio.play()
-                }
-            }
-        } else {
-            audio?.pause()
-            try { yt?.pauseVideo() } catch (e) { }
+    useEffect(() => {
+        if (youtubeRef.current && typeof youtubeRef.current.setVolume === 'function') {
+            youtubeRef.current.setVolume(beatVolume)
         }
-    }, [isPlaying, session.beatId])
+    }, [beatVolume])
 
-    // Master Clock Loop
+    // --- Master Clock & Sync Loop ---
     useEffect(() => {
         let animationFrame: number
 
         const loop = () => {
             animationFrame = requestAnimationFrame(loop)
 
+            // If playing, sync Audio to YouTube (Master)
             if (isPlaying && youtubeRef.current && typeof youtubeRef.current.getCurrentTime === 'function') {
                 const ytTime = youtubeRef.current.getCurrentTime()
-                const offsetSeconds = (session.syncOffset || 0) / 1000
+                setCurrentTime(ytTime)
+
+                // Sync Logic
+                // Audio Time = YT Time - (Offset / 1000)
+                const offsetSeconds = syncOffset / 1000
                 const targetAudioTime = ytTime - offsetSeconds
                 const audio = audioRef.current
 
                 if (audio) {
-                    // Update UI Progress
-                    setCurrentTime(targetAudioTime > 0 ? targetAudioTime : 0)
-                    const total = session.duration || 1
-                    setProgress(((targetAudioTime > 0 ? targetAudioTime : 0) / total) * 100)
-
-                    // Sync Audio
                     if (targetAudioTime < 0) {
-                        // We are in the Pre-Roll / Intro
+                        // Wait for cue
                         if (!audio.paused) {
                             audio.pause()
                             audio.currentTime = 0
                         }
+                    } else if (targetAudioTime >= audio.duration) {
+                        // End of audio
+                        if (!audio.paused) audio.pause()
                     } else {
-                        // We are in the Vocal part
+                        // Should be playing
                         if (audio.paused) {
                             audio.currentTime = targetAudioTime
                             audio.play()
                         } else {
-                            // Drift Correction (if drift > 0.1s)
-                            if (Math.abs(audio.currentTime - targetAudioTime) > 0.15) {
-                                console.log('🔄 Re-syncing drift', Math.abs(audio.currentTime - targetAudioTime))
+                            // Drift Correction
+                            if (Math.abs(audio.currentTime - targetAudioTime) > 0.1) {
                                 audio.currentTime = targetAudioTime
                             }
                         }
                     }
                 }
+            } else if (isPlaying && !session.beatId && audioRef.current) {
+                // Freestyle with NO Beat (Master = Audio)
+                setCurrentTime(audioRef.current.currentTime)
             }
         }
 
-        if (isPlaying) {
-            loop()
+        if (isPlaying) loop()
+        else {
+            audioRef.current?.pause()
+            youtubeRef.current?.pauseVideo()
         }
 
         return () => cancelAnimationFrame(animationFrame)
-    }, [isPlaying, session.syncOffset, session.duration])
+    }, [isPlaying, syncOffset, session.beatId])
 
-    // State Change (Initial Play Trigger only)
-    const handlePlayerStateChange = () => {
-        // We rely on the loop for sync, but we use this to catch the initial "Play" command
-        // effectively handled by the useEffect above monitoring [isPlaying]
+    // --- Drag Logic ---
+    const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+        setIsDraggingSync(true)
+        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX
+        dragStartX.current = clientX
+        dragStartOffset.current = syncOffset
     }
 
-    // Sync Check (Optional: Resync every few seconds? For now just Play/Pause together)
+    const handleDragMove = (e: MouseEvent | TouchEvent) => {
+        if (!isDraggingSync || !trackRef.current) return
 
-    // Volume Management
+        const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX
+        const deltaPixels = clientX - dragStartX.current
+
+        // Convert Pixels to Time
+        const containerWidth = trackRef.current.offsetWidth
+        const msPerPixel = (session.duration * 1000) / containerWidth
+        const deltaMs = deltaPixels * msPerPixel
+
+        setSyncOffset(dragStartOffset.current + deltaMs)
+    }
+
+    const handleDragEnd = () => {
+        setIsDraggingSync(false)
+        console.log('Saved Offset:', syncOffset)
+    }
+
     useEffect(() => {
-        if (audioRef.current) audioRef.current.volume = vocalVolume / 100
-    }, [vocalVolume])
-
-    // Volume Management
-    useEffect(() => {
-        if (audioRef.current) audioRef.current.volume = vocalVolume / 100
-    }, [vocalVolume])
-
-    useEffect(() => {
-        if (youtubeRef.current) youtubeRef.current.setVolume(beatVolume)
-    }, [beatVolume])
-
-
-    // Time Update (Driven by Audio)
-    const handleTimeUpdate = () => {
-        if (audioRef.current) {
-            const current = audioRef.current.currentTime
-            const total = audioRef.current.duration || session.duration || 1
-            setCurrentTime(current)
-            setProgress((current / total) * 100)
+        if (isDraggingSync) {
+            window.addEventListener('mousemove', handleDragMove)
+            window.addEventListener('touchmove', handleDragMove)
+            window.addEventListener('mouseup', handleDragEnd)
+            window.addEventListener('touchend', handleDragEnd)
         }
+        return () => {
+            window.removeEventListener('mousemove', handleDragMove)
+            window.removeEventListener('touchmove', handleDragMove)
+            window.removeEventListener('mouseup', handleDragEnd)
+            window.removeEventListener('touchend', handleDragEnd)
+        }
+    }, [isDraggingSync, session.duration])
+
+    // Manual Seek
+    const handleTimelineClick = (e: React.MouseEvent) => {
+        if (isDraggingSync) return
+
+        const rect = e.currentTarget.getBoundingClientRect()
+        const clickX = e.clientX - rect.left
+        const percent = clickX / rect.width
+        const targetTime = percent * session.duration
+
+        if (youtubeRef.current) youtubeRef.current.seekTo(targetTime)
+        if (audioRef.current) audioRef.current.currentTime = Math.max(0, targetTime - syncOffset / 1000)
     }
 
-    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newProgress = Number(e.target.value)
-        const total = audioRef.current?.duration || session.duration || 1
-        const seekTime = (newProgress / 100) * total
-
-        // Seek Audio
-        if (audioRef.current) {
-            audioRef.current.currentTime = seekTime
-        }
-        // Seek YouTube
-        if (youtubeRef.current) {
-            youtubeRef.current.seekTo(seekTime)
-        }
-
-        setProgress(newProgress)
+    const handleDownload = () => {
+        if (!session.blob) return
+        const url = URL.createObjectURL(session.blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `recording-${new Date().toISOString()}.webm`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
-    // YouTube Opts
-    const ytOpts: YouTubeProps['opts'] = {
-        height: '0',
-        width: '0', // Hidden player for playback
-        playerVars: {
-            autoplay: 0,
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            playsinline: 1,
-            start: 0,
-            origin: window.location.origin,
-        },
-    }
+    const moments = session.metadata?.moments || []
 
     return (
-        <div className="flex flex-col w-full gap-6 bg-[#181818] p-4 rounded-xl border border-[#282828]">
-            {/* Hidden stuff */}
-            <audio
-                ref={audioRef}
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={() => {
-                    onEnded()
-                    setProgress(0)
-                }}
-            />
-            {session.beatId && (
-                <div className="fixed top-0 left-0 w-1 h-1 pointer-events-none opacity-0 z-[-1]">
-                    <YouTube
-                        videoId={session.beatId}
-                        opts={ytOpts}
-                        onReady={(e) => {
-                            youtubeRef.current = e.target
-                            e.target.setVolume(beatVolume)
-                        }}
-                        onStateChange={handlePlayerStateChange}
-                    />
-                </div>
-            )}
+        <div className="flex flex-col w-full gap-4 bg-[#181818] p-4 rounded-xl border border-[#282828] select-none">
+            <audio ref={audioRef} onEnded={onEnded} />
 
-            {/* TRACK 1: BEAT */}
-            <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between text-xs text-subdued uppercase tracking-wider font-bold">
-                    <div className="flex items-center gap-2">
-                        <Music size={14} className="text-[#1DB954]" />
-                        <span>Beat Track</span>
-                    </div>
-                </div>
-                {/* Beat Progress Bar */}
-                <div className="relative w-full h-8 flex items-center group">
-                    {/* We use the same progress for now as they are synced, 
-                         but visually separating them gives the 'studio' feel */}
-                    <div className="absolute inset-0 bg-[#282828] rounded-lg overflow-hidden">
-                        <div
-                            className="h-full bg-[#1DB954]/20 transition-all duration-100 ease-linear"
-                            style={{ width: `${progress}%` }}
-                        />
-                    </div>
-                    {/* Beat Volume Inside Track */}
-                    <input
-                        type="range"
-                        min="0" max="100"
-                        value={beatVolume}
-                        onChange={(e) => setBeatVolume(Number(e.target.value))}
-                        className="absolute right-2 w-20 h-1 accent-[#1DB954] bg-white/10 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Beat Volume"
-                    />
-                </div>
+            {/* Header / Stats */}
+            <div className="flex items-center justify-between text-xs text-subdued font-bold tracking-wider mb-2">
+                <span>{formatTime(currentTime)}</span>
+                <span className="text-[#1DB954]">
+                    Sync: {Math.round(syncOffset)}ms
+                </span>
+                <span>{formatTime(session.duration)}</span>
             </div>
 
-            {/* TRACK 2: VOCALS */}
-            <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between text-xs text-subdued uppercase tracking-wider font-bold">
-                    <div className="flex items-center gap-2">
-                        <Mic size={14} className="text-[#E50914]" />
-                        <span>Vocals</span>
-                    </div>
-                    <span>{formatTime(currentTime)} / {formatTime(session.duration)}</span>
+            {/* Volume Controls */}
+            <div className="grid grid-cols-2 gap-4 bg-[#121212] p-2 rounded mb-2">
+                <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase text-subdued font-bold">Vocals</label>
+                    <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={vocalVolume}
+                        onChange={(e) => setVocalVolume(parseFloat(e.target.value))}
+                        className="accent-[#1DB954] h-1 bg-[#282828] rounded-lg appearance-none cursor-pointer"
+                    />
                 </div>
-
-                <div className="relative w-full h-12 flex items-center group">
+                <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase text-subdued font-bold">Beat</label>
                     <input
                         type="range"
                         min="0"
                         max="100"
-                        value={progress || 0}
-                        onChange={handleSeek}
-                        className="relative z-10 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    {/* Custom Vocal Visualizer Background */}
-                    <div className="absolute inset-0 bg-[#282828] rounded-lg overflow-hidden flex items-center">
-                        {/* Fake Waveform Pattern */}
-                        <div className="w-full h-1/2 flex items-center justify-center gap-0.5 opacity-30">
-                            {Array.from({ length: 40 }).map((_, i) => (
-                                <div key={i} className="w-1 bg-white rounded-full" style={{ height: `${Math.random() * 100}%` }} />
-                            ))}
-                        </div>
-                        {/* Progress Overlay */}
-                        <div
-                            className="absolute inset-0 bg-[#E50914]/30 border-r-2 border-[#E50914] transition-all duration-100 ease-linear"
-                            style={{ width: `${progress}%` }}
-                        />
-                    </div>
-                    {/* Vocal Volume Inside Track */}
-                    <input
-                        type="range"
-                        min="0" max="100"
-                        value={vocalVolume}
-                        onChange={(e) => setVocalVolume(Number(e.target.value))}
-                        className="absolute right-2 z-20 w-20 h-1 accent-[#E50914] bg-white/10 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Vocal Volume"
+                        value={beatVolume}
+                        onChange={(e) => setBeatVolume(parseInt(e.target.value))}
+                        className="accent-purple-500 h-1 bg-[#282828] rounded-lg appearance-none cursor-pointer"
                     />
                 </div>
             </div>
 
-            {/* Global Play/Pause happens via parent button usually, 
-                but here we visualize the tracks */}
+            {/* TIMELINE STUDIO CONTAINER */}
+            <div
+                ref={trackRef}
+                className="relative w-full h-40 bg-[#121212] rounded-lg overflow-hidden border border-[#282828] cursor-crosshair"
+                onClick={handleTimelineClick}
+            >
+                {/* 1. BEAT TRACK (Background Ref) */}
+                <div className="absolute top-0 w-full h-1/2 border-b border-[#282828] bg-black/40">
+                    <span className="absolute top-1 left-2 text-[10px] text-subdued pointer-events-none">BEAT</span>
+                    {/* Beat Progress Overlay */}
+                    <div
+                        className="absolute inset-y-0 left-0 bg-white/5 pointer-events-none"
+                        style={{ width: `${(currentTime / session.duration) * 100}%` }}
+                    />
+                </div>
+
+                {/* 2. VOCAL TRACK (Draggable) */}
+                <div
+                    className="absolute bottom-0 h-1/2 flex items-center transition-transform hover:bg-[#282828]/50"
+                    style={{
+                        width: '100%',
+                        cursor: isDraggingSync ? 'grabbing' : 'grab'
+                    }}
+                    onMouseDown={(e) => { e.stopPropagation(); handleDragStart(e) }}
+                    onTouchStart={(e) => { e.stopPropagation(); handleDragStart(e) }}
+                    onClick={(e) => e.stopPropagation()} // Prevent seek when clicking track handle
+                >
+                    <span className="absolute top-1 left-2 text-[10px] text-[#1DB954] pointer-events-none z-10">VOCALS</span>
+
+                    {/* Drag Handle Indicator */}
+                    <div className="absolute left-0 inset-y-0 w-1 bg-[#1DB954] z-20 shadow-[0_0_10px_#1DB954]" />
+
+                    {/* Waveform */}
+                    <div className="w-full h-full opacity-80 pl-1">
+                        {isProcessingAudio ? (
+                            <div className="w-full h-full flex items-center justify-center text-xs text-subdued">Analyzing...</div>
+                        ) : (
+                            <WaveformTrack peaks={audioPeaks} color="#535353" height={60} progress={(currentTime - (syncOffset / 1000)) / session.duration * 100} />
+                        )}
+                    </div>
+                </div>
+
+                {/* 3. PLAYHEAD */}
+                <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-white z-30 pointer-events-none shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                    style={{ left: `${(currentTime / session.duration) * 100}%` }}
+                />
+
+                {/* 4. MARKERS */}
+                {moments.map((m: number, i: number) => (
+                    <div
+                        key={i}
+                        className="absolute top-0 bottom-0 w-px bg-yellow-500/50 pointer-events-none z-0"
+                        style={{ left: `${(m / session.duration) * 100}%` }}
+                    >
+                        <div className="absolute bottom-1 w-2 h-2 rounded-full bg-yellow-500 -translate-x-1/2" />
+                    </div>
+                ))}
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex items-center justify-between mt-2">
+                <div className="flex gap-2">
+                    <button onClick={() => setSyncOffset(s => s - 50)} className="btn-secondary text-xs py-1 px-3 h-8">
+                        <ChevronLeft size={14} /> -50ms
+                    </button>
+                    <button onClick={() => setSyncOffset(s => s + 50)} className="btn-secondary text-xs py-1 px-3 h-8">
+                        +50ms <ChevronRight size={14} />
+                    </button>
+                </div>
+
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleDownload}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#282828] hover:bg-white/10 text-xs font-bold transition-colors"
+                        title="Download Audio"
+                    >
+                        <Download size={14} />
+                        MP3
+                    </button>
+                    <button
+                        className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#282828] hover:bg-white/10 text-xs font-bold transition-colors"
+                        title="Share"
+                    >
+                        <Share2 size={14} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Hidden YT */}
+            <div className="hidden">
+                {session.beatId && (
+                    <YouTube
+                        videoId={session.beatId}
+                        onReady={(e) => youtubeRef.current = e.target}
+                        opts={{ height: '0', width: '0', playerVars: { playsinline: 1, controls: 0 } }}
+                    />
+                )}
+            </div>
+
+            {/* Content Area: Lyrics & Moments */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-right" dir="rtl">
+                {/* 1. Lyrics Column */}
+                <div className="h-[300px]">
+                    <LyricsDisplay
+                        lyrics={session.metadata?.lyrics}
+                        segments={session.metadata?.lyricsSegments}
+                        onSeek={(t) => {
+                            if (youtubeRef.current) youtubeRef.current.seekTo(t)
+                            if (audioRef.current) audioRef.current.currentTime = Math.max(0, t - syncOffset / 1000)
+                        }}
+                        currentTime={currentTime}
+                    />
+                </div>
+
+                {/* 2. Moments Column */}
+                <div>
+                    <MomentsList moments={moments} onSeek={(t) => youtubeRef.current?.seekTo(t)} />
+                </div>
+            </div>
         </div>
     )
 }

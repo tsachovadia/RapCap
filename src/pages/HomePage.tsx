@@ -3,8 +3,9 @@
  */
 import { useNavigate } from 'react-router-dom'
 import { useSessions } from '../hooks/useSessions'
-import { Mic, Eye, Bell, Music, Play, Link2, BrainCircuit, Waves } from 'lucide-react'
+import { Mic, Eye, Bell, Music, Play, Link2, BrainCircuit, Waves, Info } from 'lucide-react'
 import { drills } from '../data/drills'
+import { useState } from 'react'
 
 
 import { useProfile } from '../hooks/useProfile'
@@ -13,6 +14,9 @@ export default function HomePage() {
     const navigate = useNavigate()
     const { sessions } = useSessions()
     const { profile } = useProfile()
+    const [showGoalTooltip, setShowGoalTooltip] = useState(false)
+    const [notificationPermission, setNotificationPermission] = useState(Notification.permission)
+
     const greeting = getGreeting(profile.name)
 
     // Get recent items (last 4 sessions)
@@ -29,6 +33,15 @@ export default function HomePage() {
     const weeklyProgress = calculateWeeklyProgress(sessions || [])
     const WEEKLY_GOAL = 3
 
+    const requestNotificationPermission = () => {
+        Notification.requestPermission().then(permission => {
+            setNotificationPermission(permission)
+            if (permission === 'granted') {
+                new Notification('ראפ קאפ', { body: 'מעולה! נעדכן אותך כשתגיע ליעד.' })
+            }
+        })
+    }
+
     return (
         <div className="pb-24">
             {/* Header */}
@@ -37,17 +50,18 @@ export default function HomePage() {
                 <div className="flex items-center justify-between">
                     <h1 className="text-2xl font-bold">{greeting}</h1>
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-[#282828] px-3 py-1.5 rounded-full mr-2">
+                        <div className="flex items-center gap-1 bg-[#282828] px-3 py-1.5 rounded-full mr-2" title="ימי רצף">
                             <span className="text-lg">🔥</span>
                             <span className="text-sm font-bold font-mono">{streak}</span>
                         </div>
-                        <button className="btn-icon">
+                        <button className="btn-icon" title="התראות" onClick={() => alert('אין התראות חדשות')}>
                             <Bell size={20} />
                         </button>
                         <button
                             onClick={() => navigate('/settings')}
                             className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-black border-2 border-transparent hover:border-white transition-all transform hover:scale-105"
                             style={{ backgroundColor: profile.avatarColor }}
+                            title="הגדרות פרופיל"
                         >
                             {profile.name[0].toUpperCase()}
                         </button>
@@ -57,7 +71,7 @@ export default function HomePage() {
 
             <div className="px-4">
                 {/* Quick Actions Grid - Spotify style */}
-                <div className="grid grid-cols-2 gap-2 mb-8">
+                <div className="grid grid-cols-2 gap-2 mb-6">
                     {quickAccessItems.map((item) => (
                         <button
                             key={item.id}
@@ -74,13 +88,54 @@ export default function HomePage() {
                     ))}
                 </div>
 
-                {/* Weekly Goal */}
+                {/* Big CTA - MOVED UP */}
                 <section className="mb-8">
+                    <div className="spotify-card p-6 text-center">
+                        <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
+                            style={{ backgroundColor: '#1DB954' }}>
+                            <Mic className="text-black" size={32} />
+                        </div>
+                        <h3 className="text-lg font-bold mb-2">מוכן לזרום?</h3>
+                        <p className="text-subdued text-sm mb-4">תפוס את הרגע והקלט את ה-Flow שלך</p>
+                        <button
+                            onClick={() => navigate('/freestyle')}
+                            className="btn-spotify w-full py-3 font-bold"
+                        >
+                            התחל הקלטה
+                        </button>
+                    </div>
+                </section>
+
+                {/* Weekly Goal */}
+                <section className="mb-8 relative">
                     <div className="bg-gradient-to-r from-[#282828] to-[#181818] p-4 rounded-lg border border-[#3E3E3E]">
                         <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-sm font-bold text-subdued uppercase tracking-wider">יעד שבועי</h3>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-bold text-subdued uppercase tracking-wider">יעד שבועי</h3>
+                                <button
+                                    onClick={() => setShowGoalTooltip(!showGoalTooltip)}
+                                    className="text-subdued hover:text-white transition-colors"
+                                >
+                                    <Info size={14} />
+                                </button>
+                            </div>
                             <span className="text-sm font-bold">{weeklyProgress} / {WEEKLY_GOAL}</span>
                         </div>
+
+                        {showGoalTooltip && (
+                            <div className="mb-3 text-xs bg-[#3E3E3E] p-2 rounded text-gray-200 animate-in fade-in zoom-in-95 duration-200">
+                                <p className="mb-2">היעד השבועי שלך: {WEEKLY_GOAL} אימונים בשבוע כדי לשמור על כושר ראפ.</p>
+                                {notificationPermission === 'default' && (
+                                    <button
+                                        onClick={requestNotificationPermission}
+                                        className="text-[#1DB954] hover:underline font-bold"
+                                    >
+                                        קבל תזכורות להשלמת היעד
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
                         <div className="w-full bg-[#121212] rounded-full h-2 mb-2">
                             <div
                                 className="bg-[#1DB954] h-2 rounded-full transition-all duration-1000"
@@ -93,9 +148,9 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                {/* Daily Mix Section */}
+                {/* Drill Library (Previously Daily Mix) */}
                 <section className="mb-8">
-                    <h2 className="text-xl font-bold mb-4">המיקס היומי שלך</h2>
+                    <h2 className="text-xl font-bold mb-4">ספריית אימונים</h2>
                     <div className="flex gap-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
                         {drills.map((drill) => (
                             <div
@@ -170,23 +225,6 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                {/* Big CTA */}
-                <section className="mb-8">
-                    <div className="spotify-card p-6 text-center">
-                        <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
-                            style={{ backgroundColor: '#1DB954' }}>
-                            <Mic className="text-black" size={32} />
-                        </div>
-                        <h3 className="text-lg font-bold mb-2">מוכן לזרום?</h3>
-                        <p className="text-subdued text-sm mb-4">תפוס את הרגע והקלט את ה-Flow שלך</p>
-                        <button
-                            onClick={() => navigate('/freestyle')}
-                            className="btn-spotify w-full py-3 font-bold"
-                        >
-                            התחל הקלטה
-                        </button>
-                    </div>
-                </section>
 
                 <div className="text-center pb-8 opacity-30 text-[10px] text-subdued font-mono">
                     <p>RapCap v1.1.0</p>

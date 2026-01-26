@@ -152,6 +152,7 @@ export default function WordAssociationPage() {
                         <h2 className="text-5xl font-black text-white drop-shadow-2xl tracking-tight">
                             {currentWord}
                         </h2>
+                        <p className="text-sm text-subdued mt-2 opacity-80">כתוב את המילה הראשונה שעולה לך לראש</p>
                     </div>
 
                     {/* Input Area */}
@@ -165,11 +166,11 @@ export default function WordAssociationPage() {
                                 placeholder={isRunning ? "מה זה מזכיר לך?" : "המתן..."}
                                 className="w-full bg-[#282828] text-white text-center text-xl py-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#E8115B] transition-all shadow-lg px-12"
                                 disabled={!isRunning || isFinished}
-                                autoFocus
                                 autoComplete="off"
                             />
                             <button
                                 type="submit"
+                                onMouseDown={(e) => e.preventDefault()}
                                 disabled={!inputValue.trim() || !isRunning}
                                 className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-[#E8115B] flex items-center justify-center text-white disabled:opacity-50 disabled:bg-[#404040] transition-colors"
                             >

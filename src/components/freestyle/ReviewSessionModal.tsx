@@ -1,0 +1,122 @@
+import { X, Check, Music2, Clock, Calendar } from 'lucide-react'
+
+
+
+interface ReviewSessionModalProps {
+    isOpen: boolean
+    onClose: () => void
+    onSave: () => void
+    onDiscard: () => void
+    data: {
+        transcript: string
+        duration: number
+        beatId: string
+        date: Date
+        segments: Array<{ text: string, timestamp: number }>
+    }
+}
+
+export default function ReviewSessionModal({ isOpen, onClose, onSave, onDiscard, data }: ReviewSessionModalProps) {
+    if (!isOpen) return null
+
+    // Format helpers
+    const fmt = (s: number) => {
+        const min = Math.floor(s / 60)
+        const sec = Math.floor(s % 60)
+        return `${min}:${sec.toString().padStart(2, '0')}`
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-[#181818] border border-[#282828] rounded-2xl w-full max-w-md flex flex-col max-h-[85vh] shadow-2xl">
+
+                {/* Header */}
+                <div className="p-4 border-b border-[#282828] flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Check className="text-[#1DB954]" size={20} />
+                        Session Complete
+                    </h2>
+                    <button onClick={onClose} className="p-2 hover:bg-[#282828] rounded-full transition-colors">
+                        <X size={20} className="text-subdued" />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+
+                    {/* Metadata Grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-[#121212] p-3 rounded-xl border border-[#282828] flex flex-col items-center gap-1">
+                            <Clock size={16} className="text-subdued" />
+                            <span className="text-2xl font-bold text-white">{fmt(data.duration)}</span>
+                            <span className="text-xs text-subdued uppercase">Duration</span>
+                        </div>
+                        <div className="bg-[#121212] p-3 rounded-xl border border-[#282828] flex flex-col items-center gap-1">
+                            <Music2 size={16} className="text-subdued" />
+                            <span className="text-sm font-bold text-white truncate max-w-full px-2" title={data.beatId}>
+                                {data.beatId || 'No Beat'}
+                            </span>
+                            <span className="text-xs text-subdued uppercase">Beat ID</span>
+                        </div>
+                    </div>
+
+                    {/* Date */}
+                    <div className="flex items-center justify-center gap-2 text-sm text-subdued">
+                        <Calendar size={14} />
+                        <span>{data.date.toLocaleString()}</span>
+                    </div>
+
+                    {/* Lyrics Preview with Timestamps */}
+                    <div className="bg-[#121212] rounded-xl border border-[#282828] p-4 min-h-[200px] flex flex-col gap-2 relative">
+                        <div className="absolute top-2 right-2 opacity-30 pointer-events-none">
+                            <span className="text-[10px] font-mono border border-white/20 px-1 rounded">RAW DATA</span>
+                        </div>
+
+                        {data.segments.length > 0 ? (
+                            <div className="flex flex-col gap-3 font-mono text-sm h-full overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
+                                {data.segments.map((seg, i) => (
+                                    <div key={i} className="flex gap-3 text-white/80 border-b border-[#282828]/50 pb-2 last:border-0 relative group">
+                                        {/* Explicit Timestamp Visualization */}
+                                        <span className="text-[#1DB954] font-bold select-none shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                                            [{fmt(seg.timestamp)}]
+                                        </span>
+                                        <p className="leading-snug break-words">
+                                            {/* Simulate word-level interaction visually (even if mock for now) */}
+                                            {seg.text.split(' ').map((word, wIdx) => (
+                                                <span key={wIdx} className="hover:text-white hover:bg-white/10 rounded px-0.5 cursor-help transition-colors" title={`~${fmt(seg.timestamp)}`}>
+                                                    {word}{' '}
+                                                </span>
+                                            ))}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center text-subdued italic py-10">
+                                No lyrics detected...
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-4 border-t border-[#282828] flex gap-3 bg-[#181818] rounded-b-2xl">
+                    <button
+                        onClick={onDiscard}
+                        className="flex-1 py-3 rounded-xl font-bold bg-[#282828] hover:bg-red-900/50 hover:text-red-500 text-subdued transition-colors flex items-center justify-center gap-2"
+                    >
+                        <X size={18} />
+                        Discard
+                    </button>
+                    <button
+                        onClick={onSave}
+                        className="flex-[2] py-3 rounded-xl font-bold bg-[#1DB954] hover:bg-[#1ed760] text-black transition-colors flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(29,185,84,0.3)]"
+                    >
+                        <Check size={18} />
+                        Save to Library
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}

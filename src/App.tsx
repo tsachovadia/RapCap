@@ -18,6 +18,8 @@ import FlowPatternsPage from './pages/FlowPatternsPage'
 
 
 
+import { Agentation } from 'agentation'
+
 export default function App() {
   // Request mic permission on app load
   useEffect(() => {
@@ -33,21 +35,24 @@ export default function App() {
   }, [])
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/freestyle" element={<FreestylePage />} />
-          <Route path="/library" element={<LibraryPage />} />
-          <Route path="/drills" element={<DrillsPage />} />
-          <Route path="/drills/object-writing" element={<ObjectWritingPage />} />
-          <Route path="/drills/rhyme-chains" element={<RhymeChainsPage />} />
-          <Route path="/drills/word-association" element={<WordAssociationPage />} />
-          <Route path="/drills/flow-patterns" element={<FlowPatternsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/freestyle" element={<FreestylePage />} />
+            <Route path="/library" element={<LibraryPage />} />
+            <Route path="/drills" element={<DrillsPage />} />
+            <Route path="/drills/object-writing" element={<ObjectWritingPage />} />
+            <Route path="/drills/rhyme-chains" element={<RhymeChainsPage />} />
+            <Route path="/drills/word-association" element={<WordAssociationPage />} />
+            <Route path="/drills/flow-patterns" element={<FlowPatternsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+      {import.meta.env.DEV && <Agentation />}
+    </>
   )
 }

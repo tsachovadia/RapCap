@@ -14,6 +14,9 @@ export function useAudioRecorder() {
         duration: 0,
     });
 
+    const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+    const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+
     const mediaRecorder = useRef<MediaRecorder | null>(null);
     const audioChunks = useRef<Blob[]>([]);
     const timerRef = useRef<number | null>(null);
@@ -22,23 +25,44 @@ export function useAudioRecorder() {
     const analyserNode = useRef<AnalyserNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
 
+    // Fetch devices
+    const getAudioInputDevices = useCallback(async () => {
+        try {
+            // Must have permission first to see labels
+            // We assume permission is requested on init, but we can try to enumerate anyway
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const inputs = devices.filter(d => d.kind === 'audioinput');
+            setAvailableDevices(inputs);
+            return inputs;
+        } catch (e) {
+            console.warn("Failed to enumerate devices", e);
+            return [];
+        }
+    }, []);
+
     const initializeStream = useCallback(async () => {
         try {
-            // Check if stream is already active and valid
-            if (streamRef.current && streamRef.current.active) {
-                return;
+            // Stop existing tracks if any
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
             }
 
-            console.log("🎤 Requesting microphone access...");
-            const stream = await navigator.mediaDevices.getUserMedia({
+            console.log("🎤 Requesting microphone access...", selectedDeviceId ? `Device: ${selectedDeviceId}` : 'Default');
+            const constraints: MediaStreamConstraints = {
                 audio: {
+                    deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
                 }
-            });
+            };
+
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             streamRef.current = stream;
             console.log("✅ Microphone access granted");
+
+            // Update available devices list after permission granted
+            getAudioInputDevices();
 
             // Initialize AudioContext if needed (for visualizer)
             if (!audioContext.current || audioContext.current.state === 'closed') {
@@ -48,12 +72,34 @@ export function useAudioRecorder() {
                 await audioContext.current.resume();
             }
 
+            // Setup Visualizer (Analyser) immediately so it's ready even before recording
+            if (!analyserNode.current && audioContext.current) {
+                analyserNode.current = audioContext.current.createAnalyser();
+                analyserNode.current.fftSize = 256;
+                sourceNode.current = audioContext.current.createMediaStreamSource(stream);
+                sourceNode.current.connect(analyserNode.current);
+            } else if (audioContext.current && sourceNode.current && analyserNode.current) {
+                // Re-connect new stream to existing analyser
+                // Disconnect old source is tricky, easier to just recreate source
+                sourceNode.current.disconnect();
+                sourceNode.current = audioContext.current.createMediaStreamSource(stream);
+                sourceNode.current.connect(analyserNode.current);
+            }
+
         } catch (err) {
             console.error("❌ Error initializing stream:", err);
-            alert("לא ניתן לגשת למיקרופון. אנא וודא שאישרת גישה בהגדרות הדפדפן.");
+            alert("לא ניתן לגשת למיקרופון/התקן נבחר. אנא בדוק הרשאות או בחר התקן אחר.");
             throw err;
         }
-    }, []);
+    }, [selectedDeviceId, getAudioInputDevices]);
+
+    // Re-init stream if device changes
+    useEffect(() => {
+        // Only auto-reinit if we already had a stream running or explicitly requested
+        if (streamRef.current) {
+            initializeStream();
+        }
+    }, [selectedDeviceId, initializeStream]);
 
     const getSupportedMimeType = () => {
         const types = [
@@ -65,32 +111,21 @@ export function useAudioRecorder() {
         ];
         for (const type of types) {
             if (MediaRecorder.isTypeSupported(type)) {
-                console.log(`Using MIME type: ${type}`);
                 return type;
             }
         }
-        console.warn("No specific MIME type supported, using default.");
-        return ''; // Let browser choose default
+        return '';
     };
 
     const startRecording = useCallback(async () => {
         try {
-            // Ensure stream is ready
+            // Ensure stream is ready and active
             if (!streamRef.current || !streamRef.current.active) {
                 await initializeStream();
             }
 
             const stream = streamRef.current;
             if (!stream) throw new Error("No active stream");
-
-            // Setup Visualizer (Analyser)
-            if (!analyserNode.current && audioContext.current) {
-                analyserNode.current = audioContext.current.createAnalyser();
-                analyserNode.current.fftSize = 256;
-                // re-connect source
-                sourceNode.current = audioContext.current.createMediaStreamSource(stream);
-                sourceNode.current.connect(analyserNode.current);
-            }
 
             // Create MediaRecorder
             const options = getSupportedMimeType() ? { mimeType: getSupportedMimeType() } : undefined;
@@ -105,16 +140,15 @@ export function useAudioRecorder() {
                 }
             };
 
-            recorder.start(100); // Collect 100ms chunks
+            recorder.start(100);
             console.log("🔴 Recording started");
 
-            // Start Timer
             setRecorderState(prev => ({
                 ...prev,
                 isRecording: true,
                 isPaused: false,
                 duration: 0,
-                analyser: analyserNode.current || undefined
+                analyser: analyserNode.current || undefined // Ensure analyser is passed
             }));
 
             timerRef.current = window.setInterval(() => {
@@ -133,12 +167,10 @@ export function useAudioRecorder() {
                 mediaRecorder.current.onstop = () => {
                     const mimeType = mediaRecorder.current?.mimeType || 'audio/webm';
                     const audioBlob = new Blob(audioChunks.current, { type: mimeType });
-                    console.log(`✅ Recording stopped. Blob size: ${audioBlob.size}, Type: ${mimeType}`);
                     resolve(audioBlob);
                 };
                 mediaRecorder.current.stop();
 
-                // Clear Timer
                 if (timerRef.current) {
                     clearInterval(timerRef.current);
                     timerRef.current = null;
@@ -151,22 +183,17 @@ export function useAudioRecorder() {
         });
     }, []);
 
-    // Cleanup on unmount
+    // Cleanup
     useEffect(() => {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-            }
-            if (audioContext.current) {
-                audioContext.current.close();
-            }
+            if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+            if (audioContext.current) audioContext.current.close();
         };
     }, []);
 
     const togglePause = useCallback(() => {
         if (!mediaRecorder.current) return;
-
         if (recorderState.isPaused) {
             mediaRecorder.current.resume();
             timerRef.current = window.setInterval(() => {
@@ -180,11 +207,19 @@ export function useAudioRecorder() {
         }
     }, [recorderState.isPaused]);
 
+    // Device Label (reactive)
+    const deviceLabel = streamRef.current?.getAudioTracks()[0]?.label || 'Default Mic';
+
     return {
         initializeStream,
         startRecording,
         stopRecording,
         togglePause,
+        deviceLabel,
+        availableDevices,
+        selectedDeviceId,
+        setDeviceId: setSelectedDeviceId,
+        getAudioInputDevices,
         ...recorderState
     };
 }

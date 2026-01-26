@@ -52,7 +52,7 @@ export default function BeatPlayer({ videoId, isPlaying, onReady, onStateChange,
     };
 
     return (
-        <div className="w-full aspect-video rounded-lg overflow-hidden bg-black shadow-lg mb-4">
+        <div className="w-full h-full rounded-lg overflow-hidden bg-black shadow-lg relative">
             <YouTube
                 videoId={videoId}
                 opts={opts}
