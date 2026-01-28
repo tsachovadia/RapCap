@@ -35,6 +35,9 @@ export async function getVocalization(word: string): Promise<string[]> {
         // Actually, let's look at the research again carefully. 
         // "Payload: {'w': '...'}" -> "Retrieves phonetic suggestions".
         // Let's safe-guard:
+        if (Array.isArray(data)) {
+            return data;
+        }
         return data.all_nikud || [word]; // Fallback
     } catch (e) {
         console.error("Dicta Vocalization Error:", e);
