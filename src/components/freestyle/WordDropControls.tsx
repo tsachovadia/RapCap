@@ -54,10 +54,17 @@ export default function WordDropControls({ settings, onUpdate, language }: WordD
                     />
 
                     <div
-                        className="fixed z-[101] w-80 bg-[#1E1E1E] rounded-2xl border border-[#333] shadow-2xl p-6 animate-in zoom-in-95 duration-200 origin-top-right"
+                        className="fixed z-[101] w-[90vw] max-w-sm md:w-80 bg-[#1E1E1E] rounded-2xl border border-[#333] shadow-2xl p-6 
+                                 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 
+                                 md:left-auto md:top-auto md:translate-x-0 md:translate-y-0
+                                 animate-in zoom-in-95 fade-in slide-in-from-bottom-5 md:slide-in-from-bottom-0 duration-200 origin-center md:origin-top-right"
                         style={{
-                            top: `${menuPosition.top}px`,
-                            right: `${menuPosition.right}px`
+                            // Only apply calculated position on desktop (md breakpoint is 768px)
+                            top: window.innerWidth >= 768 ? `${menuPosition.top}px` : undefined,
+                            right: window.innerWidth >= 768 ? `${menuPosition.right}px` : undefined,
+                            // max-height for safe mobile viewing
+                            maxHeight: '85vh',
+                            overflowY: 'auto'
                         }}
                     >
 

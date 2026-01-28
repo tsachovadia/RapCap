@@ -457,26 +457,25 @@ export default function FreestylePage() {
                                 />
                             </div>
 
-                            {/* Words Container (Clipped) */}
-                            <div className="absolute inset-0 overflow-hidden flex flex-col items-center justify-start pt-20 p-4">
+                            {/* Words Container (Responsive Fixed) */}
+                            <div className="absolute inset-0 overflow-y-auto custom-scrollbar flex flex-col items-center justify-start pt-14 p-4 min-h-[160px]">
                                 {wordDropSettings.enabled && flowState === 'recording' ? (
                                     currentRandomWords.length > 0 ? (
-                                        <div className="flex flex-wrap justify-center gap-6 animate-in fade-in zoom-in duration-300">
+                                        <div className="flex flex-wrap justify-center gap-6 animate-in fade-in zoom-in duration-300 pb-8">
                                             {currentRandomWords.map((word, i) => (
-                                                <span key={i} className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#1DB954] to-[#1ED760] drop-shadow-[0_0_15px_rgba(29,185,84,0.4)] leading-tight tracking-tight">
+                                                <span key={i} className="text-3xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#1DB954] to-[#1ED760] drop-shadow-[0_0_15px_rgba(29,185,84,0.4)] leading-tight tracking-tight text-center break-words">
                                                     {word}
                                                 </span>
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="text-subdued opacity-20 animate-pulse">
+                                        <div className="text-subdued opacity-20 animate-pulse mt-4">
                                             <Sparkles size={64} />
                                         </div>
                                     )
                                 ) : (
-                                    <div className="flex flex-col items-center gap-4 text-subdued/30 select-none">
-                                        {/* Sparkles Removed per feedback */}
-                                        <span className="text-sm font-medium uppercase tracking-widest">{language === 'he' ? 'זריקת מילה' : 'Word Drop Area'}</span>
+                                    <div className="flex flex-col items-center gap-4 text-subdued/30 select-none mt-4">
+                                        <span className="text-sm font-medium uppercase tracking-widest text-center">{language === 'he' ? 'אזור מילים' : 'Word Drop Area'}</span>
                                     </div>
                                 )}
                             </div>
