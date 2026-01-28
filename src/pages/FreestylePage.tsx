@@ -10,7 +10,7 @@ import WordDropControls, { type WordDropSettings } from '../components/freestyle
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
 import { db } from '../db/db'
-import { ArrowLeft, MoreHorizontal, Mic, Sparkles, Hash, Link as LinkIcon, Check, X } from 'lucide-react'
+import { ArrowLeft, MoreHorizontal, Mic, Sparkles, Hash, Link as LinkIcon, Check, X, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { commonWordsHe, commonWordsEn } from '../data/wordBank'
 
@@ -128,16 +128,43 @@ export default function FreestylePage() {
     const [wordDropSettings, setWordDropSettings] = useState<WordDropSettings>({
         enabled: false,
         interval: 4,
-        quantity: 1
+        quantity: 1,
+        mode: 'random'
     })
     const [currentRandomWords, setCurrentRandomWords] = useState<string[]>([])
     const randomIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const sequenceIndexRef = useRef(0)
 
     // Pool of all words
-    const allWords = useMemo(() => {
+    // Deck Selection State
+    // const [showDeckSelector, setShowDeckSelector] = useState(false) // REMOVED: Managed inside WordDropControls now
+    const [selectedDeckId, setSelectedDeckId] = useState<number | null>(null)
+    const [deckWords, setDeckWords] = useState<string[]>([])
+
+    // Fetch deck words when ID changes
+    useEffect(() => {
+        if (selectedDeckId !== null) {
+            db.wordGroups.get(selectedDeckId).then(group => {
+                if (group) setDeckWords(group.items)
+            })
+        } else {
+            setDeckWords([])
+        }
+    }, [selectedDeckId])
+
+    // Reset sequence when deck changes
+    useEffect(() => {
+        sequenceIndexRef.current = 0
+    }, [selectedDeckId, deckWords])
+
+    // Pool of all words (Dynamic)
+    const activeWordPool = useMemo(() => {
+        if (selectedDeckId !== null && deckWords.length > 0) {
+            return deckWords
+        }
         const source = language === 'he' ? commonWordsHe : commonWordsEn
         return source.map(w => w.word)
-    }, [language])
+    }, [language, selectedDeckId, deckWords])
 
     // Polling Ref for Pre-Roll Check
     const preRollCheckRef = useRef<number | null>(null)
@@ -149,17 +176,29 @@ export default function FreestylePage() {
 
     // Random Word Effect
     // Random Word Effect
+    // Random / Sequential Word Effect
     useEffect(() => {
         if (wordDropSettings.enabled && flowState === 'recording') {
             const tick = () => {
                 const words = []
-                for (let i = 0; i < wordDropSettings.quantity; i++) {
-                    words.push(allWords[Math.floor(Math.random() * allWords.length)])
+
+                if (wordDropSettings.mode === 'sequential') {
+                    // Sequential Logic
+                    for (let i = 0; i < wordDropSettings.quantity; i++) {
+                        const word = activeWordPool[sequenceIndexRef.current % activeWordPool.length]
+                        words.push(word)
+                        sequenceIndexRef.current = (sequenceIndexRef.current + 1) % activeWordPool.length
+                    }
+                } else {
+                    // Random Logic
+                    for (let i = 0; i < wordDropSettings.quantity; i++) {
+                        words.push(activeWordPool[Math.floor(Math.random() * activeWordPool.length)])
+                    }
                 }
+
                 setCurrentRandomWords(words)
 
                 // Random variance (approx +/- 25% of interval)
-                // e.g. 4s -> 3s to 5s range
                 const variance = (wordDropSettings.interval * 1000) * 0.5
                 const base = wordDropSettings.interval * 1000
                 const nextInterval = base - (variance / 2) + Math.random() * variance
@@ -167,17 +206,15 @@ export default function FreestylePage() {
                 randomIntervalRef.current = setTimeout(tick, nextInterval)
             }
             tick()
-            return () => {
-                if (randomIntervalRef.current) clearTimeout(randomIntervalRef.current)
-            }
         } else {
-            // Clear words when not recording
-            setTimeout(() => {
-                setCurrentRandomWords(prev => prev.length > 0 ? [] : prev)
-            }, 0)
+            setCurrentRandomWords([])
             if (randomIntervalRef.current) clearTimeout(randomIntervalRef.current)
         }
-    }, [wordDropSettings.enabled, wordDropSettings.interval, wordDropSettings.quantity, flowState, allWords])
+
+        return () => {
+            if (randomIntervalRef.current) clearTimeout(randomIntervalRef.current)
+        }
+    }, [wordDropSettings.enabled, wordDropSettings.interval, wordDropSettings.quantity, wordDropSettings.mode, flowState, activeWordPool])
 
     // UNIFIED CONTROL LOGIC
 
@@ -476,6 +513,8 @@ export default function FreestylePage() {
                                     settings={wordDropSettings}
                                     onUpdate={setWordDropSettings}
                                     language={language}
+                                    onSelectDeck={setSelectedDeckId}
+                                    selectedGroupId={selectedDeckId}
                                 />
                             </div>
 
@@ -497,10 +536,19 @@ export default function FreestylePage() {
                                     )
                                 ) : (
                                     <div className="flex flex-col items-center gap-4 text-subdued/30 select-none mt-4">
-                                        <span className="text-sm font-medium uppercase tracking-widest text-center">{language === 'he' ? 'אזור מילים' : 'Word Drop Area'}</span>
+                                        <button
+                                            className="flex flex-col items-center gap-2 hover:text-green-500 transition-colors cursor-default"
+                                        >
+                                            <span className="text-sm font-medium uppercase tracking-widest text-center">
+                                                {selectedDeckId ? 'Selected Deck Active' : (language === 'he' ? 'זריקת מילה כבויה' : 'Word Drop Off')}
+                                            </span>
+                                            <Layers size={24} />
+                                        </button>
                                     </div>
                                 )}
                             </div>
+
+
                         </div>
                     </div>
 
@@ -640,6 +688,8 @@ export default function FreestylePage() {
                 setDeviceId={setDeviceId}
                 resetAudioState={resetAudioState}
             />
+
+
         </div>
     )
 }

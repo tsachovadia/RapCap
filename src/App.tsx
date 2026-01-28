@@ -13,6 +13,10 @@ import RhymeChainsPage from './pages/RhymeChainsPage'
 import WordAssociationPage from './pages/WordAssociationPage'
 import SettingsPage from './pages/SettingsPage'
 import FlowPatternsPage from './pages/FlowPatternsPage'
+import RhymeLibraryPage from './pages/RhymeLibraryPage'
+import RhymeEditorPage from './pages/RhymeEditorPage'
+import { useEffect } from 'react'
+import { seedDatabase } from './db/db'
 
 
 
@@ -24,16 +28,11 @@ import ReloadPrompt from './components/ReloadPrompt'
 export default function App() {
   // Request mic permission on app load
   // Request mic permission on app load - REMOVED to prevent race conditions
-  // useEffect(() => {
-  //   navigator.mediaDevices.getUserMedia({ audio: true })
-  //     .then(stream => {
-  //       console.log('Microphone permission granted')
-  //       stream.getTracks().forEach(track => track.stop())
-  //     })
-  //     .catch(err => {
-  //       console.warn('Microphone permission denied or ignored', err)
-  //     })
-  // }, [])
+
+  // Initialize DB with seed data
+  useEffect(() => {
+    seedDatabase().catch(console.error)
+  }, [])
 
   return (
     <>
@@ -48,6 +47,12 @@ export default function App() {
             <Route path="/drills/rhyme-chains" element={<RhymeChainsPage />} />
             <Route path="/drills/word-association" element={<WordAssociationPage />} />
             <Route path="/drills/flow-patterns" element={<FlowPatternsPage />} />
+
+            <Route path="/rhyme-library" element={<RhymeLibraryPage />} />
+            <Route path="/rhyme-library/new" element={<RhymeEditorPage />} />
+            <Route path="/rhyme-library/:id" element={<RhymeEditorPage />} />
+
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,13 +1,11 @@
-/**
- * Bottom Navigation - Spotify Style
- */
 import { NavLink } from 'react-router-dom'
-import { Home, Mic2, Library, Dumbbell } from 'lucide-react'
+import { Home, Mic2, Dumbbell, BookOpen, Library } from 'lucide-react'
 
 const tabs = [
     { path: '/', icon: Home, label: 'בית' },
     { path: '/freestyle', icon: Mic2, label: 'הקלטה' },
-    { path: '/library', icon: Library, label: 'הספריה שלך' },
+    { path: '/rhyme-library', icon: BookOpen, label: 'חרוזים' },
+    { path: '/library', icon: Library, label: 'הקלטות' },
     { path: '/drills', icon: Dumbbell, label: 'אימון' },
 ]
 

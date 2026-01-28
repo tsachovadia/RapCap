@@ -1,24 +1,31 @@
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-
-import { Sparkles, Settings, X, Timer, Layers } from 'lucide-react'
+import { Sparkles, Settings, X, Timer, Layers, Shuffle, ListOrdered, Book } from 'lucide-react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '../../db/db'
 
 export interface WordDropSettings {
     enabled: boolean
     interval: number // seconds
     quantity: number // 1, 2, 3
+    mode: 'random' | 'sequential'
 }
 
 interface WordDropControlsProps {
     settings: WordDropSettings
     onUpdate: (settings: WordDropSettings) => void
     language: 'he' | 'en'
+    onSelectDeck: (groupId: number | null) => void
+    selectedGroupId: number | null
 }
 
-export default function WordDropControls({ settings, onUpdate, language }: WordDropControlsProps) {
+export default function WordDropControls({ settings, onUpdate, language, onSelectDeck, selectedGroupId }: WordDropControlsProps) {
     const [isOpen, setIsOpen] = useState(false)
     const buttonRef = useRef<HTMLButtonElement>(null)
     const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 })
+
+    // Fetch decks internally
+    const groups = useLiveQuery(() => db.wordGroups.toArray())
 
     const toggleEnabled = () => {
         onUpdate({ ...settings, enabled: !settings.enabled })
@@ -122,6 +129,88 @@ export default function WordDropControls({ settings, onUpdate, language }: WordD
                                         {num}
                                     </button>
                                 ))}
+                            </div>
+                        </div>
+
+                        {/* Source Selection (Deck) */}
+                        <div className="mb-6 space-y-3">
+                            <div className="flex items-center gap-2 text-sm text-gray-300">
+                                <Book size={16} className="text-[#1DB954]" />
+                                <span>{language === 'he' ? 'מקור המילים' : 'Word Source'}</span>
+                            </div>
+
+                            {/* Simple Dropdown / List */}
+                            <div className="bg-[#282828] rounded-xl border border-[#333] overflow-hidden">
+                                {/* Classic Random Option */}
+                                <button
+                                    onClick={() => onSelectDeck(null)}
+                                    className={`w-full flex items-center justify-between p-3 border-b border-[#333] transition-colors ${selectedGroupId === null ? 'bg-[#3E3E3E] text-white' : 'text-subdued hover:bg-[#333]'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <Shuffle size={14} />
+                                        <span>{language === 'he' ? 'בלגן (מילון כללי)' : 'Classic Random'}</span>
+                                    </div>
+                                    {selectedGroupId === null && <div className="w-2 h-2 bg-green-500 rounded-full" />}
+                                </button>
+
+                                {/* Custom Decks */}
+                                {groups?.slice(0, 3).map(group => (
+                                    <button
+                                        key={group.id}
+                                        onClick={() => onSelectDeck(group.id!)}
+                                        className={`w-full flex items-center justify-between p-3 border-b border-[#333] last:border-0 transition-colors ${selectedGroupId === group.id ? 'bg-[#3E3E3E] text-white' : 'text-subdued hover:bg-[#333]'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Book size={14} />
+                                            <span className="truncate max-w-[150px]">{group.name}</span>
+                                        </div>
+                                        {selectedGroupId === group.id && <div className="w-2 h-2 bg-green-500 rounded-full" />}
+                                    </button>
+                                ))}
+
+                                {groups && groups.length > 3 && (
+                                    <div className="p-2 text-xs text-center text-subdued bg-[#222]">
+                                        + {groups.length - 3} more (Manage in Library)
+                                    </div>
+                                )}
+
+                                {(!groups || groups.length === 0) && (
+                                    <div className="p-3 text-xs text-center text-subdued italic">
+                                        {language === 'he' ? 'אין חבילות שמורות' : 'No custom decks yet'}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Mode Control */}
+                        <div className="mb-6 space-y-3">
+                            <div className="flex items-center gap-2 text-sm text-gray-300">
+                                {settings.mode === 'random' ? <Shuffle size={16} className="text-[#1DB954]" /> : <ListOrdered size={16} className="text-[#1DB954]" />}
+                                <span>{language === 'he' ? 'מצב אימון' : 'Training Mode'}</span>
+                            </div>
+                            <div className="flex bg-[#282828] rounded-xl p-1 border border-[#333]">
+                                <button
+                                    onClick={() => onUpdate({ ...settings, mode: 'random' })}
+                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${settings.mode === 'random'
+                                        ? 'bg-[#3E3E3E] text-white shadow-sm'
+                                        : 'text-subdued hover:text-white'
+                                        }`}
+                                >
+                                    <Shuffle size={14} />
+                                    {language === 'he' ? 'אקראי' : 'Random'}
+                                </button>
+                                <button
+                                    onClick={() => onUpdate({ ...settings, mode: 'sequential' })}
+                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${settings.mode === 'sequential'
+                                        ? 'bg-[#3E3E3E] text-white shadow-sm'
+                                        : 'text-subdued hover:text-white'
+                                        }`}
+                                >
+                                    <ListOrdered size={14} />
+                                    {language === 'he' ? 'לפי סדר' : 'Sequence'}
+                                </button>
                             </div>
                         </div>
 
