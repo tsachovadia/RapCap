@@ -129,15 +129,8 @@ export default function RecordingControls({
     return (
         <div className="flex flex-col items-center justify-center w-full relative">
 
-            {/* Timer */}
-            <div className={`text-6xl font-bold tabular-nums mb-4 transition-opacity ${isPaused ? 'opacity-50' : 'opacity-100'}`}
-                style={{ fontFamily: 'ui-monospace, monospace' }}>
-                {formatTime(duration)}
-            </div>
-            <p className="text-2xs text-subdued mb-8">{isPaused ? 'מושהה' : isPreRolling ? 'מתכונן...' : isRecording ? 'מקליט' : 'מוכן'}</p>
-
             {/* Visualizer Canvas & Save Marker */}
-            <div className="h-16 w-full max-w-xs mb-8 flex items-end justify-center relative">
+            <div className="h-12 w-full max-w-xs mb-4 flex items-end justify-center relative">
                 <canvas ref={canvasRef} width={300} height={60} className="w-full h-full" />
 
                 {/* Save Moment Button (Visible only when Recording) */}
@@ -153,7 +146,7 @@ export default function RecordingControls({
             </div>
 
             {/* Controls */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 mb-4">
 
                 {/* Cancel / Finish */}
                 {!isIdle && (
@@ -201,12 +194,12 @@ export default function RecordingControls({
                 </div>
             </div>
 
-            {/* Helper Text */}
-            {isPaused && (
-                <div className="mt-4 text-xs text-subdued animate-pulse">
-                    ההקלטה מושהית. לחץ להמשך או סיום לשמירה.
-                </div>
-            )}
+            {/* Timer (Moved to Bottom) */}
+            <div className={`text-3xl font-bold tabular-nums mb-1 transition-opacity ${isPaused ? 'opacity-50' : 'opacity-100'}`}
+                style={{ fontFamily: 'ui-monospace, monospace' }}>
+                {formatTime(duration)}
+            </div>
+            <p className="text-2xs text-subdued animate-pulse">{isPaused ? 'מושהה' : isPreRolling ? 'מתכונן...' : isRecording ? 'מקליט' : 'מוכן'}</p>
 
             {/* Settings Modal */}
             {showSettings && (
