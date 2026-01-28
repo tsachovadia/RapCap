@@ -56,6 +56,27 @@ export default function FreestylePage() {
     // Auto-scroll ref
     const transcriptEndRef = useRef<HTMLDivElement>(null)
 
+    // Buffering Guard State
+    const wasPausedByBuffering = useRef(false)
+
+    const handlePlayerStateChange = (event: any) => {
+        const state = event.data
+        // State 3 = Buffering
+        if (state === 3 && flowState === 'recording') {
+            console.warn("⚠️ Beat Buffering detected! Pausing flow to maintain sync.")
+            wasPausedByBuffering.current = true
+            handlePauseFlow()
+            alert(language === 'he' ? 'האינטרנט איטי. ההקלטה הושהתה כדי לשמור על סנכרון.' : 'Network Slow. Recording paused to maintain sync.')
+        }
+        // State 1 = Playing
+        if (state === 1 && flowState === 'paused' && wasPausedByBuffering.current) {
+            console.log("✅ Beat buffered and ready.")
+            // Optional: We could auto-resume, but user might be confused. Better to let them resume manually.
+            // But we reset the flag so next pause isn't treated as buffering
+            wasPausedByBuffering.current = false
+        }
+    }
+
     // Auto-scroll logic
     useEffect(() => {
         if (segments.length > 0 || interimTranscript) {
@@ -395,6 +416,7 @@ export default function FreestylePage() {
                                 isPlaying={flowState !== 'idle' && flowState !== 'paused'}
                                 volume={beatVolume}
                                 onReady={(player) => setYoutubePlayer(player)}
+                                onStateChange={handlePlayerStateChange}
                             />
 
                             {/* Status Overlay */}
