@@ -13,6 +13,7 @@ interface ReviewSessionModalProps {
         beatId: string
         date: Date
         segments: Array<{ text: string, timestamp: number }>
+        wordSegments?: Array<{ word: string, timestamp: number }>
     }
 }
 
@@ -25,6 +26,11 @@ export default function ReviewSessionModal({ isOpen, onClose, onSave, onDiscard,
         const sec = Math.floor(s % 60)
         return `${min}:${sec.toString().padStart(2, '0')}`
     }
+
+    // Prefer word segments if available and populated, otherwise fallback to chunks
+    const displaySegments = (data.wordSegments && data.wordSegments.length > 0)
+        ? data.wordSegments.map(ws => ({ text: ws.word, timestamp: ws.timestamp }))
+        : data.segments;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -72,21 +78,16 @@ export default function ReviewSessionModal({ isOpen, onClose, onSave, onDiscard,
                             <span className="text-[10px] font-mono border border-white/20 px-1 rounded">RAW DATA</span>
                         </div>
 
-                        {data.segments.length > 0 ? (
-                            <div className="flex flex-col gap-3 font-mono text-sm h-full overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
-                                {data.segments.map((seg, i) => (
-                                    <div key={i} className="flex gap-3 text-white/80 border-b border-[#282828]/50 pb-2 last:border-0 relative group">
+                        {displaySegments.length > 0 ? (
+                            <div className="flex flex-col gap-2 font-mono text-sm h-full overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
+                                {displaySegments.map((seg, i) => (
+                                    <div key={i} className="flex gap-3 text-white/80 border-b border-[#282828]/50 pb-1 last:border-0 relative group items-center">
                                         {/* Explicit Timestamp Visualization */}
-                                        <span className="text-[#1DB954] font-bold select-none shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                                        <span className="text-[#1DB954] font-bold select-none shrink-0 opacity-70 group-hover:opacity-100 transition-opacity text-xs w-12 text-right">
                                             [{fmt(seg.timestamp)}]
                                         </span>
-                                        <p className="leading-snug break-words">
-                                            {/* Simulate word-level interaction visually (even if mock for now) */}
-                                            {seg.text.split(' ').map((word, wIdx) => (
-                                                <span key={wIdx} className="hover:text-white hover:bg-white/10 rounded px-0.5 cursor-help transition-colors" title={`~${fmt(seg.timestamp)}`}>
-                                                    {word}{' '}
-                                                </span>
-                                            ))}
+                                        <p className="leading-snug break-words flex-1">
+                                            {seg.text}
                                         </p>
                                     </div>
                                 ))}

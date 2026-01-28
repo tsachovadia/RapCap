@@ -14,6 +14,9 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     const lastSegmentEndRef = useRef<number>(0)
     const isPhraseActiveRef = useRef<boolean>(false)
 
+    // Track restart timeout to prevent loops
+    const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
     useEffect(() => {
         // Initialize SpeechRecognition
         if (!('webkitSpeechRecognition' in window)) {
@@ -37,15 +40,10 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
                     // Capture timestamp for this segment (relative to start)
                     const now = Date.now()
-                    // const timestamp = (now - startTimeRef.current) / 1000 // OLD BULK TIMESTAMP
 
                     // WORD LEVEL LOGIC & CHUNKING
                     const estimatedDuration = Math.min(text.length * 80, 5000) // 80ms per char, max 5s fallback
                     const phraseStart = phraseStartTimeRef.current || (now - estimatedDuration)
-
-                    // Ensure we don't overlap strangely with previous segment if we are guessing
-                    // const safePhraseStart = Math.max(phraseStart, lastSegmentEndRef.current) 
-                    // (Commented out: Overlap is better than cutting off if we guessed late)
 
                     const duration = now - phraseStart
                     lastSegmentEndRef.current = now
@@ -92,22 +90,38 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
         recognition.onerror = (event: any) => {
             console.error("Transcription error", event.error)
+            // If denied, kill the loop
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                isRecordingRef.current = false
+            }
         }
 
         recognition.onend = () => {
             // Auto-restart if we are still supposedly recording
-            // Use a ref to check latest state without stale closures
+            // Use a timeout to prevent rapid-fire loops
             if (isRecordingRef.current) {
-                console.log("🔄 Recognition ended, restarting...")
-                try {
-                    recognition.start()
-                } catch (e) {
-                    // ignore already started errors
-                }
+                console.log("🔄 Recognition ended, restarting in 200ms...")
+
+                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
+
+                restartTimeoutRef.current = setTimeout(() => {
+                    if (!isRecordingRef.current) return;
+                    try {
+                        recognition.start()
+                    } catch (e) {
+                        console.warn("Restart failed:", e)
+                    }
+                }, 50)
             }
         }
 
         recognitionRef.current = recognition
+
+        return () => {
+            // Cleanup on unmount or language change
+            if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
+            recognition.abort()
+        }
     }, [language])
 
     // Keep ref synced
@@ -119,6 +133,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     useEffect(() => {
         if (isRecording) {
             try {
+                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
                 startTimeRef.current = Date.now()
                 recognitionRef.current?.start()
                 setIsListening(true)
@@ -127,6 +142,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             }
         } else {
             try {
+                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
                 recognitionRef.current?.stop()
                 setIsListening(false)
                 setInterimTranscript('')

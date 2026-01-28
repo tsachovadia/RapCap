@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Play, Pause, Square, Bookmark, Mic } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Play, Pause, Square, Bookmark, Mic, Settings, X, Check, Volume2, Sliders } from 'lucide-react';
 
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused';
 
@@ -12,6 +12,27 @@ interface RecordingControlsProps {
     onFinish: () => void;
     onSaveMarker: () => void;
     analyser?: AnalyserNode;
+
+    availableDevices?: { deviceId: string, label: string }[];
+    selectedDeviceId?: string;
+    onDeviceChange?: (id: string) => void;
+
+    // Audio Engine Props
+    audioConstraints?: MediaTrackConstraints;
+    setAudioConstraints?: (c: Partial<MediaTrackConstraints>) => void;
+
+    availableOutputDevices?: MediaDeviceInfo[];
+    selectedOutputId?: string;
+    onOutputChange?: (id: string) => void;
+
+    vocalEffects?: {
+        enabled: boolean;
+        eqLow: number;
+        eqHigh: number;
+        compressor: number;
+        gain: number;
+    };
+    setVocalEffects?: (effects: any) => void;
 }
 
 export default function RecordingControls({
@@ -25,19 +46,27 @@ export default function RecordingControls({
     analyser,
     availableDevices = [],
     selectedDeviceId = '',
-    onDeviceChange = () => { }
-}: RecordingControlsProps & {
-    availableDevices?: { deviceId: string, label: string }[];
-    selectedDeviceId?: string;
-    onDeviceChange?: (id: string) => void;
-}) {
+    onDeviceChange = () => { },
+    audioConstraints = {},
+    setAudioConstraints = () => { },
+
+    availableOutputDevices = [],
+    selectedOutputId = '',
+    onOutputChange = () => { },
+
+    vocalEffects = { enabled: false, eqLow: 0, eqHigh: 0, compressor: 0, gain: 1.0 },
+    setVocalEffects = () => { }
+
+}: RecordingControlsProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationRef = useRef<number | undefined>(undefined);
+    const [showSettings, setShowSettings] = useState(false);
 
     // Format time MM:SS
     const formatTime = (secs: number) => {
-        const mins = Math.floor(secs / 60);
-        const seconds = secs % 60;
+        const floorSecs = Math.floor(secs);
+        const mins = Math.floor(floorSecs / 60);
+        const seconds = floorSecs % 60;
         return `${mins.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     };
 
@@ -126,7 +155,7 @@ export default function RecordingControls({
             {/* Controls */}
             <div className="flex items-center gap-6">
 
-                {/* Cancel / Finish (Only visible when ACTIVE or PAUSED) */}
+                {/* Cancel / Finish */}
                 {!isIdle && (
                     <button
                         onClick={onFinish}
@@ -160,25 +189,15 @@ export default function RecordingControls({
                     )}
                 </button>
 
-                {/* Device Picker (Right of Record Button) - Always visible or active logic */}
+                {/* Settings Toggle */}
                 <div className="w-14 flex items-center justify-center">
-                    <div className="relative flex items-center justify-center group">
-                        <div className="p-3 rounded-full bg-[#282828] text-subdued hover:text-white hover:bg-[#3E3E3E] transition-all cursor-pointer">
-                            <Mic size={20} />
-                        </div>
-                        {/* Dropdown (Opacity 0 by default, check if we want explicit click or hover) */}
-                        <select
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            value={selectedDeviceId}
-                            onChange={(e) => onDeviceChange(e.target.value)}
-                            title="Select Microphone"
-                        >
-                            <option value="" disabled>Select Mic</option>
-                            {availableDevices.map(d => (
-                                <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <button
+                        onClick={() => setShowSettings(true)}
+                        className="p-3 rounded-full bg-[#282828] text-subdued hover:text-white hover:bg-[#3E3E3E] transition-all"
+                        title="Audio Settings"
+                    >
+                        <Settings size={20} />
+                    </button>
                 </div>
             </div>
 
@@ -186,6 +205,173 @@ export default function RecordingControls({
             {isPaused && (
                 <div className="mt-4 text-xs text-subdued animate-pulse">
                     ההקלטה מושהית. לחץ להמשך או סיום לשמירה.
+                </div>
+            )}
+
+            {/* Settings Modal */}
+            {showSettings && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in" style={{ zIndex: 100 }}>
+                    <div className="bg-[#181818] border border-[#333] rounded-2xl p-6 w-full max-w-md flex flex-col gap-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between sticky top-0 bg-[#181818] z-10 pb-2 border-b border-[#333]">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <Settings size={18} /> Audio Settings
+                            </h3>
+                            <button onClick={() => setShowSettings(false)} className="text-subdued hover:text-white">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* 1. Input Device */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-bold text-subdued uppercase flex items-center gap-2">
+                                <Mic size={12} /> Input Device
+                            </label>
+                            <div className="relative">
+                                <select
+                                    className="w-full bg-[#222] border border-[#333] rounded-lg p-3 text-sm text-white appearance-none focus:border-[#1DB954] focus:outline-none"
+                                    value={selectedDeviceId}
+                                    onChange={(e) => onDeviceChange(e.target.value)}
+                                >
+                                    <option value="" disabled>Select Microphone</option>
+                                    {availableDevices.map(d => (
+                                        <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* 2. Output Device (If supported) */}
+                        {availableOutputDevices && availableOutputDevices.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs font-bold text-subdued uppercase flex items-center gap-2">
+                                    <Volume2 size={12} /> Output Device
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        className="w-full bg-[#222] border border-[#333] rounded-lg p-3 text-sm text-white appearance-none focus:border-[#1DB954] focus:outline-none"
+                                        value={selectedOutputId}
+                                        onChange={(e) => onOutputChange(e.target.value)}
+                                    >
+                                        <option value="" disabled>Default Speaker</option>
+                                        {availableOutputDevices.map(d => (
+                                            <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 3. Signal Processing (Hardware) */}
+                        <div className="flex flex-col gap-3">
+                            <label className="text-xs font-bold text-subdued uppercase">Signal Cleanup</label>
+
+                            <label className="flex items-center justify-between p-3 bg-[#222] rounded-lg cursor-pointer hover:bg-[#2a2a2a] transition-colors">
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-medium">Echo Cancellation</span>
+                                    <span className="text-[10px] text-subdued">Turn OFF if beat volume drops (Ducking).</span>
+                                </div>
+                                <div
+                                    className={`w-10 h-6 rounded-full relative transition-colors ${audioConstraints?.echoCancellation ? 'bg-[#1DB954]' : 'bg-[#444]'}`}
+                                    onClick={() => setAudioConstraints({ echoCancellation: !audioConstraints?.echoCancellation })}
+                                >
+                                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${audioConstraints?.echoCancellation ? 'translate-x-4' : ''}`} />
+                                </div>
+                            </label>
+
+                            <label className="flex items-center justify-between p-3 bg-[#222] rounded-lg cursor-pointer hover:bg-[#2a2a2a] transition-colors">
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-medium">Noise Suppression</span>
+                                    <span className="text-[10px] text-subdued">Filters background noise.</span>
+                                </div>
+                                <div
+                                    className={`w-10 h-6 rounded-full relative transition-colors ${audioConstraints?.noiseSuppression ? 'bg-[#1DB954]' : 'bg-[#444]'}`}
+                                    onClick={() => setAudioConstraints({ noiseSuppression: !audioConstraints?.noiseSuppression })}
+                                >
+                                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${audioConstraints?.noiseSuppression ? 'translate-x-4' : ''}`} />
+                                </div>
+                            </label>
+                        </div>
+
+                        {/* 4. Vocal Effects (Studio Processing) */}
+                        <div className="flex flex-col gap-3">
+                            <label className="text-xs font-bold text-subdued uppercase flex items-center justify-between">
+                                <span className="flex items-center gap-2"><Sliders size={12} /> Studio Effects</span>
+                                {/* Master Switch */}
+                                <div
+                                    className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${vocalEffects.enabled ? 'bg-[#1DB954]' : 'bg-[#444]'}`}
+                                    onClick={() => setVocalEffects({ ...vocalEffects, enabled: !vocalEffects.enabled })}
+                                >
+                                    <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${vocalEffects.enabled ? 'translate-x-4' : ''}`} />
+                                </div>
+                            </label>
+
+                            <div className={`flex flex-col gap-4 p-3 bg-[#222] rounded-lg transition-opacity ${vocalEffects.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                                {/* Compressor */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                        <span>Compressor (Punch)</span>
+                                        <span className="text-[#1DB954]">{vocalEffects.compressor}%</span>
+                                    </div>
+                                    <input
+                                        type="range" min="0" max="100"
+                                        value={vocalEffects.compressor}
+                                        onChange={(e) => setVocalEffects({ ...vocalEffects, compressor: Number(e.target.value) })}
+                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
+                                    />
+                                </div>
+
+                                {/* EQ Low */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                        <span>Low End (Warmth)</span>
+                                        <span className={vocalEffects.eqLow > 0 ? "text-[#1DB954]" : "text-subdued"}>{vocalEffects.eqLow > 0 ? '+' : ''}{vocalEffects.eqLow}dB</span>
+                                    </div>
+                                    <input
+                                        type="range" min="-12" max="12"
+                                        value={vocalEffects.eqLow}
+                                        onChange={(e) => setVocalEffects({ ...vocalEffects, eqLow: Number(e.target.value) })}
+                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
+                                    />
+                                </div>
+
+                                {/* EQ High */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                        <span>High End (Crisp)</span>
+                                        <span className={vocalEffects.eqHigh > 0 ? "text-[#1DB954]" : "text-subdued"}>{vocalEffects.eqHigh > 0 ? '+' : ''}{vocalEffects.eqHigh}dB</span>
+                                    </div>
+                                    <input
+                                        type="range" min="-12" max="12"
+                                        value={vocalEffects.eqHigh}
+                                        onChange={(e) => setVocalEffects({ ...vocalEffects, eqHigh: Number(e.target.value) })}
+                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
+                                    />
+                                </div>
+
+                                {/* Output Gain */}
+                                <div className="space-y-1 border-t border-[#333] pt-2">
+                                    <div className="flex justify-between text-xs">
+                                        <span>Output Gain</span>
+                                        <span className="text-white">{Math.round(vocalEffects.gain * 100)}%</span>
+                                    </div>
+                                    <input
+                                        type="range" min="0" max="2" step="0.1"
+                                        value={vocalEffects.gain}
+                                        onChange={(e) => setVocalEffects({ ...vocalEffects, gain: Number(e.target.value) })}
+                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <button
+                            onClick={() => setShowSettings(false)}
+                            className="w-full py-3 bg-[#1DB954] text-black font-bold rounded-full hover:bg-[#1ed760] transition-colors flex items-center justify-center gap-2"
+                        >
+                            <Check size={18} /> Done
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

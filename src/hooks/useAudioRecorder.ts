@@ -8,63 +8,161 @@ export interface RecorderState {
 }
 
 export function useAudioRecorder() {
+    const [permissionError, setPermissionError] = useState<Error | null>(null);
+
     const [recorderState, setRecorderState] = useState<RecorderState>({
         isRecording: false,
         isPaused: false,
         duration: 0,
     });
 
+    // Audio Constraints State (Input)
+    const [audioConstraints, setAudioConstraints] = useState<MediaTrackConstraints>(() => {
+        try {
+            const saved = localStorage.getItem('rapcap_audio_constraints');
+            return saved ? JSON.parse(saved) : {
+                echoCancellation: false,
+                noiseSuppression: true,
+                autoGainControl: true
+            };
+        } catch (e) {
+            return {
+                echoCancellation: false,
+                noiseSuppression: true,
+                autoGainControl: true
+            };
+        }
+    });
+
+    // Vocal Effects State
+    const [vocalEffects, setVocalEffects] = useState(() => {
+        try {
+            const saved = localStorage.getItem('rapcap_vocal_effects');
+            return saved ? JSON.parse(saved) : {
+                enabled: false,
+                eqLow: 0,   // dB
+                eqHigh: 0,  // dB
+                compressor: 0, // 0-100% (Threshold logic)
+                gain: 1.0   // output gain
+            };
+        } catch (e) {
+            return {
+                enabled: false,
+                eqLow: 0,
+                eqHigh: 0,
+                compressor: 0,
+                gain: 1.0
+            };
+        }
+    });
+
     const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
     const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+    const [selectedOutputId, setSelectedOutputId] = useState<string>('');
+    const [availableOutputDevices, setAvailableOutputDevices] = useState<MediaDeviceInfo[]>([]);
+
+    // Effects for persistence
+    useEffect(() => {
+        localStorage.setItem('rapcap_audio_constraints', JSON.stringify(audioConstraints));
+    }, [audioConstraints]);
+
+    useEffect(() => {
+        localStorage.setItem('rapcap_vocal_effects', JSON.stringify(vocalEffects));
+    }, [vocalEffects]);
 
     const mediaRecorder = useRef<MediaRecorder | null>(null);
     const audioChunks = useRef<Blob[]>([]);
     const timerRef = useRef<number | null>(null);
+
+    const startTimeRef = useRef<number>(0);
+    const pausedTimeRef = useRef<number>(0);
+    const pauseStartRef = useRef<number>(0);
+
     const audioContext = useRef<AudioContext | null>(null);
     const sourceNode = useRef<MediaStreamAudioSourceNode | null>(null);
     const analyserNode = useRef<AnalyserNode | null>(null);
-    const streamRef = useRef<MediaStream | null>(null);
 
-    // Fetch devices
-    const getAudioInputDevices = useCallback(async () => {
+    const eqLowNode = useRef<BiquadFilterNode | null>(null);
+    const eqHighNode = useRef<BiquadFilterNode | null>(null);
+    const compressorNode = useRef<DynamicsCompressorNode | null>(null);
+    const gainNode = useRef<GainNode | null>(null);
+    const destNode = useRef<MediaStreamAudioDestinationNode | null>(null);
+
+    const streamRef = useRef<MediaStream | null>(null);
+    const processedStreamRef = useRef<MediaStream | null>(null);
+
+    const getDevices = useCallback(async () => {
         try {
-            // Must have permission first to see labels
-            // We assume permission is requested on init, but we can try to enumerate anyway
             const devices = await navigator.mediaDevices.enumerateDevices();
-            const inputs = devices.filter(d => d.kind === 'audioinput');
-            setAvailableDevices(inputs);
-            return inputs;
+            setAvailableDevices(devices.filter(d => d.kind === 'audioinput'));
+            setAvailableOutputDevices(devices.filter(d => d.kind === 'audiooutput'));
         } catch (e) {
             console.warn("Failed to enumerate devices", e);
-            return [];
         }
     }, []);
 
-    const initializeStream = useCallback(async () => {
+    // Apply Effect Settings to Nodes
+    useEffect(() => {
+        if (!audioContext.current) return;
+        const ctx = audioContext.current;
+        const now = ctx.currentTime;
+
+        if (eqLowNode.current) eqLowNode.current.gain.setTargetAtTime(vocalEffects.enabled ? vocalEffects.eqLow : 0, now, 0.1);
+        if (eqHighNode.current) eqHighNode.current.gain.setTargetAtTime(vocalEffects.enabled ? vocalEffects.eqHigh : 0, now, 0.1);
+        if (compressorNode.current) {
+            const threshold = vocalEffects.enabled ? -10 - (vocalEffects.compressor * 0.4) : 0;
+            compressorNode.current.threshold.setTargetAtTime(vocalEffects.enabled ? threshold : 0, now, 0.1);
+            compressorNode.current.ratio.setTargetAtTime(vocalEffects.enabled ? 12 : 1, now, 0.1);
+        }
+        if (gainNode.current) gainNode.current.gain.setTargetAtTime(vocalEffects.enabled ? vocalEffects.gain : 1.0, now, 0.1);
+    }, [vocalEffects]);
+
+    const initializeStream = useCallback(async (overrideConstraints?: MediaTrackConstraints) => {
+        setPermissionError(null);
         try {
-            // Stop existing tracks if any
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(t => t.stop());
             }
 
-            console.log("🎤 Requesting microphone access...", selectedDeviceId ? `Device: ${selectedDeviceId}` : 'Default');
-            const constraints: MediaStreamConstraints = {
-                audio: {
-                    deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            };
+            const currentConstraints = overrideConstraints || audioConstraints;
+            let stream: MediaStream | null = null;
 
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            try {
+                if (selectedDeviceId) {
+                    console.log("🎤 Requesting microphone access...", `Device: ${selectedDeviceId}`);
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            deviceId: { exact: selectedDeviceId },
+                            ...currentConstraints
+                        }
+                    });
+                } else {
+                    throw new Error("No device ID selected, falling back to default");
+                }
+            } catch (firstErr) {
+                console.warn("⚠️ Failed to get specific device, trying default...", firstErr);
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            ...currentConstraints,
+                            deviceId: undefined
+                        }
+                    });
+                    console.log("✅ Fallback to default device successful");
+                    setSelectedDeviceId('');
+                } catch (secondErr) {
+                    console.warn("⚠️ Failed default with constraints, trying absolute raw...", secondErr);
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                }
+            }
+
+            if (!stream) throw new Error("Could not initialize audio stream");
+
             streamRef.current = stream;
             console.log("✅ Microphone access granted");
 
-            // Update available devices list after permission granted
-            getAudioInputDevices();
+            getDevices();
 
-            // Initialize AudioContext if needed (for visualizer)
             if (!audioContext.current || audioContext.current.state === 'closed') {
                 audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
             }
@@ -72,88 +170,132 @@ export function useAudioRecorder() {
                 await audioContext.current.resume();
             }
 
-            // Setup Visualizer (Analyser) immediately so it's ready even before recording
-            if (!analyserNode.current && audioContext.current) {
-                analyserNode.current = audioContext.current.createAnalyser();
-                analyserNode.current.fftSize = 256;
-                sourceNode.current = audioContext.current.createMediaStreamSource(stream);
-                sourceNode.current.connect(analyserNode.current);
-            } else if (audioContext.current && sourceNode.current && analyserNode.current) {
-                // Re-connect new stream to existing analyser
-                // Disconnect old source is tricky, easier to just recreate source
+            const ctx = audioContext.current;
+
+            if (!sourceNode.current) sourceNode.current = ctx.createMediaStreamSource(stream);
+            else {
                 sourceNode.current.disconnect();
-                sourceNode.current = audioContext.current.createMediaStreamSource(stream);
-                sourceNode.current.connect(analyserNode.current);
+                sourceNode.current = ctx.createMediaStreamSource(stream);
             }
+
+            if (!eqLowNode.current) {
+                eqLowNode.current = ctx.createBiquadFilter();
+                eqLowNode.current.type = 'lowshelf';
+                eqLowNode.current.frequency.value = 200;
+            }
+            if (!eqHighNode.current) {
+                eqHighNode.current = ctx.createBiquadFilter();
+                eqHighNode.current.type = 'highshelf';
+                eqHighNode.current.frequency.value = 3000;
+            }
+            if (!compressorNode.current) {
+                compressorNode.current = ctx.createDynamicsCompressor();
+                compressorNode.current.knee.value = 40;
+                compressorNode.current.attack.value = 0.003;
+                compressorNode.current.release.value = 0.25;
+            }
+            if (!gainNode.current) gainNode.current = ctx.createGain();
+            if (!analyserNode.current) {
+                analyserNode.current = ctx.createAnalyser();
+                analyserNode.current.fftSize = 256;
+            }
+            if (!destNode.current) destNode.current = ctx.createMediaStreamDestination();
+
+            sourceNode.current.connect(eqLowNode.current);
+            eqLowNode.current.connect(eqHighNode.current);
+            eqHighNode.current.connect(compressorNode.current);
+            compressorNode.current.connect(gainNode.current);
+
+            gainNode.current.connect(analyserNode.current);
+            gainNode.current.connect(destNode.current);
+
+            processedStreamRef.current = destNode.current.stream;
+            console.log("✅ Audio Graph Built & Routed");
+
+            // Force state update to expose analyser
+            setRecorderState(prev => ({ ...prev, analyser: analyserNode.current || undefined }));
+
 
         } catch (err) {
             console.error("❌ Error initializing stream:", err);
-            alert("לא ניתן לגשת למיקרופון/התקן נבחר. אנא בדוק הרשאות או בחר התקן אחר.");
+
+            // Diagnostic Logic
+            let diagnosticMsg = "";
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputs = devices.filter(d => d.kind === 'audioinput');
+                if (audioInputs.length === 0) {
+                    diagnosticMsg = "No devices detected";
+                } else {
+                    diagnosticMsg = `${audioInputs.length} devices detected`;
+                }
+            } catch (e) {
+                diagnosticMsg = "Enumerate failed";
+            }
+
+            // Wrap error with diagnostic
+            const finalError = new Error(err instanceof Error ? err.message : String(err));
+            (finalError as any).diagnostic = diagnosticMsg;
+            setPermissionError(finalError);
+
             throw err;
         }
-    }, [selectedDeviceId, getAudioInputDevices]);
+    }, [selectedDeviceId, getDevices, audioConstraints]);
 
-    // Re-init stream if device changes
     useEffect(() => {
-        // Only auto-reinit if we already had a stream running or explicitly requested
-        if (streamRef.current) {
+        if ('setSinkId' in AudioContext.prototype && audioContext.current) {
+            (audioContext.current as any).setSinkId?.(selectedOutputId).catch((err: any) => console.warn("Set Sink ID failed", err));
+        }
+    }, [selectedOutputId]);
+
+    useEffect(() => {
+        if (streamRef.current && !recorderState.isRecording) {
             initializeStream();
         }
     }, [selectedDeviceId, initializeStream]);
 
     const getSupportedMimeType = () => {
-        const types = [
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/mp4',
-            'audio/aac',
-            'audio/ogg;codecs=opus'
-        ];
-        for (const type of types) {
-            if (MediaRecorder.isTypeSupported(type)) {
-                return type;
-            }
-        }
+        const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/ogg;codecs=opus'];
+        for (const type of types) if (MediaRecorder.isTypeSupported(type)) return type;
         return '';
     };
 
     const startRecording = useCallback(async () => {
         try {
-            // Ensure stream is ready and active
-            if (!streamRef.current || !streamRef.current.active) {
-                await initializeStream();
-            }
+            if (!streamRef.current || !streamRef.current.active) await initializeStream();
+            const streamToRecord = processedStreamRef.current || streamRef.current;
+            if (!streamToRecord) throw new Error("No active stream");
 
-            const stream = streamRef.current;
-            if (!stream) throw new Error("No active stream");
-
-            // Create MediaRecorder
             const options = getSupportedMimeType() ? { mimeType: getSupportedMimeType() } : undefined;
-            const recorder = new MediaRecorder(stream, options);
+            const recorder = new MediaRecorder(streamToRecord, options);
 
             mediaRecorder.current = recorder;
             audioChunks.current = [];
 
             recorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    audioChunks.current.push(event.data);
-                }
+                if (event.data.size > 0) audioChunks.current.push(event.data);
             };
 
             recorder.start(100);
             console.log("🔴 Recording started");
+
+            startTimeRef.current = Date.now();
+            pausedTimeRef.current = 0;
+            pauseStartRef.current = 0;
 
             setRecorderState(prev => ({
                 ...prev,
                 isRecording: true,
                 isPaused: false,
                 duration: 0,
-                analyser: analyserNode.current || undefined // Ensure analyser is passed
+                analyser: analyserNode.current || undefined
             }));
 
             timerRef.current = window.setInterval(() => {
-                setRecorderState(prev => ({ ...prev, duration: prev.duration + 1 }));
-            }, 1000);
+                const now = Date.now();
+                const rawElapsed = now - startTimeRef.current - pausedTimeRef.current;
+                setRecorderState(prev => ({ ...prev, duration: rawElapsed / 1000 }));
+            }, 100);
 
         } catch (err) {
             console.error("❌ Failed to start recording:", err);
@@ -163,6 +305,16 @@ export function useAudioRecorder() {
 
     const stopRecording = useCallback((): Promise<Blob> => {
         return new Promise((resolve) => {
+            // Always clear timer and reset state immediately
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+
+            // We set recording false here, but we also rely on the onstop event for data
+            // However, we must ensure UI state updates regardless of recorder health
+            setRecorderState(prev => ({ ...prev, isRecording: false, isPaused: false }));
+
             if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
                 mediaRecorder.current.onstop = () => {
                     const mimeType = mediaRecorder.current?.mimeType || 'audio/webm';
@@ -170,18 +322,32 @@ export function useAudioRecorder() {
                     resolve(audioBlob);
                 };
                 mediaRecorder.current.stop();
-
-                if (timerRef.current) {
-                    clearInterval(timerRef.current);
-                    timerRef.current = null;
-                }
-
-                setRecorderState(prev => ({ ...prev, isRecording: false, isPaused: false }));
             } else {
-                resolve(new Blob());
+                console.warn("Recorder already inactive or null during stop");
+                resolve(new Blob([], { type: 'audio/webm' }));
             }
         });
     }, []);
+
+    const togglePause = useCallback(() => {
+        if (!mediaRecorder.current) return;
+        if (recorderState.isPaused) {
+            mediaRecorder.current.resume();
+            const now = Date.now();
+            pausedTimeRef.current += (now - pauseStartRef.current);
+            timerRef.current = window.setInterval(() => {
+                const currentNow = Date.now();
+                const rawElapsed = currentNow - startTimeRef.current - pausedTimeRef.current;
+                setRecorderState(prev => ({ ...prev, duration: rawElapsed / 1000 }));
+            }, 100);
+            setRecorderState(prev => ({ ...prev, isPaused: false }));
+        } else {
+            mediaRecorder.current.pause();
+            pauseStartRef.current = Date.now();
+            if (timerRef.current) clearInterval(timerRef.current);
+            setRecorderState(prev => ({ ...prev, isPaused: true }));
+        }
+    }, [recorderState.isPaused]);
 
     // Cleanup
     useEffect(() => {
@@ -192,26 +358,41 @@ export function useAudioRecorder() {
         };
     }, []);
 
-    const togglePause = useCallback(() => {
-        if (!mediaRecorder.current) return;
-        if (recorderState.isPaused) {
-            mediaRecorder.current.resume();
-            timerRef.current = window.setInterval(() => {
-                setRecorderState(prev => ({ ...prev, duration: prev.duration + 1 }));
-            }, 1000);
-            setRecorderState(prev => ({ ...prev, isPaused: false }));
-        } else {
-            mediaRecorder.current.pause();
-            if (timerRef.current) clearInterval(timerRef.current);
-            setRecorderState(prev => ({ ...prev, isPaused: true }));
-        }
-    }, [recorderState.isPaused]);
-
-    // Device Label (reactive)
     const deviceLabel = streamRef.current?.getAudioTracks()[0]?.label || 'Default Mic';
+
+    const updateAudioConstraints = useCallback((newConstraints: Partial<MediaTrackConstraints>) => {
+        setAudioConstraints(prev => ({ ...prev, ...newConstraints }));
+    }, []);
+
+    const resetAudioState = useCallback(async () => {
+        console.log("♻️ Resetting Audio State...");
+        setPermissionError(null);
+        setSelectedDeviceId('');
+
+        // Stop current stream if exists
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+        }
+
+        // Force a raw request to prompt permissions if blocked/missing
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+            console.log("✅ Hard reset successful, stream acquired");
+            getDevices();
+            // Re-init audio graph
+            initializeStream();
+        } catch (err) {
+            console.error("❌ Hard reset failed:", err);
+            // Re-trigger error state logic via initializeStream
+            initializeStream();
+        }
+    }, [initializeStream, getDevices]);
 
     return {
         initializeStream,
+        permissionError,
         startRecording,
         stopRecording,
         togglePause,
@@ -219,7 +400,16 @@ export function useAudioRecorder() {
         availableDevices,
         selectedDeviceId,
         setDeviceId: setSelectedDeviceId,
-        getAudioInputDevices,
+        availableOutputDevices,
+        selectedOutputId,
+        setOutputId: setSelectedOutputId,
+        getAudioInputDevices: getDevices,
+        audioConstraints,
+        setAudioConstraints: updateAudioConstraints,
+        vocalEffects,
+        setVocalEffects,
+        audioAnalyser: analyserNode.current, // Expose
+        resetAudioState, // New Function
         ...recorderState
     };
 }

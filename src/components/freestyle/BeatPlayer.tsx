@@ -17,8 +17,8 @@ export default function BeatPlayer({ videoId, isPlaying, onReady, onStateChange,
         width: '100%',
         playerVars: {
             autoplay: 0,
-            controls: 0, // Hide controls to force sync via our UI
-            disablekb: 1, // Disable keyboard shortcuts
+            controls: 1, // Show controls (User req)
+            disablekb: 0, // Enable KB shortcuts for better control
             fs: 0,
             modestbranding: 1,
             playsinline: 1,

@@ -8,8 +8,9 @@ import BeatPlayer from '../components/freestyle/BeatPlayer'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import WordDropControls, { type WordDropSettings } from '../components/freestyle/WordDropControls'
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
+import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
 import { db } from '../db/db'
-import { ArrowLeft, MoreHorizontal, Volume2, Mic, Sparkles, Hash, Link as LinkIcon, Check, X } from 'lucide-react'
+import { ArrowLeft, MoreHorizontal, Mic, Sparkles, Hash, Link as LinkIcon, Check, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { commonWordsHe, commonWordsEn } from '../data/wordBank'
 
@@ -20,6 +21,7 @@ export default function FreestylePage() {
     const navigate = useNavigate()
     const {
         initializeStream,
+        permissionError,
         startRecording,
         stopRecording,
         isRecording,
@@ -27,14 +29,25 @@ export default function FreestylePage() {
         analyser,
         // deviceLabel,
         availableDevices,
+        selectedDeviceId,
         setDeviceId,
-        selectedDeviceId
+        audioConstraints,
+        setAudioConstraints,
+        // New Effects & Output
+        availableOutputDevices,
+        selectedOutputId,
+        setOutputId,
+        vocalEffects,
+        setVocalEffects,
+        resetAudioState
     } = useAudioRecorder()
 
     // Language State
     const [language, setLanguage] = useState<'he' | 'en'>('he')
 
-    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isRecording, language)
+    // Transcription State (Decoupled from recording to allow immediate start on user gesture)
+    const [isTranscribing, setIsTranscribing] = useState(false)
+    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isTranscribing, language)
 
     // Beat State
     const [videoId, setVideoId] = useState(STATIC_BEAT_ID)
@@ -79,6 +92,16 @@ export default function FreestylePage() {
     // Feature: Review Modal
     const [showReviewModal, setShowReviewModal] = useState(false)
     const [pendingSessionBlob, setPendingSessionBlob] = useState<Blob | null>(null)
+
+    // Mic Setup Modal State
+    const [showMicSetup, setShowMicSetup] = useState(false)
+
+    // Trigger modal on error
+    useEffect(() => {
+        if (permissionError) {
+            setShowMicSetup(true)
+        }
+    }, [permissionError])
 
     // Feature: Random Words
     const [wordDropSettings, setWordDropSettings] = useState<WordDropSettings>({
@@ -141,6 +164,7 @@ export default function FreestylePage() {
     const handlePauseFlow = () => {
         console.log('⏸️ Pausing Flow...')
         setFlowState('paused')
+        setIsTranscribing(false) // Pause transcription
         if (youtubePlayer && typeof youtubePlayer.pauseVideo === 'function') {
             youtubePlayer.pauseVideo()
         }
@@ -151,12 +175,14 @@ export default function FreestylePage() {
     const handleResumeFlow = () => {
         console.log('▶️ Resuming Flow...')
         setFlowState('recording')
+        setIsTranscribing(true) // Resume transcription
         if (youtubePlayer) youtubePlayer.playVideo()
     }
 
     const handleFinishFlow = async () => {
         console.log('🛑 Finishing Flow...')
         setFlowState('idle')
+        setIsTranscribing(false) // Stop transcription
         if (preRollCheckRef.current) cancelAnimationFrame(preRollCheckRef.current)
         if (youtubePlayer) youtubePlayer.pauseVideo()
 
@@ -171,7 +197,19 @@ export default function FreestylePage() {
 
     const handleConfirmSave = () => {
         if (pendingSessionBlob) {
-            saveSession(pendingSessionBlob)
+            // Calculate offset (Pre-Roll Duration)
+            const offset = Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000
+
+            // Correct Segments
+            const correctedSegments = segments
+                .map(s => ({ ...s, timestamp: s.timestamp - offset }))
+                .filter(s => s.timestamp >= 0)
+
+            const correctedWordSegments = wordSegments
+                .map(s => ({ ...s, timestamp: s.timestamp - offset }))
+                .filter(s => s.timestamp >= 0)
+
+            saveSession(pendingSessionBlob, correctedSegments, correctedWordSegments)
             setShowReviewModal(false)
             setPendingSessionBlob(null)
         }
@@ -188,10 +226,15 @@ export default function FreestylePage() {
 
     // Precise timing ref
     const recordingStartTimeRef = useRef<number>(0)
+    const transcriptionStartTimeRef = useRef<number>(0)
 
     // Update start logic to set this ref
     const handleStartFlow = async () => {
         console.log('🎤 Starting Flow...')
+
+        // Start transcription IMMEDIATELY to capture user gesture
+        setIsTranscribing(true)
+        transcriptionStartTimeRef.current = Date.now()
 
         if (youtubePlayer && typeof youtubePlayer.playVideo === 'function') {
             try {
@@ -212,8 +255,10 @@ export default function FreestylePage() {
             monitorPreRoll()
         } catch (e) {
             console.error('Failed to start flow:', e)
-            alert('שגיאה בגישה למיקרופון')
+            // Alert removed here, relying on permissionError state -> Modal
+            // But we still set idle
             setFlowState('idle')
+            setIsTranscribing(false) // Revert if failed
             if (youtubePlayer) youtubePlayer.pauseVideo()
         }
     }
@@ -259,7 +304,7 @@ export default function FreestylePage() {
         setMoments(prev => [...prev, preciseTime])
     }
 
-    const saveSession = async (blob: Blob) => {
+    const saveSession = async (blob: Blob, finalSegments: any[], finalWordSegments: any[]) => {
         try {
             await db.sessions.add({
                 title: `Freestyle ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
@@ -273,8 +318,8 @@ export default function FreestylePage() {
                     moments: moments, // Renamed to capture correctly
 
                     lyrics: transcript + (interimTranscript ? ' ' + interimTranscript : ''),
-                    lyricsSegments: segments, // Save structured data for interactive playback
-                    lyricsWords: wordSegments, // NEW: Word-level timestamps
+                    lyricsSegments: finalSegments, // Use corrected segments
+                    lyricsWords: finalWordSegments, // Use corrected words
                     language: language
                 }
             })
@@ -320,9 +365,18 @@ export default function FreestylePage() {
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                     <h1 className="text-base font-bold">Live Studio</h1>
                 </div>
-                <button onClick={() => navigate('/settings')} className="btn-icon">
-                    <MoreHorizontal size={24} />
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowMicSetup(true)}
+                        className={`btn-icon ${permissionError ? 'text-red-500 animate-pulse' : ''}`}
+                        title={language === 'he' ? 'הגדרת מיקרופון' : 'Microphone Setup'}
+                    >
+                        <Mic size={24} />
+                    </button>
+                    <button onClick={() => navigate('/settings')} className="btn-icon">
+                        <MoreHorizontal size={24} />
+                    </button>
+                </div>
             </header>
 
             {/* Main Content Area - Fill remaining space */}
@@ -359,21 +413,25 @@ export default function FreestylePage() {
 
                             {/* URL Input Overlay */}
                             {showUrlInput ? (
-                                <div className="absolute inset-0 bg-[#181818]/95 z-20 flex flex-col items-center justify-center p-2 animate-in fade-in">
-                                    <div className="flex w-full gap-2">
-                                        <input
-                                            type="text"
-                                            placeholder="Paste YouTube Link..."
-                                            className="flex-1 bg-[#333] border border-[#444] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#1DB954]"
-                                            value={urlInput}
-                                            onChange={e => setUrlInput(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleUrlSubmit()}
-                                            autoFocus
-                                        />
-                                        <button onClick={handleUrlSubmit} className="bg-[#1DB954] text-black p-1.5 rounded hover:bg-[#1ed760] transition-colors"><Check size={14} /></button>
-                                        <button onClick={() => setShowUrlInput(false)} className="bg-[#333] text-white p-1.5 rounded hover:bg-[#444] transition-colors"><X size={14} /></button>
+                                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
+                                    <div className="w-full max-w-md bg-[#181818] p-4 rounded-xl border border-[#333] shadow-2xl space-y-4">
+                                        <h3 className="text-lg font-bold text-white text-center">
+                                            {language === 'he' ? 'בחר ביט מיוטיוב' : 'Select YouTube Beat'}
+                                        </h3>
+                                        <div className="flex w-full gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="Paste YouTube Link..."
+                                                className="flex-1 bg-[#222] border border-[#333] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#1DB954] w-full"
+                                                value={urlInput}
+                                                onChange={e => setUrlInput(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleUrlSubmit()}
+                                                autoFocus
+                                            />
+                                            <button onClick={handleUrlSubmit} className="bg-[#1DB954] text-black p-1.5 rounded hover:bg-[#1ed760] transition-colors"><Check size={14} /></button>
+                                            <button onClick={() => setShowUrlInput(false)} className="bg-[#333] text-white p-1.5 rounded hover:bg-[#444] transition-colors"><X size={14} /></button>
+                                        </div>
                                     </div>
-                                    <span className="text-[10px] text-subdued mt-2">youtube.com/watch?v=...</span>
                                 </div>
                             ) : (
                                 <button
@@ -400,12 +458,12 @@ export default function FreestylePage() {
                             </div>
 
                             {/* Words Container (Clipped) */}
-                            <div className="absolute inset-0 overflow-hidden flex flex-col items-center justify-center p-4">
+                            <div className="absolute inset-0 overflow-hidden flex flex-col items-center justify-start pt-20 p-4">
                                 {wordDropSettings.enabled && flowState === 'recording' ? (
                                     currentRandomWords.length > 0 ? (
-                                        <div className="flex flex-wrap justify-center gap-4 animate-in fade-in zoom-in duration-300">
+                                        <div className="flex flex-wrap justify-center gap-6 animate-in fade-in zoom-in duration-300">
                                             {currentRandomWords.map((word, i) => (
-                                                <span key={i} className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#1DB954] to-[#1ED760] drop-shadow-[0_0_25px_rgba(29,185,84,0.6)] leading-tight tracking-tight">
+                                                <span key={i} className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#1DB954] to-[#1ED760] drop-shadow-[0_0_15px_rgba(29,185,84,0.4)] leading-tight tracking-tight">
                                                     {word}
                                                 </span>
                                             ))}
@@ -440,16 +498,16 @@ export default function FreestylePage() {
                                     if (youtubePlayer) youtubePlayer.setVolume(val)
                                 }}
                                 className="h-full w-1 accent-[#1DB954] bg-[#3E3E3E] rounded appearance-none cursor-pointer"
-                                style={{ WebkitAppearance: 'slider-vertical' }}
+                                style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
                             />
                         </div>
-                        <Volume2 size={16} className="text-subdued mb-2" />
+
                     </div>
 
                 </div>
 
                 {/* Controls Area (Swapped Position) */}
-                <div className="relative flex-none py-2 flex flex-col items-center gap-2">
+                <div className="relative flex-none py-2 flex flex-col items-center gap-2 z-30">
 
                     {/* Moments List (Top Right of Controls) - Only this remains here or move? Keep it simpler. */}
                     {moments.length > 0 && (
@@ -471,6 +529,14 @@ export default function FreestylePage() {
                         availableDevices={availableDevices}
                         selectedDeviceId={selectedDeviceId}
                         onDeviceChange={setDeviceId}
+                        audioConstraints={audioConstraints}
+                        setAudioConstraints={setAudioConstraints}
+                        // New Props
+                        availableOutputDevices={availableOutputDevices}
+                        selectedOutputId={selectedOutputId}
+                        onOutputChange={setOutputId}
+                        vocalEffects={vocalEffects}
+                        setVocalEffects={setVocalEffects}
                     />
                 </div>
 
@@ -485,7 +551,7 @@ export default function FreestylePage() {
                         <div className="h-full flex flex-col items-center justify-center text-subdued/30 italic gap-2 min-h-[120px]">
                             <Sparkles size={24} className="opacity-20" />
                             <span className="text-lg font-medium">
-                                {language === 'he' ? 'הכה בביט והראה לי מה יש לך...' : 'Drop bars, I\'m listening...'}
+                                {language === 'he' ? 'המילים שלך יופיעו כאן בזמן אמת...' : 'Your lyrics will appear here in real-time...'}
                             </span>
                         </div>
                     )}
@@ -525,8 +591,33 @@ export default function FreestylePage() {
                     duration: duration,
                     beatId: videoId,
                     date: new Date(),
-                    segments: segments
+                    // Apply offset visualization in review? 
+                    // Ideally we pass corrected data, but `segments` state is raw.
+                    // We can do on-the-fly correction here for the modal view if needed, 
+                    // or just accept that review might be slightly off until saved?
+                    // BETTER: Pass corrected data.
+                    segments: segments.map(s => ({
+                        ...s,
+                        timestamp: s.timestamp - (Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000)
+                    })).filter(s => s.timestamp >= 0),
+                    wordSegments: wordSegments.map(s => ({
+                        ...s,
+                        timestamp: s.timestamp - (Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000)
+                    })).filter(s => s.timestamp >= 0)
                 }}
+            />
+
+            {/* Microphone Setup / Troubleshooting Modal */}
+            <MicrophoneSetupModal
+                isOpen={showMicSetup}
+                onClose={() => setShowMicSetup(false)}
+                permissionError={permissionError}
+                initializeStream={initializeStream}
+                audioAnalyser={analyser} // Use the one from recorderState
+                availableDevices={availableDevices}
+                selectedDeviceId={selectedDeviceId}
+                setDeviceId={setDeviceId}
+                resetAudioState={resetAudioState}
             />
         </div>
     )
