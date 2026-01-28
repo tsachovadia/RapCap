@@ -19,6 +19,7 @@ import FlowPatternsPage from './pages/FlowPatternsPage'
 
 
 import { Agentation } from 'agentation'
+import ReloadPrompt from './components/ReloadPrompt'
 
 export default function App() {
   // Request mic permission on app load
@@ -53,6 +54,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       {import.meta.env.DEV && <Agentation />}
+      <ReloadPrompt />
     </>
   )
 }

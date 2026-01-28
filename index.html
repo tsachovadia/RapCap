@@ -24,6 +24,27 @@
 
 <body>
   <div id="root"></div>
+
+  <!-- PWA Safety Net: Force Reload on Chunk Load Error (Black Screen Fix) -->
+  <script>
+    window.addEventListener('error', (e) => {
+      // Check if error is related to loading a chunk
+      if (e.message && (e.message.includes('Loading chunk') || e.message.includes('Importing a module script failed'))) {
+        console.error('⚠️ Chunk Load Error detected. Forcing hard reload...', e);
+        // Only reload if we haven't just reloaded (prevent infinite loops)
+        if (!sessionStorage.getItem('retry-chunk-load')) {
+          sessionStorage.setItem('retry-chunk-load', 'true');
+          window.location.reload(true);
+        }
+      }
+    });
+
+    // Clear the retry flag on successful load
+    window.addEventListener('load', () => {
+      setTimeout(() => sessionStorage.removeItem('retry-chunk-load'), 5000);
+    });
+  </script>
+
   <script type="module" src="/src/main.tsx"></script>
 </body>
 
