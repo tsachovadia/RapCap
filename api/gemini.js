@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
     try {
         const genAI = new GoogleGenerativeAI(API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
         const prompt = `
     You are a Hebrew Mnemonic Expert.
@@ -52,10 +52,11 @@ export default async function handler(req, res) {
        - Example: "הוא הלך ל**יָרִיד** ופגש **תַּלְמִיד**".
 
     2. **Logic (Memorization Strategy)**: 
-       - Explain HOW to memorize this. Break the story down into "Houses", "Steps", or logical chunks.
+       - Explain HOW to memorize this **IN HEBREW**. 
+       - Break the story down into "Houses", "Steps", or logical chunks.
        - You can use the "Crisis -> Decision -> Leap -> Growth" structure if it fits, BUT PLEASE FEEL FREE to invent your own logical structure that best fits the specific story. 
        - If the user asked for a specific structure, follow it, otherwise use your best judgment.
-       - The goal is to give the user a mental map.
+       - The goal is to give the user a mental map in Hebrew.
 
     Output Format:
     Please verify your response is a valid JSON object with the following keys:
