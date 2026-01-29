@@ -4,7 +4,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 // import { useEffect } from 'react'
 import AppLayout from './layouts/AppLayout'
-import HomePage from './pages/HomePage'
+import { ReloadPrompt } from './components/ReloadPrompt'
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
+import { HomePage } from './pages/HomePage'
 import FreestylePage from './pages/FreestylePage'
 import LibraryPage from './pages/LibraryPage'
 import DrillsPage from './pages/DrillsPage'
@@ -36,6 +38,7 @@ export default function App() {
 
   return (
     <>
+      <OnboardingWizard />
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>

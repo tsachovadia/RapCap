@@ -247,6 +247,28 @@ export default function SettingsPage() {
                     </div>
                 </section>
 
+                {/* Debug Section */}
+                <section className="bg-red-900/10 rounded-lg p-6 border border-red-900/20">
+                    <h2 className="text-xl font-bold mb-4 text-red-400 uppercase text-sm tracking-wider">אזור מפתחים (Debug)</h2>
+                    <div className="space-y-4">
+                        <button
+                            onClick={() => {
+                                localStorage.removeItem('rapcap-onboarding-completed');
+                                window.location.reload();
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-[#282828] rounded hover:bg-[#3E3E3E] transition-colors text-right"
+                        >
+                            <div className="flex items-center gap-3">
+                                <span className="material-symbols-rounded text-zinc-400">restart_alt</span>
+                                <div>
+                                    <span className="block font-bold text-white">Reset Onboarding Wizard</span>
+                                    <span className="text-xs text-zinc-400">מנקה את הזיכרון ומפעיל מחדש את אשף ההתקנה</span>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                </section>
+
                 <div className="text-center text-xs text-subdued pt-8">
                     <p>RapCap v0.5.0 Alpha</p>
                     <p>Built with ❤️ by Artifex</p>
