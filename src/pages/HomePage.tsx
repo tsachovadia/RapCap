@@ -15,7 +15,9 @@ export default function HomePage() {
     const { sessions } = useSessions()
     const { profile } = useProfile()
     const [showGoalTooltip, setShowGoalTooltip] = useState(false)
-    const [notificationPermission, setNotificationPermission] = useState(Notification.permission)
+    const [notificationPermission, setNotificationPermission] = useState(
+        typeof Notification !== 'undefined' ? Notification.permission : 'default'
+    )
 
     const greeting = getGreeting(profile.name)
 
@@ -34,6 +36,11 @@ export default function HomePage() {
     const WEEKLY_GOAL = 3
 
     const requestNotificationPermission = () => {
+        if (typeof Notification === 'undefined') {
+            alert('הדפדפן שלך לא תומך בהתראות')
+            return
+        }
+
         Notification.requestPermission().then(permission => {
             setNotificationPermission(permission)
             if (permission === 'granted') {
