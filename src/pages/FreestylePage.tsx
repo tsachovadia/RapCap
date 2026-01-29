@@ -610,7 +610,10 @@ export default function FreestylePage() {
                 </div>
 
                 {/* Secondary: Live Transcript (Spotify-Style Teleprompter) */}
-                <div className="flex-1 min-h-[160px] bg-[#121212]/50 rounded-xl border border-[#282828] p-4 overflow-y-auto no-scrollbar relative mx-0 mb-safe flex flex-col gap-4 shadow-inner">
+                <div
+                    className="flex-1 min-h-[160px] bg-[#121212]/50 rounded-xl border border-[#282828] p-4 overflow-y-auto no-scrollbar relative mx-0 flex flex-col gap-4 shadow-inner"
+                    style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+                >
                     <div className="absolute top-2 right-2 opacity-50 z-10 pointer-events-none">
                         <Mic size={16} className="text-subdued/20" />
                     </div>

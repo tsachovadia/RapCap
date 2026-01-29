@@ -28,15 +28,22 @@
 html {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  /* Prevent global scroll */
+  height: 100%;
 }
 
 body {
   font-family: var(--font-sans);
   background-color: var(--color-spotify-dark);
   color: #FFFFFF;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100%;
+  width: 100%;
+  position: fixed;
+  /* Lock body */
+  overflow: hidden;
   overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 

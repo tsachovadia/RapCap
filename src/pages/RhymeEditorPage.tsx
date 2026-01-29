@@ -276,8 +276,8 @@ export default function RhymeEditorPage() {
                 </div>
                 {/* Dicta Modal */}
                 {isDictaOpen && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-                        <div className="bg-[#1e1e1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[80vh]">
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 pb-24 sm:pb-4">
+                        <div className="bg-[#1e1e1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[70vh] sm:max-h-[80vh]">
                             {/* Modal Header */}
                             <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#252525] rounded-t-2xl">
                                 <h2 className="font-bold flex items-center gap-2">
