@@ -4,9 +4,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 // import { useEffect } from 'react'
 import AppLayout from './layouts/AppLayout'
-import { ReloadPrompt } from './components/ReloadPrompt'
+import ReloadPrompt from './components/ReloadPrompt'
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
-import { HomePage } from './pages/HomePage'
+import HomePage from './pages/HomePage'
 import FreestylePage from './pages/FreestylePage'
 import LibraryPage from './pages/LibraryPage'
 import DrillsPage from './pages/DrillsPage'
@@ -25,7 +25,7 @@ import { seedDatabase } from './db/db'
 
 
 import { Agentation } from 'agentation'
-import ReloadPrompt from './components/ReloadPrompt'
+
 
 export default function App() {
   // Request mic permission on app load
@@ -56,7 +56,7 @@ export default function App() {
             <Route path="/rhyme-library/:id" element={<RhymeEditorPage />} />
 
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

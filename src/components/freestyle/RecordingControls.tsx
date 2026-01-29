@@ -24,15 +24,6 @@ interface RecordingControlsProps {
     availableOutputDevices?: MediaDeviceInfo[];
     selectedOutputId?: string;
     onOutputChange?: (id: string) => void;
-
-    vocalEffects?: {
-        enabled: boolean;
-        eqLow: number;
-        eqHigh: number;
-        compressor: number;
-        gain: number;
-    };
-    setVocalEffects?: (effects: any) => void;
 }
 
 export default function RecordingControls({
@@ -284,79 +275,6 @@ export default function RecordingControls({
                                 </div>
                             </label>
                         </div>
-
-                        {/* 4. Vocal Effects (Studio Processing) */}
-                        <div className="flex flex-col gap-3">
-                            <label className="text-xs font-bold text-subdued uppercase flex items-center justify-between">
-                                <span className="flex items-center gap-2"><Sliders size={12} /> Studio Effects</span>
-                                {/* Master Switch */}
-                                <div
-                                    className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${vocalEffects.enabled ? 'bg-[#1DB954]' : 'bg-[#444]'}`}
-                                    onClick={() => setVocalEffects({ ...vocalEffects, enabled: !vocalEffects.enabled })}
-                                >
-                                    <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${vocalEffects.enabled ? 'translate-x-4' : ''}`} />
-                                </div>
-                            </label>
-
-                            <div className={`flex flex-col gap-4 p-3 bg-[#222] rounded-lg transition-opacity ${vocalEffects.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                                {/* Compressor */}
-                                <div className="space-y-1">
-                                    <div className="flex justify-between text-xs">
-                                        <span>Compressor (Punch)</span>
-                                        <span className="text-[#1DB954]">{vocalEffects.compressor}%</span>
-                                    </div>
-                                    <input
-                                        type="range" min="0" max="100"
-                                        value={vocalEffects.compressor}
-                                        onChange={(e) => setVocalEffects({ ...vocalEffects, compressor: Number(e.target.value) })}
-                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
-                                    />
-                                </div>
-
-                                {/* EQ Low */}
-                                <div className="space-y-1">
-                                    <div className="flex justify-between text-xs">
-                                        <span>Low End (Warmth)</span>
-                                        <span className={vocalEffects.eqLow > 0 ? "text-[#1DB954]" : "text-subdued"}>{vocalEffects.eqLow > 0 ? '+' : ''}{vocalEffects.eqLow}dB</span>
-                                    </div>
-                                    <input
-                                        type="range" min="-12" max="12"
-                                        value={vocalEffects.eqLow}
-                                        onChange={(e) => setVocalEffects({ ...vocalEffects, eqLow: Number(e.target.value) })}
-                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
-                                    />
-                                </div>
-
-                                {/* EQ High */}
-                                <div className="space-y-1">
-                                    <div className="flex justify-between text-xs">
-                                        <span>High End (Crisp)</span>
-                                        <span className={vocalEffects.eqHigh > 0 ? "text-[#1DB954]" : "text-subdued"}>{vocalEffects.eqHigh > 0 ? '+' : ''}{vocalEffects.eqHigh}dB</span>
-                                    </div>
-                                    <input
-                                        type="range" min="-12" max="12"
-                                        value={vocalEffects.eqHigh}
-                                        onChange={(e) => setVocalEffects({ ...vocalEffects, eqHigh: Number(e.target.value) })}
-                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
-                                    />
-                                </div>
-
-                                {/* Output Gain */}
-                                <div className="space-y-1 border-t border-[#333] pt-2">
-                                    <div className="flex justify-between text-xs">
-                                        <span>Output Gain</span>
-                                        <span className="text-white">{Math.round(vocalEffects.gain * 100)}%</span>
-                                    </div>
-                                    <input
-                                        type="range" min="0" max="2" step="0.1"
-                                        value={vocalEffects.gain}
-                                        onChange={(e) => setVocalEffects({ ...vocalEffects, gain: Number(e.target.value) })}
-                                        className="w-full h-1 bg-[#444] rounded-lg appearance-none cursor-pointer accent-[#1DB954]"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
 
                         <button
                             onClick={() => setShowSettings(false)}

@@ -8,8 +8,9 @@ interface InstallStepProps {
 
 export const InstallStep: React.FC<InstallStepProps> = ({ onNext, isIOS }) => {
     return (
-        <div className="flex flex-col items-center justify-between h-full p-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex-1 flex flex-col items-center justify-center space-y-6">
+    return (
+        <div className="flex flex-col items-center justify-center h-full p-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col items-center justify-center space-y-6">
                 <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-2">
                     <Smartphone className="w-10 h-10 text-blue-400" />
                 </div>
@@ -43,7 +44,7 @@ export const InstallStep: React.FC<InstallStepProps> = ({ onNext, isIOS }) => {
                 )}
             </div>
 
-            <div className="w-full max-w-xs space-y-4 mt-8">
+            <div className="w-full max-w-xs space-y-4 mt-8 pb-8">
                 <div className="text-xs text-zinc-500">
                     Note: If you are already in the app, just click Continue.
                 </div>
@@ -56,5 +57,6 @@ export const InstallStep: React.FC<InstallStepProps> = ({ onNext, isIOS }) => {
                 </button>
             </div>
         </div>
+    );
     );
 };

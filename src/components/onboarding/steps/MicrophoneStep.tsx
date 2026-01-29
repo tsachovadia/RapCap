@@ -1,4 +1,4 @@
-```
+
 import React, { useState } from 'react';
 import { Mic, AlertCircle } from 'lucide-react';
 
@@ -29,8 +29,8 @@ export const MicrophoneStep: React.FC<MicrophoneStepProps> = ({ onNext, checkPer
     };
 
     return (
-        <div className="flex flex-col items-center justify-between h-full p-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex-1 flex flex-col items-center justify-center space-y-8">
+        <div className="flex flex-col items-center justify-center h-full p-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col items-center justify-center space-y-8">
                 <div className="relative">
                     <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-2 z-10 relative animate-pulse">
                         <Mic className="w-12 h-12 text-red-500" />
@@ -53,20 +53,25 @@ export const MicrophoneStep: React.FC<MicrophoneStepProps> = ({ onNext, checkPer
                 )}
             </div>
 
-            <button
-                onClick={handleEnableMic}
-                disabled={loading}
-                className="w-full max-w-xs bg-red-600 hover:bg-red-500 text-white font-bold py-4 px-8 rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                {loading ? 'Requesting...' : 'Enable Access'}
-            </button>
+                )}
+            </div>
 
-            <button
-                onClick={onNext}
-                className="mt-4 text-zinc-500 text-sm hover:text-zinc-300 underline"
-            >
-                Skip for now
-            </button>
-        </div>
+            <div className="w-full flex flex-col items-center gap-4 mt-8 pb-8">
+                <button
+                    onClick={handleEnableMic}
+                    disabled={loading}
+                    className="w-full max-w-xs bg-red-600 hover:bg-red-500 text-white font-bold py-4 px-8 rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {loading ? 'Requesting...' : 'Enable Access'}
+                </button>
+
+                <button
+                    onClick={onNext}
+                    className="text-zinc-500 text-sm hover:text-zinc-300 underline"
+                >
+                    Skip for now
+                </button>
+            </div>
+        </div >
     );
 };

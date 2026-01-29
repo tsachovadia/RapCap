@@ -39,7 +39,7 @@ export const OnboardingWizard: React.FC = () => {
                         <MicrophoneStep
                             onNext={nextStep}
                             checkPermissions={checkPermissions}
-                            hasPermission={hasMicPermission}
+                            checkPermissions={checkPermissions}
                         />
                     )}
                     {step === 'notifications' && (

@@ -32,8 +32,8 @@ export const NotificationStep: React.FC<NotificationStepProps> = ({ onNext, chec
     };
 
     return (
-        <div className="flex flex-col items-center justify-between h-full p-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex-1 flex flex-col items-center justify-center space-y-8">
+        <div className="flex flex-col items-center justify-center h-full p-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col items-center justify-center space-y-8">
                 <div className="w-24 h-24 bg-purple-500/10 rounded-full flex items-center justify-center mb-2">
                     <Bell className="w-12 h-12 text-purple-400" />
                 </div>
@@ -53,19 +53,21 @@ export const NotificationStep: React.FC<NotificationStepProps> = ({ onNext, chec
                 )}
             </div>
 
-            <button
-                onClick={handleEnableNotifications}
-                className="w-full max-w-xs bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 px-8 rounded-full transition-all active:scale-95"
-            >
-                Enable Notifications
-            </button>
+            <div className="w-full flex flex-col items-center gap-4 mt-8 pb-8">
+                <button
+                    onClick={handleEnableNotifications}
+                    className="w-full max-w-xs bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 px-8 rounded-full transition-all active:scale-95"
+                >
+                    Enable Notifications
+                </button>
 
-            <button
-                onClick={onNext}
-                className="mt-4 text-zinc-500 text-sm hover:text-zinc-300 underline"
-            >
-                Maybe later
-            </button>
+                <button
+                    onClick={onNext}
+                    className="text-zinc-500 text-sm hover:text-zinc-300 underline"
+                >
+                    Maybe later
+                </button>
+            </div>
         </div>
     );
 };
