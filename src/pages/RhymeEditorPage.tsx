@@ -149,9 +149,9 @@ export default function RhymeEditorPage() {
     // 4. Categories (Bottom - Placeholder)
 
     return (
-        <div className="flex flex-col h-full bg-[#121212] text-white relative">
+        <div className="flex flex-col bg-[#121212] text-white relative">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#1a1a1a]">
+            <div className="sticky top-0 z-30 flex items-center justify-between p-4 border-b border-white/5 bg-[#1a1a1a]">
                 <button onClick={() => navigate(-1)} className="text-white/60 p-2">
                     <ArrowLeft size={24} />
                 </button>
@@ -173,7 +173,7 @@ export default function RhymeEditorPage() {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            <div className="p-4 space-y-6">
 
                 {/* 1. WORD BANK & ADDER */}
                 <div className="space-y-4">
