@@ -111,6 +111,8 @@ export default function FreestylePage() {
     // Feature: Review Modal
     const [showReviewModal, setShowReviewModal] = useState(false)
     const [pendingSessionBlob, setPendingSessionBlob] = useState<Blob | null>(null)
+    const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{ text: string, segments: any[], wordSegments: any[] } | null>(null) // [NEW] Enhanced Data
+    const enhancedDataRef = useRef<any>(null) // [NEW] Ref for synchronous access in save
 
     // Mic Setup Modal State
     const [showMicSetup, setShowMicSetup] = useState(false)
@@ -265,16 +267,25 @@ export default function FreestylePage() {
                 .map(s => ({ ...s, timestamp: s.timestamp - offset }))
                 .filter(s => s.timestamp >= 0)
 
-            saveSession(pendingSessionBlob, correctedSegments, correctedWordSegments)
+            // [NEW] Use Enhanced Data if available
+            if (enhancedTranscriptData) {
+                saveSession(pendingSessionBlob, enhancedTranscriptData.segments, enhancedTranscriptData.wordSegments, enhancedTranscriptData.text)
+            } else {
+                saveSession(pendingSessionBlob, correctedSegments, correctedWordSegments)
+            }
+
             setShowReviewModal(false)
             setPendingSessionBlob(null)
+            setEnhancedTranscriptData(null) // Reset
         }
     }
 
     const handleDiscard = () => {
         if (confirm('Are you sure you want to discard this session?')) {
             setShowReviewModal(false)
+            setShowReviewModal(false)
             setPendingSessionBlob(null)
+            setEnhancedTranscriptData(null) // Reset
             resetTranscript()
             setMoments([])
         }
@@ -360,7 +371,7 @@ export default function FreestylePage() {
         setMoments(prev => [...prev, preciseTime])
     }
 
-    const saveSession = async (blob: Blob, finalSegments: any[], finalWordSegments: any[]) => {
+    const saveSession = async (blob: Blob, finalSegments: any[], finalWordSegments: any[], customTranscript?: string) => {
         try {
             await db.sessions.add({
                 title: `Freestyle ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
@@ -373,7 +384,7 @@ export default function FreestylePage() {
                 metadata: {
                     moments: moments, // Renamed to capture correctly
 
-                    lyrics: transcript + (interimTranscript ? ' ' + interimTranscript : ''),
+                    lyrics: customTranscript || (transcript + (interimTranscript ? ' ' + interimTranscript : '')),
                     lyricsSegments: finalSegments, // Use corrected segments
                     lyricsWords: finalWordSegments, // Use corrected words
                     language: language
@@ -658,21 +669,48 @@ export default function FreestylePage() {
                 onClose={() => setShowReviewModal(false)}
                 onSave={handleConfirmSave}
                 onDiscard={handleDiscard}
+                audioBlob={pendingSessionBlob} // [NEW] Pass blob for Whisper
+                onUpdateTranscript={(text, newSegments, newWords) => {
+                    // Update the underlying state so the save function picks it up
+                    // We need to update the segments logic. 
+                    // Note: 'transcript' state in FreestylePage is usually cumulative string.
+                    // We might need to expose setters or refactor how we store the "final" version for saving.
+                    // Since 'saveSession' uses 'transcript', 'segments', 'wordSegments' from state...
+                    // WE MUST UPDATE THE STATE HERE.
+
+                    // However, useTranscription hook owns these states. 
+                    // We need extended logic or simply override the data passed to 'saveSession' via a ref, 
+                    // OR simple hack: Modify the 'data' passed to modal? No, that's read-only.
+
+                    // Best approach: Store "Enhanced" data in Freestyle page separate from hook, 
+                    // or force update the hook state if possible? 
+                    // Hook doesn't expose setters.
+
+                    // EASIEST: Just store "enhancedData" in a state here and merge it during save.
+
+                    // Check 'handleConfirmSave': it reads from 'segments'.
+                    // Let's create an override ref or state.
+                    enhancedDataRef.current = { transcript: text, segments: newSegments, wordSegments: newWords };
+                    // Force re-render of modal by waiting for next tick or implicit state update? 
+                    // Actually, modifying 'segments' state from the hook won't work if hook doesn't export setter.
+                    // The 'ReviewSessionModal' displays 'data' prop.
+                    // If we update a local state 'reviewData' initialized from hook, it would work best.
+
+                    // BUT for minimal changes:
+                    // Let's add a state 'enhancedTranscriptData' initialized to null.
+                    setEnhancedTranscriptData({ text, segments: newSegments, wordSegments: newWords });
+                }}
                 data={{
-                    transcript: transcript,
+                    transcript: enhancedTranscriptData ? enhancedTranscriptData.text : transcript,
                     duration: duration,
                     beatId: videoId,
                     date: new Date(),
-                    // Apply offset visualization in review? 
-                    // Ideally we pass corrected data, but `segments` state is raw.
-                    // We can do on-the-fly correction here for the modal view if needed, 
-                    // or just accept that review might be slightly off until saved?
-                    // BETTER: Pass corrected data.
-                    segments: segments.map(s => ({
+                    // Use enhanced if available, else standard (with offset correction applied for display)
+                    segments: enhancedTranscriptData ? enhancedTranscriptData.segments : segments.map(s => ({
                         ...s,
                         timestamp: s.timestamp - (Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000)
                     })).filter(s => s.timestamp >= 0),
-                    wordSegments: wordSegments.map(s => ({
+                    wordSegments: enhancedTranscriptData ? enhancedTranscriptData.wordSegments : wordSegments.map(s => ({
                         ...s,
                         timestamp: s.timestamp - (Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000)
                     })).filter(s => s.timestamp >= 0)

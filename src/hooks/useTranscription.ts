@@ -29,6 +29,11 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         recognition.interimResults = true
         recognition.lang = language === 'he' ? 'he-IL' : 'en-US'
 
+        recognition.onstart = () => {
+            console.log("🎤 Speech Recognition Started")
+            setIsListening(true)
+        }
+
         recognition.onresult = (event: any) => {
             let finalTranscript = ''
             let localInterim = ''
@@ -37,6 +42,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 if (event.results[i].isFinal) {
                     const text = event.results[i][0].transcript.trim()
                     finalTranscript += text + ' '
+                    console.log("📝 Final Result:", text)
 
                     // Capture timestamp for this segment (relative to start)
                     const now = Date.now()
@@ -84,12 +90,14 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 phraseStartTimeRef.current = Date.now()
             }
 
+            if (localInterim) console.log("🗣️ Interim:", localInterim)
+
             setTranscript(prev => prev + finalTranscript)
             setInterimTranscript(localInterim)
         }
 
         recognition.onerror = (event: any) => {
-            console.error("Transcription error", event.error)
+            console.error("Transcription error detail:", event.error)
             // If denied, kill the loop
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                 isRecordingRef.current = false
@@ -97,21 +105,23 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         }
 
         recognition.onend = () => {
+            console.log("🛑 Speech Recognition Ended")
             // Auto-restart if we are still supposedly recording
             // Use a timeout to prevent rapid-fire loops
             if (isRecordingRef.current) {
-                console.log("🔄 Recognition ended, restarting in 200ms...")
+                console.log("🔄 Recognition ended unexpectedly, restarting in 200ms...")
 
                 if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
 
                 restartTimeoutRef.current = setTimeout(() => {
                     if (!isRecordingRef.current) return;
                     try {
+                        console.log("🔄 Attempting restart...")
                         recognition.start()
                     } catch (e) {
                         console.warn("Restart failed:", e)
                     }
-                }, 50)
+                }, 200) // Increased to 200ms to be safer
             }
         }
 

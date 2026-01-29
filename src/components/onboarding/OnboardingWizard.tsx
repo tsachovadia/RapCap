@@ -13,8 +13,7 @@ export const OnboardingWizard: React.FC = () => {
         nextStep,
         completeOnboarding,
         isIOS,
-        checkPermissions,
-        hasMicPermission
+        checkPermissions
     } = useOnboarding();
 
     if (!isOpen) return null;
@@ -38,7 +37,6 @@ export const OnboardingWizard: React.FC = () => {
                     {step === 'microphone' && (
                         <MicrophoneStep
                             onNext={nextStep}
-                            checkPermissions={checkPermissions}
                             checkPermissions={checkPermissions}
                         />
                     )}

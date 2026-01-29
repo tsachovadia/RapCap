@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import YouTube, { type YouTubeProps } from 'react-youtube';
 
 interface BeatPlayerProps {
@@ -12,7 +12,8 @@ interface BeatPlayerProps {
 export default function BeatPlayer({ videoId, isPlaying, onReady, onStateChange, volume }: BeatPlayerProps) {
     const playerRef = useRef<any>(null);
 
-    const opts: YouTubeProps['opts'] = {
+    // Memoize options to prevent iframe reload on every render!
+    const opts: YouTubeProps['opts'] = useMemo(() => ({
         height: '100%',
         width: '100%',
         playerVars: {
@@ -25,7 +26,7 @@ export default function BeatPlayer({ videoId, isPlaying, onReady, onStateChange,
             origin: window.location.origin,
             rel: 0, // Don't show related videos on pause
         },
-    };
+    }), []);
 
     // We still keep the effect for declarative updates, but direct calls are better for mobile
     useEffect(() => {

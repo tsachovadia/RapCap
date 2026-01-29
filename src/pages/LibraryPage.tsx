@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useSessions } from '../hooks/useSessions'
 import SessionPlayer from '../components/library/SessionPlayer'
-import { Music, Play, Pause, Trash2, Copy, Check } from 'lucide-react'
+import { db } from '../db/db'
+import { Music, Play, Pause, Trash2, Copy, Check, Sparkles } from 'lucide-react'
 
 import { useProfile } from '../hooks/useProfile'
 
@@ -134,15 +135,50 @@ export default function LibraryPage() {
                                     </div>
 
                                     {/* Actions */}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            deleteSession(session.id);
-                                        }}
-                                        className="btn-icon w-8 h-8"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {/* WHISPER BUTTON: Only for freestyles that have a blob */}
+                                        {session.type === 'freestyle' && session.blob && (
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm("האם לשפר תמלול עם Whisper? (זה ייקח כמה שניות)")) {
+                                                        const btn = e.currentTarget;
+                                                        btn.disabled = true;
+                                                        try {
+                                                            const { transcribeAudio } = await import('../services/whisper');
+                                                            const result = await transcribeAudio(session.blob, session.metadata?.language || 'he');
+
+                                                            // Update DB
+                                                            await db.sessions.update(session.id, {
+                                                                'metadata.lyrics': result.text,
+                                                                'metadata.lyricsSegments': result.segments,
+                                                                'metadata.lyricsWords': result.wordSegments
+                                                            });
+                                                            alert("התמלול שופר בהצלחה! ✅");
+                                                        } catch (err) {
+                                                            console.error(err);
+                                                            alert("שגיאה בתמלול: " + String(err));
+                                                        } finally {
+                                                            btn.disabled = false;
+                                                        }
+                                                    }
+                                                }}
+                                                className="btn-icon w-8 h-8 text-yellow-400 hover:text-yellow-300"
+                                                title="שפר תמלול (Whisper)"
+                                            >
+                                                <Sparkles size={18} />
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteSession(session.id);
+                                            }}
+                                            className="btn-icon w-8 h-8"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Expanded Content */}

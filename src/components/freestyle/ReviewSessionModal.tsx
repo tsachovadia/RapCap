@@ -1,4 +1,6 @@
-import { X, Check, Music2, Clock, Calendar } from 'lucide-react'
+import { X, Check, Music2, Clock, Calendar, Sparkles, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { transcribeAudio } from '../../services/whisper'
 
 
 
@@ -7,6 +9,8 @@ interface ReviewSessionModalProps {
     onClose: () => void
     onSave: () => void
     onDiscard: () => void
+    audioBlob?: Blob | null // [NEW] Added for Whisper
+    onUpdateTranscript?: (text: string, segments: any[], wordSegments: any[]) => void // [NEW] Callback
     data: {
         transcript: string
         duration: number
@@ -17,7 +21,9 @@ interface ReviewSessionModalProps {
     }
 }
 
-export default function ReviewSessionModal({ isOpen, onClose, onSave, onDiscard, data }: ReviewSessionModalProps) {
+export default function ReviewSessionModal({ isOpen, onClose, onSave, onDiscard, data, audioBlob, onUpdateTranscript }: ReviewSessionModalProps) {
+    const [isEnhancing, setIsEnhancing] = useState(false);
+
     if (!isOpen) return null
 
     // Format helpers
@@ -74,8 +80,30 @@ export default function ReviewSessionModal({ isOpen, onClose, onSave, onDiscard,
 
                     {/* Lyrics Preview with Timestamps */}
                     <div className="bg-[#121212] rounded-xl border border-[#282828] p-4 min-h-[200px] flex flex-col gap-2 relative">
-                        <div className="absolute top-2 right-2 opacity-30 pointer-events-none">
-                            <span className="text-[10px] font-mono border border-white/20 px-1 rounded">RAW DATA</span>
+                        <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
+                            {/* Transcribe Button */}
+                            {audioBlob && onUpdateTranscript && (
+                                <button
+                                    onClick={async () => {
+                                        if (isEnhancing) return;
+                                        try {
+                                            setIsEnhancing(true);
+                                            const result = await transcribeAudio(audioBlob, 'he'); // Defaulting to Hebrew logic as requested
+                                            onUpdateTranscript(result.text, result.segments, result.wordSegments);
+                                        } catch (e) {
+                                            alert("שגיאה בתמלול: " + (e instanceof Error ? e.message : String(e)));
+                                        } finally {
+                                            setIsEnhancing(false);
+                                        }
+                                    }}
+                                    className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-2 py-1 rounded-md flex items-center gap-1 transition-colors shadow-lg"
+                                    disabled={isEnhancing}
+                                >
+                                    {isEnhancing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                    {isEnhancing ? 'מתמלל...' : 'שפר תמלול (Whisper)'}
+                                </button>
+                            )}
+                            <span className="text-[10px] font-mono border border-white/20 px-1 rounded opacity-30 pointer-events-none">RAW DATA</span>
                         </div>
 
                         {displaySegments.length > 0 ? (
