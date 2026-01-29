@@ -8,7 +8,6 @@ interface InstallStepProps {
 
 export const InstallStep: React.FC<InstallStepProps> = ({ onNext, isIOS }) => {
     return (
-    return (
         <div className="flex flex-col items-center justify-center h-full p-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col items-center justify-center space-y-6">
                 <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-2">
@@ -57,6 +56,5 @@ export const InstallStep: React.FC<InstallStepProps> = ({ onNext, isIOS }) => {
                 </button>
             </div>
         </div>
-    );
     );
 };

@@ -53,8 +53,7 @@ export const MicrophoneStep: React.FC<MicrophoneStepProps> = ({ onNext, checkPer
                 )}
             </div>
 
-                )}
-            </div>
+
 
             <div className="w-full flex flex-col items-center gap-4 mt-8 pb-8">
                 <button

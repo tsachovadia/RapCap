@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSessions } from '../hooks/useSessions'
 import SessionPlayer from '../components/library/SessionPlayer'
-import { Music, Play, Pause, Trash2 } from 'lucide-react'
+import { Music, Play, Pause, Trash2, Copy, Check } from 'lucide-react'
 
 import { useProfile } from '../hooks/useProfile'
 
@@ -11,6 +11,7 @@ export default function LibraryPage() {
     const [activeFilter, setActiveFilter] = useState('all')
     const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
     const [isPlaying, setIsPlaying] = useState(false)
+    const [copiedSessionId, setCopiedSessionId] = useState<number | null>(null)
 
     const filters = [
         { id: 'all', label: 'הכל' },
@@ -24,6 +25,24 @@ export default function LibraryPage() {
         } else {
             setActiveSessionId(id)
             setIsPlaying(true)
+        }
+    }
+
+    const handleCopyDrill = (session: any) => {
+        let textToCopy = ''
+
+        if (session.subtype === 'rhyme-chains') {
+            textToCopy = (session.content?.split(', ') || []).join('\n')
+        } else if (session.subtype === 'word-association') {
+            textToCopy = (session.content?.split(' → ') || []).join(' → ')
+        } else {
+            textToCopy = session.content || ''
+        }
+
+        if (textToCopy) {
+            navigator.clipboard.writeText(textToCopy)
+            setCopiedSessionId(session.id)
+            setTimeout(() => setCopiedSessionId(null), 2000)
         }
     }
 
@@ -172,6 +191,18 @@ export default function LibraryPage() {
                                                     </div>
                                                 ) : (
                                                     <p className="text-sm text-subdued whitespace-pre-wrap">{session.content || 'תוכן האימון חסר'}</p>
+                                                )}
+                                                {session.subtype !== 'flow-patterns' && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleCopyDrill(session)
+                                                        }}
+                                                        className={`mt-3 flex items-center gap-2 text-xs transition-colors ${copiedSessionId === session.id ? 'text-green-500' : 'text-[#1DB954] hover:text-white'}`}
+                                                    >
+                                                        {copiedSessionId === session.id ? <Check size={14} /> : <Copy size={14} />}
+                                                        <span>{copiedSessionId === session.id ? 'הועתק ללוח!' : 'העתק תוכן'}</span>
+                                                    </button>
                                                 )}
                                             </div>
                                         )}

@@ -37,8 +37,6 @@ export default function FreestylePage() {
         availableOutputDevices,
         selectedOutputId,
         setOutputId,
-        vocalEffects,
-        setVocalEffects,
         resetAudioState
     } = useAudioRecorder()
 
@@ -384,10 +382,14 @@ export default function FreestylePage() {
             // Reset UI
             setMoments([])
             resetTranscript()
-            alert('האימון נשמר בהצלחה בספריה!')
+            setPendingSessionBlob(null) // Ensure blob is cleared
+
+            // Explicit Navigation to Library (Fixes iOS PWA "Home" bug)
+            navigate('/library')
+
         } catch (e) {
             console.error('Failed to save session', e)
-            alert('שגיאה בשמירת ההקלטה')
+            alert('שגיאה בשמירת ההקלטה: ' + (e instanceof Error ? e.message : String(e)))
         }
     }
 
@@ -604,8 +606,6 @@ export default function FreestylePage() {
                         availableOutputDevices={availableOutputDevices}
                         selectedOutputId={selectedOutputId}
                         onOutputChange={setOutputId}
-                        vocalEffects={vocalEffects}
-                        setVocalEffects={setVocalEffects}
                     />
                 </div>
 

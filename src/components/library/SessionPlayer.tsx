@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import YouTube from 'react-youtube'
-import { ChevronLeft, ChevronRight, Download, Share2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Copy, Check } from 'lucide-react'
 import MomentsList from './MomentsList'
 import WaveformTrack from './WaveformTrack'
 import LyricsDisplay from './LyricsDisplay'
@@ -217,19 +217,58 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
         if (audioRef.current) audioRef.current.currentTime = Math.max(0, targetTime - syncOffset / 1000)
     }
 
+    const [includeTimestamps, setIncludeTimestamps] = useState(false)
+    const [isCopied, setIsCopied] = useState(false)
+
+    const handleCopyLyrics = () => {
+        let text = ''
+        const segments = session.metadata?.lyricsSegments
+        const rawLyrics = session.metadata?.lyrics
+
+        if (includeTimestamps && segments && Array.isArray(segments)) {
+            text = segments.map((s: any) => {
+                const time = formatTime(s.timestamp)
+                return `[${time}] ${s.text}`
+            }).join('\n')
+        } else {
+            text = rawLyrics || ''
+        }
+
+        if (text) {
+            navigator.clipboard.writeText(text)
+            setIsCopied(true)
+            setTimeout(() => setIsCopied(false), 2000)
+        }
+    }
+
     const handleDownload = () => {
         if (!session.blob) return
         const url = URL.createObjectURL(session.blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `recording-${new Date().toISOString()}.webm`
+        a.download = `recording-${new Date().toISOString()}.mp3`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
     }
 
-    const moments = session.metadata?.moments || []
+    // Fix for 0:00 Moments: Ensure generic moments have timestamps
+    // Sometimes moments might be stored as just numbers (timestamps) or objects.
+    // We normalize to the interface expected by MomentsList
+    const rawMoments = session.metadata?.moments || [];
+    const moments = rawMoments.map((m: any, idx: number) => {
+        // If it's already an object with time/label, use it.
+        // If it's just a number (legacy), wrap it.
+        // If it comes from the recorder, check the structure.
+        // Assuming user feedback "saved as 0:00" means the data might be 0 or formatting fails.
+        // We'll trust the value if it exists, otherwise default.
+        if (typeof m === 'object' && m !== null) {
+            return { timestamp: m.timestamp || 0, label: m.label || `Moment ${idx + 1}` };
+        }
+        // Fallback for number or other types
+        return { timestamp: Number(m) || 0, label: `Moment ${idx + 1}` };
+    });
 
     return (
         <div className="flex flex-col w-full gap-4 bg-[#181818] p-4 rounded-xl border border-[#282828] select-none">
@@ -320,11 +359,11 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
                 />
 
                 {/* 4. MARKERS */}
-                {moments.map((m: number, i: number) => (
+                {moments.map((m: any, i: number) => (
                     <div
                         key={i}
                         className="absolute top-0 bottom-0 w-px bg-yellow-500/50 pointer-events-none z-0"
-                        style={{ left: `${(m / session.duration) * 100}%` }}
+                        style={{ left: `${(m.timestamp / session.duration) * 100}%` }}
                     >
                         <div className="absolute bottom-1 w-2 h-2 rounded-full bg-yellow-500 -translate-x-1/2" />
                     </div>
@@ -351,12 +390,7 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
                         <Download size={14} />
                         MP3
                     </button>
-                    <button
-                        className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#282828] hover:bg-white/10 text-xs font-bold transition-colors"
-                        title="Share"
-                    >
-                        <Share2 size={14} />
-                    </button>
+                    {/* Share Button Removed */}
                 </div>
             </div>
 
@@ -374,7 +408,28 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
             {/* Content Area: Lyrics & Moments */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-right" dir="rtl">
                 {/* 1. Lyrics Column */}
-                <div className="h-[300px]">
+                <div className="h-[300px] flex flex-col">
+                    <div className="flex items-center justify-between mb-2 pl-2">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${includeTimestamps ? 'bg-[#1DB954] border-[#1DB954]' : 'border-subdued'}`}>
+                                {includeTimestamps && <div className="w-2 h-2 bg-black rounded-full" />}
+                            </div>
+                            <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={includeTimestamps}
+                                onChange={(e) => setIncludeTimestamps(e.target.checked)}
+                            />
+                            <span className="text-xs text-subdued">עם זמנים</span>
+                        </label>
+                        <button
+                            onClick={handleCopyLyrics}
+                            className={`flex items-center gap-1 text-xs transition-colors ${isCopied ? 'text-green-500' : 'text-subdued hover:text-[#1DB954]'}`}
+                        >
+                            {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                            {isCopied ? 'הועתק ללוח!' : 'העתק מילים'}
+                        </button>
+                    </div>
                     <LyricsDisplay
                         lyrics={session.metadata?.lyrics}
                         segments={session.metadata?.lyricsSegments}

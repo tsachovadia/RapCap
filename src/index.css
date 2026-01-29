@@ -36,6 +36,7 @@ body {
   color: #FFFFFF;
   min-height: 100vh;
   min-height: 100dvh;
+  overscroll-behavior-y: none;
 }
 
 
@@ -243,4 +244,11 @@ body {
 .text-2xs {
   font-size: 11px;
   line-height: 16px;
+}
+
+/* Animation Keyframes */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }

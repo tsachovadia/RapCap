@@ -19,6 +19,7 @@ export default function RhymeEditorPage() {
     // AI / Dicta State
     const [mnemonicLogic, setMnemonicLogic] = useState('')
     const [isGenerating, setIsGenerating] = useState(false)
+    const [isEditingStory, setIsEditingStory] = useState(false)
 
     // Dicta Modal State
     const [isDictaOpen, setIsDictaOpen] = useState(false)
@@ -227,19 +228,36 @@ export default function RhymeEditorPage() {
                         <button
                             onClick={handleMagicStory}
                             disabled={isGenerating}
-                            className="flex items-center gap-1 text-[10px] bg-purple-500/10 text-purple-400 px-2 py-1 rounded-full hover:bg-purple-500/20 disabled:opacity-50"
+                            className="relative overflow-hidden group flex items-center gap-1 text-[10px] bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-full hover:bg-purple-500/30 disabled:opacity-50 transition-all shadow-[0_0_10px_rgba(168,85,247,0.2)] hover:shadow-[0_0_15px_rgba(168,85,247,0.4)]"
                         >
-                            {isGenerating ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
-                            {isGenerating ? 'Weaving...' : 'Magic Story'}
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
+                            {isGenerating ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} className="text-purple-200" />}
+                            <span className="font-semibold">{isGenerating ? 'Weaving...' : 'Magic Story'}</span>
                         </button>
                     </div>
-                    <textarea
-                        value={story}
-                        onChange={(e) => setStory(e.target.value)}
-                        placeholder="Write the story here..."
-                        className="w-full min-h-[300px] bg-[#1a1a1a] rounded-xl p-4 text-lg leading-loose text-white/90 focus:outline-none border border-white/5 resize-y font-hebrew"
-                        style={{ direction: 'rtl', lineHeight: '2' }}
-                    />
+
+                    {isEditingStory ? (
+                        <textarea
+                            value={story}
+                            onChange={(e) => setStory(e.target.value)}
+                            onBlur={() => setIsEditingStory(false)}
+                            autoFocus
+                            placeholder="Write the story here..."
+                            className="w-full min-h-[300px] bg-[#1a1a1a] rounded-xl p-4 text-lg leading-loose text-white/90 focus:outline-none border border-green-500/30 resize-y font-hebrew shadow-inner"
+                            style={{ direction: 'rtl', lineHeight: '2' }}
+                        />
+                    ) : (
+                        <div
+                            onClick={() => setIsEditingStory(true)}
+                            className="w-full min-h-[300px] bg-[#1a1a1a] rounded-xl p-4 text-lg leading-loose text-white/90 border border-white/5 font-hebrew cursor-text hover:border-white/10 transition-colors whitespace-pre-wrap"
+                            style={{ direction: 'rtl', lineHeight: '2' }}
+                            dangerouslySetInnerHTML={{
+                                __html: story
+                                    ? story.replace(/\*\*(.*?)\*\*/g, '<strong class="text-green-400 font-bold">$1</strong>')
+                                    : '<span class="text-white/20">Click here to write or generate a story...</span>'
+                            }}
+                        />
+                    )}
                 </div>
 
                 {/* 3. MNEMONIC LOGIC (Story Summary) */}

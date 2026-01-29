@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, Square, Bookmark, Mic, Settings, X, Check, Volume2, Sliders } from 'lucide-react';
+import { Play, Pause, Square, Bookmark, Mic, Settings, X, Check, Volume2 } from 'lucide-react';
 
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused';
 
@@ -43,10 +43,7 @@ export default function RecordingControls({
 
     availableOutputDevices = [],
     selectedOutputId = '',
-    onOutputChange = () => { },
-
-    vocalEffects = { enabled: false, eqLow: 0, eqHigh: 0, compressor: 0, gain: 1.0 },
-    setVocalEffects = () => { }
+    onOutputChange = () => { }
 
 }: RecordingControlsProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
