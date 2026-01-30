@@ -10,11 +10,36 @@ export interface WordGroup {
     createdAt: Date;
     lastUsedAt: Date;
     isSystem?: boolean; // To protect seed data from accidental deletion if needed
+    cloudId?: string;
+    syncedAt?: Date;
+}
+
+export interface Session {
+    id?: number;
+    cloudId?: string;
+    syncedAt?: Date;
+    title: string;
+    type: 'freestyle' | 'drill';
+    subtype?: string;
+    beatId?: string;
+    duration: number;
+    date: Date;
+    createdAt: Date;
+    blob?: Blob;
+    syncOffset?: number;
+    metadata?: {
+        lyrics?: string;
+        lyricsSegments?: any[];
+        lyricsWords?: any[];
+        language?: string;
+        [key: string]: any;
+    };
+    content?: string; // For generic content like drill words
 }
 
 export class RapCapDatabase extends Dexie {
     wordGroups!: Table<WordGroup>;
-    sessions!: Table<any>; // Restoring sessions table
+    sessions!: Table<Session>; // Typed sessions table
 
     constructor() {
         super('rapCapDB');

@@ -4,6 +4,7 @@ export interface UserProfile {
     name: string
     bio: string
     avatarColor: string
+    avatarUrl?: string | null
     isOnboarded: boolean
 }
 

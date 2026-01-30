@@ -57,6 +57,7 @@ export default function RhymeChainsPage() {
         try {
             await db.sessions.add({
                 title: `שרשרת חרוזים: ${prompt?.word || 'ללא כותרת'}`,
+                date: new Date(),
                 createdAt: new Date(),
                 duration: 300 - timeLeft,
                 type: 'drill',

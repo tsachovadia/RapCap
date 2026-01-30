@@ -3,9 +3,11 @@
  */
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trash2, Download, Upload, Save, UserCircle } from 'lucide-react'
+import { Trash2, Download, Upload, Save, UserCircle, Cloud, RefreshCw } from 'lucide-react'
 import { db } from '../db/db'
 import { useProfile } from '../hooks/useProfile'
+import { useAuth } from '../contexts/AuthContext'
+import { syncService } from '../services/dbSync'
 
 const AVATAR_COLORS = [
     '#1DB954', // Green
@@ -21,10 +23,26 @@ const AVATAR_COLORS = [
 export default function SettingsPage() {
     const navigate = useNavigate()
     const { profile, updateProfile, resetProfile } = useProfile()
+    const { user, logout } = useAuth()
     const [name, setName] = useState(profile.name)
     const [bio, setBio] = useState(profile.bio)
     const [selectedColor, setSelectedColor] = useState(profile.avatarColor)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const [isSyncing, setIsSyncing] = useState(false)
+
+    const handleSync = async () => {
+        if (!user) return;
+        setIsSyncing(true);
+        try {
+            await syncService.syncAll();
+            alert("סנכרון הושלם בהצלחה!");
+        } catch (e) {
+            console.error(e);
+            alert("שגיאה בסנכרון");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     // Data Management
     const handleDeleteAllData = async () => {
@@ -118,7 +136,8 @@ export default function SettingsPage() {
         updateProfile({
             name,
             bio,
-            avatarColor: selectedColor,
+            avatarColor: selectedColor === 'image' ? (profile.avatarColor || '#1DB954') : selectedColor,
+            avatarUrl: selectedColor === 'image' ? profile.avatarUrl : null,
             isOnboarded: true
         })
         alert('הפרופיל עודכן בהצלחה! ✨')
@@ -145,11 +164,64 @@ export default function SettingsPage() {
                         <h2 className="text-xl font-bold">הפרופיל שלי</h2>
                     </div>
 
+                    {/* Cloud Account Status */}
+                    <div className="bg-[#282828] p-4 rounded-lg mb-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <Cloud className={user ? "text-[#1DB954]" : "text-subdued"} size={24} />
+                                <div>
+                                    <span className="block font-bold text-white">
+                                        {user ? 'מחובר לענן' : 'לא מחובר לענן'}
+                                    </span>
+                                    <span className="text-xs text-subdued max-w-[200px] block truncate">
+                                        {user ? user.email : 'התחבר כדי לגבות את השירים שלך'}
+                                    </span>
+                                </div>
+                            </div>
+                            {user ? (
+                                <button
+                                    onClick={logout}
+                                    className="px-4 py-2 bg-[#181818] border border-[#3E3E3E] rounded text-sm hover:bg-red-900/20 hover:text-red-400 hover:border-red-900/50 transition-colors"
+                                >
+                                    התנתק
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => navigate('/login')}
+                                    className="px-4 py-2 bg-white text-black font-bold rounded text-sm hover:bg-gray-200 transition-colors"
+                                >
+                                    התחבר
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Sync Button */}
+                        {user && (
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className={`w-full flex items-center justify-center gap-2 py-3 rounded bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/20 hover:bg-[#1DB954]/20 transition-all ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+                                <span>{isSyncing ? 'מסנכרן...' : 'סנכרן נתונים עכשיו'}</span>
+                            </button>
+                        )}
+                    </div>
+
                     <div className="space-y-6">
                         {/* Avatar Color Picker */}
                         <div>
                             <label className="block text-sm font-medium text-subdued mb-3">צבע דמות</label>
                             <div className="flex flex-wrap gap-3">
+                                {profile.avatarUrl && (
+                                    <button
+                                        onClick={() => setSelectedColor('image')}
+                                        className={`w-10 h-10 rounded-full transition-all overflow-hidden ${selectedColor === 'image' ? 'ring-2 ring-white scale-110' : 'opacity-70 hover:opacity-100'}`}
+                                        title="תמונת פרופיל"
+                                    >
+                                        <img src={profile.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                                    </button>
+                                )}
                                 {AVATAR_COLORS.map(color => (
                                     <button
                                         key={color}

@@ -70,7 +70,11 @@ export default function HomePage() {
                             style={{ backgroundColor: profile.avatarColor }}
                             title="הגדרות פרופיל"
                         >
-                            {profile.name[0].toUpperCase()}
+                            {profile.avatarUrl ? (
+                                <img src={profile.avatarUrl} alt={profile.name} className="w-full h-full rounded-full object-cover" />
+                            ) : (
+                                profile.name[0].toUpperCase()
+                            )}
                         </button>
                     </div>
                 </div>

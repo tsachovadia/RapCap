@@ -84,6 +84,7 @@ export default function FlowPatternsPage() {
         try {
             await db.sessions.add({
                 title: `אימון פלואו: ${new Date().toLocaleDateString()}`,
+                date: new Date(),
                 createdAt: new Date(),
                 duration: 480 - timeLeft,
                 type: 'drill',

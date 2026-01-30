@@ -34,6 +34,7 @@ export default function ObjectWritingPage() {
         try {
             await db.sessions.add({
                 title: `כתיבת אובייקטים: ${prompt?.word || 'ללא כותרת'}`,
+                date: new Date(),
                 createdAt: new Date(),
                 duration: 600 - timeLeft,
                 type: 'drill',

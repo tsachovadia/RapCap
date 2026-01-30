@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useSessions } from '../hooks/useSessions'
 import SessionPlayer from '../components/library/SessionPlayer'
-import { db } from '../db/db'
-import { Music, Play, Pause, Trash2, Copy, Check, Sparkles } from 'lucide-react'
+import { db, type Session } from '../db/db'
+import { Music, Play, Pause, Trash2, Copy, Check, Sparkles, Loader2 } from 'lucide-react'
+import TranscriptionComparisonModal from '../components/library/TranscriptionComparisonModal'
 
 import { useProfile } from '../hooks/useProfile'
 
@@ -13,6 +14,12 @@ export default function LibraryPage() {
     const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
     const [isPlaying, setIsPlaying] = useState(false)
     const [copiedSessionId, setCopiedSessionId] = useState<number | null>(null)
+    const [transcribingSessionId, setTranscribingSessionId] = useState<number | null>(null);
+    const [comparisonData, setComparisonData] = useState<{
+        session: Session;
+        original: any;
+        generated: any;
+    } | null>(null);
 
     const filters = [
         { id: 'all', label: 'הכל' },
@@ -109,7 +116,7 @@ export default function LibraryPage() {
                                 key={session.id}
                                 className={`rounded-md p-3 transition-colors ${isActive ? 'bg-[#282828]' : 'hover:bg-[#181818]'}`}
                             >
-                                <div className="flex items-center gap-3 mb-2" onClick={() => handlePlayPause(session.id)}>
+                                <div className="flex items-center gap-3 mb-2" onClick={() => session.id && handlePlayPause(session.id)}>
                                     {/* Thumbnail / Play Button */}
                                     <div
                                         className="w-12 h-12 rounded flex items-center justify-center shrink-0 cursor-pointer relative overflow-hidden group"
@@ -141,38 +148,48 @@ export default function LibraryPage() {
                                             <button
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
-                                                    if (confirm("האם לשפר תמלול עם Whisper? (זה ייקח כמה שניות)")) {
-                                                        const btn = e.currentTarget;
-                                                        btn.disabled = true;
-                                                        try {
-                                                            const { transcribeAudio } = await import('../services/whisper');
-                                                            const result = await transcribeAudio(session.blob, session.metadata?.language || 'he');
+                                                    // Start Transcription Flow
+                                                    session.id && setTranscribingSessionId(session.id);
+                                                    try {
+                                                        const { transcribeAudio } = await import('../services/whisper');
+                                                        const result = await transcribeAudio(session.blob!, (session.metadata?.language as 'he' | 'en') || 'he');
 
-                                                            // Update DB
-                                                            await db.sessions.update(session.id, {
-                                                                'metadata.lyrics': result.text,
-                                                                'metadata.lyricsSegments': result.segments,
-                                                                'metadata.lyricsWords': result.wordSegments
-                                                            });
-                                                            alert("התמלול שופר בהצלחה! ✅");
-                                                        } catch (err) {
-                                                            console.error(err);
-                                                            alert("שגיאה בתמלול: " + String(err));
-                                                        } finally {
-                                                            btn.disabled = false;
-                                                        }
+                                                        // Prepare data for comparison modal
+                                                        setComparisonData({
+                                                            session: session,
+                                                            original: {
+                                                                text: session.metadata?.lyrics || '',
+                                                                segments: session.metadata?.lyricsSegments || [],
+                                                                words: session.metadata?.lyricsWords || []
+                                                            },
+                                                            generated: {
+                                                                text: result.text,
+                                                                segments: result.segments,
+                                                                words: result.wordSegments
+                                                            }
+                                                        });
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        alert("שגיאה בתמלול: " + String(err));
+                                                    } finally {
+                                                        setTranscribingSessionId(null);
                                                     }
                                                 }}
-                                                className="btn-icon w-8 h-8 text-yellow-400 hover:text-yellow-300"
+                                                className="btn-icon w-8 h-8 text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 title="שפר תמלול (Whisper)"
+                                                disabled={transcribingSessionId === session.id}
                                             >
-                                                <Sparkles size={18} />
+                                                {transcribingSessionId === session.id ? (
+                                                    <Loader2 size={18} className="animate-spin" />
+                                                ) : (
+                                                    <Sparkles size={18} />
+                                                )}
                                             </button>
                                         )}
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                deleteSession(session.id);
+                                                session.id && deleteSession(session.id);
                                             }}
                                             className="btn-icon w-8 h-8"
                                         >
@@ -249,6 +266,31 @@ export default function LibraryPage() {
                     })}
                 </div>
             </div>
+
+            {/* Transcription Comparison Modal */}
+            {comparisonData && (
+                <TranscriptionComparisonModal
+                    isOpen={true}
+                    onClose={() => setComparisonData(null)}
+                    original={comparisonData.original}
+                    generated={comparisonData.generated}
+                    onConfirm={async (selectedData) => {
+                        try {
+                            if (comparisonData.session?.id) {
+                                await db.sessions.update(comparisonData.session.id, {
+                                    'metadata.lyrics': selectedData.text,
+                                    'metadata.lyricsSegments': selectedData.segments,
+                                    'metadata.lyricsWords': selectedData.words
+                                });
+                                // alert("התמלול עודכן בהצלחה! ✅"); // Optional: Notification toast
+                            }
+                        } catch (e) {
+                            console.error("Failed to update session", e);
+                            alert("שגיאה בשמירת התמלול");
+                        }
+                    }}
+                />
+            )}
         </div>
     )
 }

@@ -71,6 +71,7 @@ export default function WordAssociationPage() {
 
             await db.sessions.add({
                 title: `אסוציאציות: ${initialPrompt?.word || 'ללא כותרת'}`,
+                date: new Date(),
                 createdAt: new Date(),
                 duration: 180 - timeLeft,
                 type: 'drill',

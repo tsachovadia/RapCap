@@ -1,6 +1,7 @@
 import React from 'react';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import { WelcomeStep } from './steps/WelcomeStep';
+import { AuthStep } from './steps/AuthStep';
 import { InstallStep } from './steps/InstallStep';
 import { MicrophoneStep } from './steps/MicrophoneStep';
 import { NotificationStep } from './steps/NotificationStep';
@@ -33,6 +34,7 @@ export const OnboardingWizard: React.FC = () => {
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto">
                     {step === 'welcome' && <WelcomeStep onNext={nextStep} />}
+                    {step === 'auth' && <AuthStep onNext={nextStep} />}
                     {step === 'install' && <InstallStep onNext={nextStep} isIOS={isIOS} />}
                     {step === 'microphone' && (
                         <MicrophoneStep

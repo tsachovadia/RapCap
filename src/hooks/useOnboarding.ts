@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type OnboardingStep = 'welcome' | 'install' | 'microphone' | 'notifications' | 'completed';
+export type OnboardingStep = 'welcome' | 'auth' | 'install' | 'microphone' | 'notifications' | 'completed';
 
 interface OnboardingState {
     step: OnboardingStep;
@@ -75,8 +75,11 @@ export const useOnboarding = (): OnboardingState => {
     const nextStep = () => {
         switch (step) {
             case 'welcome':
-                // If not installed and on mobile, go to Install step.
-                // Otherwise skip to Mic.
+                setStep('auth');
+                break;
+
+            case 'auth':
+                // Check standalone/mobile logic for install step
                 if (!isStandalone && (isIOS || isAndroid)) {
                     setStep('install');
                 } else {

@@ -13,6 +13,7 @@ import { db } from '../db/db'
 import { ArrowLeft, MoreHorizontal, Mic, Sparkles, Hash, Link as LinkIcon, Check, X, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { commonWordsHe, commonWordsEn } from '../data/wordBank'
+import { convertBlobToMp3 } from '../services/audioEncoder'
 
 // Better static ID: 'HAFijG6kyRk' (User provided beat)
 const STATIC_BEAT_ID = 'HAFijG6kyRk'
@@ -253,8 +254,18 @@ export default function FreestylePage() {
         }
     }
 
-    const handleConfirmSave = () => {
+    const handleConfirmSave = async () => {
         if (pendingSessionBlob) {
+            // [NEW] Convert to MP3
+            let finalBlob = pendingSessionBlob;
+            try {
+                console.log("🔄 Converting to MP3...");
+                finalBlob = await convertBlobToMp3(pendingSessionBlob);
+                console.log("✅ MP3 Conversion Complete:", finalBlob.size, "bytes");
+            } catch (e) {
+                console.error("⚠️ MP3 Conversion Failed, saving original WebM:", e);
+            }
+
             // Calculate offset (Pre-Roll Duration)
             const offset = Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000
 
@@ -269,9 +280,9 @@ export default function FreestylePage() {
 
             // [NEW] Use Enhanced Data if available
             if (enhancedTranscriptData) {
-                saveSession(pendingSessionBlob, enhancedTranscriptData.segments, enhancedTranscriptData.wordSegments, enhancedTranscriptData.text)
+                await saveSession(finalBlob, enhancedTranscriptData.segments, enhancedTranscriptData.wordSegments, enhancedTranscriptData.text)
             } else {
-                saveSession(pendingSessionBlob, correctedSegments, correctedWordSegments)
+                await saveSession(finalBlob, correctedSegments, correctedWordSegments)
             }
 
             setShowReviewModal(false)
@@ -379,6 +390,7 @@ export default function FreestylePage() {
                 duration: duration,
                 beatId: videoId,
                 createdAt: new Date(),
+                date: new Date(),
                 type: 'freestyle',
                 syncOffset: 2000,
                 metadata: {
