@@ -1,4 +1,4 @@
-import { Mp3Encoder } from 'lamejs';
+import lamejs from 'lamejs';
 
 /**
  * Converts an audio Blob (WebM/WAV) to an MP3 Blob using lamejs.
@@ -20,7 +20,7 @@ export async function convertBlobToMp3(blob: Blob): Promise<Blob> {
             const sampleRate = audioBuffer.sampleRate;
             const kbps = 128; // Standard quality
 
-            const encoder = new Mp3Encoder(channels, sampleRate, kbps);
+            const encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
 
             // 4. Get PCM Data
             // We use channel 0 (Left) for mono. If we wanted stereo we'd verify numberOfChannels > 1
