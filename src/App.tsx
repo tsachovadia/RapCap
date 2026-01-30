@@ -40,9 +40,9 @@ export default function App() {
 
   return (
     <>
-      <OnboardingWizard />
       <BrowserRouter>
         <AuthProvider>
+          <OnboardingWizard />
           <Routes>
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
