@@ -16,6 +16,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
     // Track restart timeout to prevent loops
     const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const consecutiveErrorsRef = useRef<number>(0)
 
     useEffect(() => {
         // Initialize SpeechRecognition
@@ -32,6 +33,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         recognition.onstart = () => {
             console.log("🎤 Speech Recognition Started")
             setIsListening(true)
+            consecutiveErrorsRef.current = 0 // Reset on successful start
         }
 
         recognition.onresult = (event: any) => {
@@ -98,18 +100,31 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
         recognition.onerror = (event: any) => {
             console.error("Transcription error detail:", event.error)
+
             // If denied, kill the loop
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                 isRecordingRef.current = false
+            }
+
+            if (event.error === 'network') {
+                consecutiveErrorsRef.current++
             }
         }
 
         recognition.onend = () => {
             console.log("🛑 Speech Recognition Ended")
+
+            // Limit restarts on network errors to avoid tight loops
+            if (consecutiveErrorsRef.current > 5) {
+                console.warn("Too many consecutive transcription errors, stopping auto-restart")
+                setIsListening(false)
+                return
+            }
+
             // Auto-restart if we are still supposedly recording
-            // Use a timeout to prevent rapid-fire loops
             if (isRecordingRef.current) {
-                console.log("🔄 Recognition ended unexpectedly, restarting in 200ms...")
+                const delay = Math.min(200 * Math.pow(1.5, consecutiveErrorsRef.current), 5000)
+                console.log(`🔄 Restarting transcription in ${Math.round(delay)}ms...`)
 
                 if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
 
@@ -118,10 +133,13 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                     try {
                         console.log("🔄 Attempting restart...")
                         recognition.start()
+                        // Reset errors if start succeeds (or we'll catch it in next onerror)
                     } catch (e) {
                         console.warn("Restart failed:", e)
                     }
-                }, 200) // Increased to 200ms to be safer
+                }, delay)
+            } else {
+                setIsListening(false)
             }
         }
 
