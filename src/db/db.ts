@@ -45,9 +45,9 @@ export class RapCapDatabase extends Dexie {
         super('rapCapDB');
 
         // Define tables and indexes
-        this.version(1).stores({
-            wordGroups: '++id, name, lastUsedAt, isSystem',
-            sessions: '++id, title, type, createdAt'
+        this.version(2).stores({
+            wordGroups: '++id, name, lastUsedAt, isSystem, cloudId',
+            sessions: '++id, title, type, createdAt, cloudId'
         });
     }
 }

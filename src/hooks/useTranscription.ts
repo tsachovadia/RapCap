@@ -20,8 +20,22 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
     // Keep ref synced for callbacks
     const isRecordingRef = useRef(isRecording)
+    const interimTranscriptRef = useRef('') // Keep tracked for final flush
+
     useEffect(() => {
         isRecordingRef.current = isRecording
+        if (!isRecording && interimTranscriptRef.current) {
+            // Manual Flush: When recording stops, if there's leftover interim, save it
+            const text = interimTranscriptRef.current.trim()
+            if (text) {
+                console.log("📤 Flushing final interim segment:", text)
+                const ts = (Date.now() - startTimeRef.current) / 1000
+                setSegments(prev => [...prev, { text, timestamp: ts }])
+                setTranscript(prev => prev + text + " ")
+                setInterimTranscript('')
+                interimTranscriptRef.current = ''
+            }
+        }
     }, [isRecording])
 
     useEffect(() => {
@@ -105,6 +119,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             }
 
             if (localInterim) console.log("🗣️ Interim:", localInterim)
+            interimTranscriptRef.current = localInterim
             setTranscript(prev => prev + finalTranscript)
             setInterimTranscript(localInterim)
         }
@@ -160,8 +175,16 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         return () => {
             isEffectActive = false
             if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
+
+            // Final Flush: If stopping and we have interim text, try to commit it
+            if (isRecordingRef.current) {
+                console.log("📝 Finalizing transcription before cleanup...");
+                // Note: We can't easily wait for async setState here, 
+                // but the parent component (FreestylePage) should have the last state.
+            }
+
             try {
-                recognition.abort()
+                recognition.stop() // Better than abort() - allows final results
             } catch (e) { /* ignore */ }
             setIsListening(false)
             setInterimTranscript('')
