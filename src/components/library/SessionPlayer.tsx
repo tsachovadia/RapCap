@@ -15,9 +15,10 @@ interface SessionPlayerProps {
     }
     isPlaying: boolean
     onEnded: () => void
+    onLoadingChange?: (isLoading: boolean) => void
 }
 
-export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPlayerProps) {
+export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingChange }: SessionPlayerProps) {
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const youtubeRef = useRef<any>(null)
 
@@ -27,6 +28,7 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
     // Waveform State
     const [audioPeaks, setAudioPeaks] = useState<number[]>([])
     const [isProcessingAudio, setIsProcessingAudio] = useState(false)
+    const [isBuffering, setIsBuffering] = useState(false)
 
     // Sync State
     const [syncOffset, setSyncOffset] = useState(session.syncOffset || 0) // in ms
@@ -102,21 +104,40 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
         }
     }, [session.blob, session.metadata?.cloudUrl])
 
-    // Monitor Audio Errors
+    // Monitor Audio Events (Loading, Errors, Buffering)
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
 
+        const handleWaiting = () => {
+            setIsBuffering(true);
+            onLoadingChange?.(true);
+        };
+        const handleCanPlay = () => {
+            setIsBuffering(false);
+            onLoadingChange?.(false);
+        };
         const handleError = () => {
             console.error("❌ Audio Element Error:", audio.error);
+            setIsBuffering(false);
+            onLoadingChange?.(false);
             if (audio.error?.code === 4) {
                 console.warn("⚠️ Likely a CORS or Source error. Checking cloudUrl...");
             }
         };
 
+        audio.addEventListener('waiting', handleWaiting);
+        audio.addEventListener('canplay', handleCanPlay);
+        audio.addEventListener('playing', handleCanPlay);
         audio.addEventListener('error', handleError);
-        return () => audio.removeEventListener('error', handleError);
-    }, []);
+
+        return () => {
+            audio.removeEventListener('waiting', handleWaiting);
+            audio.removeEventListener('canplay', handleCanPlay);
+            audio.removeEventListener('playing', handleCanPlay);
+            audio.removeEventListener('error', handleError);
+        }
+    }, [onLoadingChange]);
 
     if (!session.blob && !session.metadata?.cloudUrl) return null
 
@@ -313,7 +334,17 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
 
             {/* Header / Stats */}
             <div className="flex items-center justify-between text-xs text-subdued font-bold tracking-wider mb-2">
-                <span>{formatTime(currentTime)}</span>
+                <div className="flex items-center gap-2">
+                    <span>{formatTime(currentTime)}</span>
+                    {isBuffering && (
+                        <div className="flex items-center gap-1 text-[#1DB954] animate-pulse">
+                            <div className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '0s' }} />
+                            <div className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '0.2s' }} />
+                            <div className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '0.4s' }} />
+                            <span className="text-[10px] uppercase">Buffering...</span>
+                        </div>
+                    )}
+                </div>
                 <span className="text-[#1DB954]">
                     Sync: {Math.round(syncOffset)}ms
                 </span>

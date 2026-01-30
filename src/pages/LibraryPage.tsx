@@ -15,6 +15,7 @@ export default function LibraryPage() {
     const [isPlaying, setIsPlaying] = useState(false)
     const [copiedSessionId, setCopiedSessionId] = useState<number | null>(null)
     const [transcribingSessionId, setTranscribingSessionId] = useState<number | null>(null);
+    const [isBuffering, setIsBuffering] = useState(false);
     const [comparisonData, setComparisonData] = useState<{
         session: Session;
         original: any;
@@ -122,7 +123,9 @@ export default function LibraryPage() {
                                         className="w-12 h-12 rounded flex items-center justify-center shrink-0 cursor-pointer relative overflow-hidden group"
                                         style={{ backgroundColor: isActive && isPlaying ? '#1DB954' : '#3E3E3E' }}
                                     >
-                                        {isActive && isPlaying ? (
+                                        {isActive && isBuffering ? (
+                                            <Loader2 className="text-[#1DB954] animate-spin" size={20} />
+                                        ) : isActive && isPlaying ? (
                                             <Pause className="text-black" size={20} fill="currentColor" />
                                         ) : (
                                             <Play className="text-white" size={20} fill="currentColor" />
@@ -215,6 +218,7 @@ export default function LibraryPage() {
                                                 session={session}
                                                 isPlaying={isPlaying}
                                                 onEnded={() => setIsPlaying(false)}
+                                                onLoadingChange={setIsBuffering}
                                             />
                                         ) : (
                                             <div className="bg-[#121212] p-4 rounded border border-[#282828] max-h-60 overflow-y-auto">
