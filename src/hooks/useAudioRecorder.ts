@@ -127,29 +127,34 @@ export function useAudioRecorder() {
             const currentConstraints = overrideConstraints || audioConstraints;
             let stream: MediaStream | null = null;
 
-            try {
-                if (selectedDeviceId) {
-                    console.log("🎤 Requesting microphone access...", `Device: ${selectedDeviceId}`);
+            if (selectedDeviceId) {
+                try {
+                    console.log("🎤 Requesting specific microphone...", `Device: ${selectedDeviceId}`);
                     stream = await navigator.mediaDevices.getUserMedia({
                         audio: {
                             deviceId: { exact: selectedDeviceId },
                             ...currentConstraints
                         }
                     });
-                } else {
-                    throw new Error("No device ID selected, falling back to default");
+                } catch (firstErr) {
+                    console.warn("⚠️ Failed to get specific device, falling back to default...", firstErr);
+                    // Fallback to default
                 }
-            } catch (firstErr) {
-                console.warn("⚠️ Failed to get specific device, trying default...", firstErr);
+            }
+
+            if (!stream) {
                 try {
+                    console.log("🎤 Requesting default microphone...");
                     stream = await navigator.mediaDevices.getUserMedia({
                         audio: {
                             ...currentConstraints,
                             deviceId: undefined
                         }
                     });
-                    console.log("✅ Fallback to default device successful");
-                    setSelectedDeviceId('');
+                    console.log("✅ Default microphone acquired");
+                    // We don't reset selectedDeviceId here, maybe the user wants it but it's unavailable right now.
+                    // But if it was successfully acquired as default, we might want to clear the ID if it was set but failed.
+                    if (selectedDeviceId) setSelectedDeviceId('');
                 } catch (secondErr) {
                     console.warn("⚠️ Failed default with constraints, trying absolute raw...", secondErr);
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -159,7 +164,7 @@ export function useAudioRecorder() {
             if (!stream) throw new Error("Could not initialize audio stream");
 
             streamRef.current = stream;
-            console.log("✅ Microphone access granted");
+            console.log("✅ Microphone stream active");
 
             getDevices();
 

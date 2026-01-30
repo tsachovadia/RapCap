@@ -75,17 +75,29 @@ export const syncService = {
                 // 1. Upload Blob if needed
                 if (session.blob && !cloudUrl) {
                     try {
-                        const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`;
+                        const extension = session.blob.type.includes('mpeg') || session.blob.type.includes('mp3') ? 'mp3' : 'webm';
+                        const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
                         const storageRef = ref(storage, `users/${uid}/${filename}`);
-                        const result = await uploadBytes(storageRef, session.blob);
+
+                        console.log(`📤 Uploading blob of type: ${session.blob.type} as ${filename}`);
+
+                        const result = await uploadBytes(storageRef, session.blob, {
+                            contentType: session.blob.type
+                        });
                         cloudUrl = await getDownloadURL(result.ref);
 
                         // Update local metadata immediately
                         const newMetadata = { ...session.metadata, cloudUrl };
                         await localDb.sessions.update(session.id!, { metadata: newMetadata });
                         session.metadata = newMetadata; // Update in memory object for next step
+                        console.log(`✅ Uploaded audio: ${cloudUrl}`);
                     } catch (e) {
-                        console.error(`Failed to upload audio for session ${session.id}:`, e);
+                        console.error(`❌ Failed to upload audio for session ${session.id}:`, e);
+                        // Log more details if possible
+                        if (e instanceof Error) {
+                            console.error("Error Message:", e.message);
+                            if ('code' in e) console.error("Error Code:", (e as any).code);
+                        }
                         continue; // Skip DB sync if audio upload failed
                     }
                 }

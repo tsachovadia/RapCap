@@ -54,6 +54,7 @@ export default function FreestylePage() {
 
     // Auto-scroll ref
     const transcriptEndRef = useRef<HTMLDivElement>(null)
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
 
     // Buffering Guard State
     const wasPausedByBuffering = useRef(false)
@@ -293,7 +294,6 @@ export default function FreestylePage() {
 
     const handleDiscard = () => {
         if (confirm('Are you sure you want to discard this session?')) {
-            setShowReviewModal(false)
             setShowReviewModal(false)
             setPendingSessionBlob(null)
             setEnhancedTranscriptData(null) // Reset
@@ -641,35 +641,53 @@ export default function FreestylePage() {
                         <Mic size={16} className="text-subdued/20" />
                     </div>
 
-                    {/* Placeholder if empty */}
-                    {segments.length === 0 && !interimTranscript && (
-                        <div className="h-full flex flex-col items-center justify-center text-subdued/30 italic gap-2 min-h-[120px]">
-                            <Sparkles size={24} className="opacity-20" />
-                            <span className="text-lg font-medium">
-                                {language === 'he' ? 'המילים שלך יופיעו כאן בזמן אמת...' : 'Your lyrics will appear here in real-time...'}
-                            </span>
-                        </div>
-                    )}
+                    {/* Content Section */}
+                    <div className="flex-1 px-4 overflow-y-auto no-scrollbar scroll-smooth" ref={scrollContainerRef}>
+                        <div className="max-w-2xl mx-auto pt-8 pb-32">
+                            {/* Recording Badge */}
+                            {flowState === 'recording' && (
+                                <div className="flex items-center gap-2 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+                                    <span className="text-xs font-bold tracking-widest text-red-500 uppercase">Recording Live</span>
+                                </div>
+                            )}
 
-                    {/* Final Segments */}
-                    {segments.map((seg, i) => (
-                        <div key={i} className="text-xl md:text-2xl text-white/60 font-bold transition-all duration-500 ease-out hover:text-white/90">
-                            <span className="text-sm font-mono text-[#1DB954]/50 mr-2 align-middle select-none">
-                                [{Math.floor(seg.timestamp / 60)}:{Math.floor(seg.timestamp % 60).toString().padStart(2, '0')}]
-                            </span>
-                            <p className="inline leading-snug">{seg.text}</p>
-                        </div>
-                    ))}
+                            {/* Transcript Display (Spotify Style) */}
+                            <div className="space-y-6 min-h-[40vh]" dir={language === 'he' ? 'rtl' : 'ltr'}>
+                                {/* Empty State */}
+                                {segments.length === 0 && !interimTranscript && flowState === 'recording' && (
+                                    <div className="text-center py-12 opacity-40">
+                                        <p className="text-lg italic">Start rapping to see lyrics...</p>
+                                    </div>
+                                )}
 
-                    {/* Active Interim Segment (The "Current Line") */}
-                    {interimTranscript && (
-                        <div className="text-2xl md:text-3xl text-white font-black leading-tight animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <span className="text-[#1DB954] drop-shadow-[0_0_15px_rgba(29,185,84,0.4)]">
-                                {interimTranscript}
-                            </span>
-                        </div>
-                    )}
+                                {/* Final Segments */}
+                                {segments.map((seg, i) => (
+                                    <div
+                                        key={i}
+                                        className="group relative text-2xl md:text-4xl font-black transition-all duration-700 ease-out text-white/40 hover:text-white/90"
+                                    >
+                                        <div className="flex items-start gap-4">
+                                            <span className="text-xs font-mono text-[#1DB954]/40 mt-3 shrink-0 tabular-nums">
+                                                {Math.floor(seg.timestamp / 60)}:{Math.floor(seg.timestamp % 60).toString().padStart(2, '0')}
+                                            </span>
+                                            <p className="leading-tight tracking-tight">{seg.text}</p>
+                                        </div>
+                                    </div>
+                                ))}
 
+                                {/* Interim Transcript (Real-time feedback) */}
+                                {interimTranscript && (
+                                    <div className="text-2xl md:text-4xl font-black text-white animate-in fade-in duration-300">
+                                        <div className="flex items-start gap-4">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-[#1DB954] mt-3.5 animate-pulse shrink-0" />
+                                            <p className="leading-tight tracking-tight drop-shadow-sm">{interimTranscript}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                     {/* Auto-scroll anchor */}
                     <div ref={transcriptEndRef} className="h-4 flex-none" />
                 </div>

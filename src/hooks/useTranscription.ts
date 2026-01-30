@@ -18,6 +18,12 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const consecutiveErrorsRef = useRef<number>(0)
 
+    // Keep ref synced for callbacks
+    const isRecordingRef = useRef(isRecording)
+    useEffect(() => {
+        isRecordingRef.current = isRecording
+    }, [isRecording])
+
     useEffect(() => {
         // Initialize SpeechRecognition
         if (!('webkitSpeechRecognition' in window)) {
@@ -25,18 +31,21 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             return
         }
 
+        let isEffectActive = true
         const recognition = new (window as any).webkitSpeechRecognition()
         recognition.continuous = true
         recognition.interimResults = true
         recognition.lang = language === 'he' ? 'he-IL' : 'en-US'
 
         recognition.onstart = () => {
-            console.log("🎤 Speech Recognition Started")
+            if (!isEffectActive) return
+            console.log(`🎤 Speech Recognition Started (${language})`)
             setIsListening(true)
-            consecutiveErrorsRef.current = 0 // Reset on successful start
+            consecutiveErrorsRef.current = 0
         }
 
         recognition.onresult = (event: any) => {
+            if (!isEffectActive) return
             let finalTranscript = ''
             let localInterim = ''
 
@@ -46,16 +55,12 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                     finalTranscript += text + ' '
                     console.log("📝 Final Result:", text)
 
-                    // Capture timestamp for this segment (relative to start)
                     const now = Date.now()
-
-                    // WORD LEVEL LOGIC & CHUNKING
-                    const estimatedDuration = Math.min(text.length * 80, 5000) // 80ms per char, max 5s fallback
+                    const estimatedDuration = Math.min(text.length * 80, 5000)
                     const phraseStart = phraseStartTimeRef.current || (now - estimatedDuration)
-
                     const duration = now - phraseStart
                     lastSegmentEndRef.current = now
-                    const words = text.split(/\s+/) // Split by whitespace
+                    const words = text.split(/\s+/)
 
                     if (words.length > 0) {
                         const step = duration / words.length
@@ -65,75 +70,58 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                         }))
                         setWordSegments(prev => [...prev, ...newWordSegments])
 
-                        // VISUAL CHUNKING: Break into lines of ~5 words for better UI granularity
                         const CHUNK_SIZE = 5
                         for (let j = 0; j < words.length; j += CHUNK_SIZE) {
                             const chunkWords = words.slice(j, j + CHUNK_SIZE)
                             const chunkText = chunkWords.join(' ')
-                            // Timestamp is the timestamp of the first word in the chunk
                             const chunkTimestamp = newWordSegments[j]?.timestamp || ((now - startTimeRef.current) / 1000)
-
                             setSegments(prev => [...prev, { text: chunkText, timestamp: chunkTimestamp }])
                         }
                     }
-
-                    // Reset phrase tracking
                     isPhraseActiveRef.current = false
                     phraseStartTimeRef.current = 0
-
                 } else {
                     localInterim += event.results[i][0].transcript
                 }
             }
 
-            // Detect phrase start
             if (localInterim.length > 0 && !isPhraseActiveRef.current) {
                 isPhraseActiveRef.current = true
                 phraseStartTimeRef.current = Date.now()
             }
 
             if (localInterim) console.log("🗣️ Interim:", localInterim)
-
             setTranscript(prev => prev + finalTranscript)
             setInterimTranscript(localInterim)
         }
 
         recognition.onerror = (event: any) => {
-            console.error("Transcription error detail:", event.error)
-
-            // If denied, kill the loop
+            if (!isEffectActive) return
+            console.error("Transcription error:", event.error)
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                 isRecordingRef.current = false
             }
-
-            // Increment error count for any error that isn't expected 
-            // to help back-off correctly if it's failing in a loop
             consecutiveErrorsRef.current++
         }
 
         recognition.onend = () => {
+            if (!isEffectActive) return
             console.log("🛑 Speech Recognition Ended")
 
-            // Limit restarts on network errors to avoid tight loops
-            if (consecutiveErrorsRef.current > 5) {
+            if (consecutiveErrorsRef.current > 10) {
                 console.warn("Too many consecutive transcription errors, stopping auto-restart")
                 setIsListening(false)
                 return
             }
 
-            // Auto-restart if we are still supposedly recording
             if (isRecordingRef.current) {
                 const delay = Math.min(200 * Math.pow(1.5, consecutiveErrorsRef.current), 5000)
-                console.log(`🔄 Restarting transcription in ${Math.round(delay)}ms...`)
-
+                console.log(`🔄 Restarting in ${Math.round(delay)}ms...`)
                 if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
-
                 restartTimeoutRef.current = setTimeout(() => {
-                    if (!isRecordingRef.current) return;
+                    if (!isEffectActive || !isRecordingRef.current) return
                     try {
-                        console.log("🔄 Attempting restart...")
                         recognition.start()
-                        // Reset errors if start succeeds (or we'll catch it in next onerror)
                     } catch (e) {
                         console.warn("Restart failed:", e)
                     }
@@ -145,38 +133,27 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
         recognitionRef.current = recognition
 
-        return () => {
-            // Cleanup on unmount or language change
-            if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
-            recognition.abort()
-        }
-    }, [language])
-
-    // Keep ref synced
-    const isRecordingRef = useRef(isRecording)
-    useEffect(() => {
-        isRecordingRef.current = isRecording
-    }, [isRecording])
-
-    useEffect(() => {
+        // Start if initially recording
         if (isRecording) {
+            startTimeRef.current = Date.now()
             try {
-                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
-                startTimeRef.current = Date.now()
-                recognitionRef.current?.start()
-                setIsListening(true)
+                recognition.start()
             } catch (e) {
-                // Ignore if already started
+                console.error("Failed to start initial transcription:", e)
             }
-        } else {
-            try {
-                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
-                recognitionRef.current?.stop()
-                setIsListening(false)
-                setInterimTranscript('')
-            } catch (e) { }
         }
-    }, [isRecording])
+
+        return () => {
+            isEffectActive = false
+            if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
+            try {
+                recognition.abort()
+            } catch (e) { /* ignore */ }
+            setIsListening(false)
+            setInterimTranscript('')
+        }
+    }, [language, isRecording])
+
 
     const resetTranscript = () => {
         setTranscript('')
