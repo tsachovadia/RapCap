@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 
@@ -8,11 +9,31 @@ export default function ReloadPrompt() {
     } = useRegisterSW({
         onRegistered(r) {
             console.log('SW Registered: ' + r)
+            // Check for updates every 60 minutes
+            if (r) {
+                setInterval(() => {
+                    r.update()
+                }, 60 * 60 * 1000)
+            }
         },
         onRegisterError(error) {
             console.log('SW registration error', error)
         },
     })
+
+    // Aggressive check: whenever user returns to the app
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log('🔍 PWA: App visible, checking for updates...')
+                navigator.serviceWorker?.getRegistration().then(reg => {
+                    reg?.update()
+                })
+            }
+        }
+        window.addEventListener('visibilitychange', handleVisibilityChange)
+        return () => window.removeEventListener('visibilitychange', handleVisibilityChange)
+    }, [])
 
     const close = () => {
         setNeedRefresh(false)

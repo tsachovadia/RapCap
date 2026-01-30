@@ -36,6 +36,7 @@ export default function App() {
   // Initialize DB with seed data
   useEffect(() => {
     seedDatabase().catch(console.error)
+    console.log("🚀 RapCap started. Build:", typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : "Development");
   }, [])
 
   return (

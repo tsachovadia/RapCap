@@ -1,3 +1,5 @@
+declare const __BUILD_TIME__: string;
+
 declare module 'virtual:pwa-register/react' {
     import type { Dispatch, SetStateAction } from 'react'
 

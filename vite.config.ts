@@ -9,6 +9,9 @@ export default defineConfig({
   server: {
     host: true
   },
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toLocaleString('he-IL')),
+  },
   plugins: [
     react(),
     basicSsl(),
@@ -18,7 +21,10 @@ export default defineConfig({
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'masked-icon.svg'],
       workbox: {
         // Essential: Prevent the Service Worker from intercepting Firebase Auth paths
-        navigateFallbackDenylist: [/^\/__\/auth/]
+        navigateFallbackDenylist: [/^\/__\/auth/],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
       },
       manifest: {
         name: 'RapCap - AI Freestyle Coach',
