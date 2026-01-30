@@ -37,9 +37,9 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
 
     // Setup Audio & Decode Peaks
     useEffect(() => {
-        if (!session.blob) return
+        if (!session.blob && !session.metadata?.cloudUrl) return
 
-        const url = URL.createObjectURL(session.blob)
+        const url = session.blob ? URL.createObjectURL(session.blob) : session.metadata.cloudUrl
         if (audioRef.current) {
             audioRef.current.src = url
         }
@@ -48,7 +48,16 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
         const decodeAudio = async () => {
             setIsProcessingAudio(true)
             try {
-                const arrayBuffer = await session.blob!.arrayBuffer()
+                let arrayBuffer: ArrayBuffer
+                if (session.blob) {
+                    arrayBuffer = await session.blob.arrayBuffer()
+                } else if (session.metadata?.cloudUrl) {
+                    const response = await fetch(session.metadata.cloudUrl)
+                    arrayBuffer = await response.arrayBuffer()
+                } else {
+                    return
+                }
+
                 const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
 
@@ -86,10 +95,12 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
 
         decodeAudio()
 
-        return () => URL.revokeObjectURL(url)
-    }, [session.blob])
+        return () => {
+            if (session.blob) URL.revokeObjectURL(url)
+        }
+    }, [session.blob, session.metadata?.cloudUrl])
 
-    if (!session.blob) return null
+    if (!session.blob && !session.metadata?.cloudUrl) return null
 
     // Volume State
     const [vocalVolume, setVocalVolume] = useState(1.0)

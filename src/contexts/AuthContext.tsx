@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
     onAuthStateChanged,
     GoogleAuthProvider,
@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { auth } from '../lib/firebase';
+import { syncService } from '../services/dbSync';
 
 interface AuthContextType {
     user: User | null;
@@ -72,6 +73,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             authPromise.then(unsub => unsub && unsub());
         };
     }, []);
+
+    // Automatic background sync when user logs in
+    const lastSyncedUserRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (user && user.uid !== lastSyncedUserRef.current) {
+            console.log("🔄 Auth: User detected, launching background sync...");
+            lastSyncedUserRef.current = user.uid;
+            syncService.syncAll().catch(err => {
+                console.error("❌ Auth: Background sync failed", err);
+            });
+        } else if (!user) {
+            lastSyncedUserRef.current = null;
+        }
+    }, [user]);
 
     const signInWithGoogle = async () => {
         const provider = new GoogleAuthProvider();

@@ -1,6 +1,6 @@
 import { db as localDb } from '../db/db';
 import { db as firestore, storage, auth } from '../lib/firebase';
-import { collection, doc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const syncService = {
@@ -10,10 +10,89 @@ export const syncService = {
 
         console.log("🔄 Starting Sync for user:", user.uid);
 
+        // 1. Pull from cloud first (Cloud -> Local)
+        await this.pullWordGroups(user.uid);
+        await this.pullSessions(user.uid);
+
+        // 2. Push to cloud (Local -> Cloud)
         await this.syncWordGroups(user.uid);
         await this.syncSessions(user.uid);
 
         console.log("✅ Sync Complete");
+    },
+
+    async pullWordGroups(uid: string) {
+        console.log("📥 Pulling WordGroups from cloud...");
+        const colRef = collection(firestore, 'users', uid, 'wordGroups');
+        const snapshot = await getDocs(colRef);
+
+        for (const docSnap of snapshot.docs) {
+            const cloudData = docSnap.data();
+            const cloudId = docSnap.id;
+
+            // Check if exists locally
+            const localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
+
+            const groupData = {
+                name: cloudData.name,
+                items: cloudData.items,
+                story: cloudData.story,
+                mnemonicLogic: cloudData.mnemonicLogic,
+                defaultInterval: cloudData.defaultInterval,
+                createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
+                lastUsedAt: cloudData.updatedAt instanceof Timestamp ? cloudData.updatedAt.toDate() : new Date(cloudData.updatedAt || cloudData.lastUsedAt),
+                isSystem: cloudData.isSystem || false,
+                cloudId: cloudId,
+                syncedAt: new Date()
+            };
+
+            if (localGroup) {
+                // Update local if cloud is newer
+                const cloudLastUsed = groupData.lastUsedAt;
+                if (cloudLastUsed > localGroup.lastUsedAt) {
+                    await localDb.wordGroups.update(localGroup.id!, groupData);
+                }
+            } else {
+                // New from cloud
+                await localDb.wordGroups.add(groupData);
+            }
+        }
+    },
+
+    async pullSessions(uid: string) {
+        console.log("📥 Pulling Sessions from cloud...");
+        const colRef = collection(firestore, 'users', uid, 'sessions');
+        const q = query(colRef, orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+
+        for (const docSnap of snapshot.docs) {
+            const cloudData = docSnap.data();
+            const cloudId = docSnap.id;
+
+            const localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
+
+            const sessionData = {
+                title: cloudData.title,
+                type: cloudData.type,
+                subtype: cloudData.subtype,
+                beatId: cloudData.beatId,
+                duration: cloudData.duration,
+                date: cloudData.date instanceof Timestamp ? cloudData.date.toDate() : new Date(cloudData.date),
+                createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
+                metadata: cloudData.metadata || {},
+                content: cloudData.content,
+                cloudId: cloudId,
+                syncedAt: new Date()
+            };
+
+            if (!localSession) {
+                await localDb.sessions.add(sessionData);
+            } else {
+                // Sessions are mostly immutable, but maybe metadata changed (lyrics)
+                // For now, just ensuring syncedAt is up to date if cloudId exists
+                await localDb.sessions.update(localSession.id!, { syncedAt: new Date() });
+            }
+        }
     },
 
     async syncWordGroups(uid: string) {

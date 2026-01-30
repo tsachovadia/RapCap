@@ -143,16 +143,25 @@ export default function LibraryPage() {
 
                                     {/* Actions */}
                                     <div className="flex items-center gap-2">
-                                        {/* WHISPER BUTTON: Only for freestyles that have a blob */}
-                                        {session.type === 'freestyle' && session.blob && (
+                                        {/* WHISPER BUTTON: Enabled if we have a blob OR a cloud URL */}
+                                        {session.type === 'freestyle' && (session.blob || session.metadata?.cloudUrl) && (
                                             <button
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
                                                     // Start Transcription Flow
                                                     session.id && setTranscribingSessionId(session.id);
                                                     try {
+                                                        let audioBlob = session.blob;
+                                                        if (!audioBlob && session.metadata?.cloudUrl) {
+                                                            console.log("📥 Fetching audio for transcription...");
+                                                            const response = await fetch(session.metadata.cloudUrl);
+                                                            audioBlob = await response.blob();
+                                                        }
+
+                                                        if (!audioBlob) throw new Error("Audio data not found");
+
                                                         const { transcribeAudio } = await import('../services/whisper');
-                                                        const result = await transcribeAudio(session.blob!, (session.metadata?.language as 'he' | 'en') || 'he');
+                                                        const result = await transcribeAudio(audioBlob, (session.metadata?.language as 'he' | 'en') || 'he');
 
                                                         // Prepare data for comparison modal
                                                         setComparisonData({
