@@ -44,6 +44,8 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         const url = session.blob ? URL.createObjectURL(session.blob) : session.metadata.cloudUrl
         if (audioRef.current) {
             console.log("🔊 Setting audio source:", url);
+            setIsBuffering(true);
+            onLoadingChange?.(true);
             audioRef.current.src = url;
             audioRef.current.load(); // Force load
         }
@@ -109,13 +111,20 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         const audio = audioRef.current;
         if (!audio) return;
 
-        const handleWaiting = () => {
+        const startLoading = () => {
+            console.log("⏳ Audio Load Start");
             setIsBuffering(true);
             onLoadingChange?.(true);
         };
-        const handleCanPlay = () => {
+        const stopLoading = (e: string) => {
+            console.log(`✅ Audio Load Stop (${e}), readyState: ${audio.readyState}`);
             setIsBuffering(false);
             onLoadingChange?.(false);
+        };
+        const handleWaiting = () => {
+            console.log("⏳ Audio Waiting (Stalled)");
+            setIsBuffering(true);
+            onLoadingChange?.(true);
         };
         const handleError = () => {
             console.error("❌ Audio Element Error:", audio.error);
@@ -126,15 +135,19 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
             }
         };
 
+        audio.addEventListener('loadstart', startLoading);
         audio.addEventListener('waiting', handleWaiting);
-        audio.addEventListener('canplay', handleCanPlay);
-        audio.addEventListener('playing', handleCanPlay);
+        audio.addEventListener('canplay', () => stopLoading('canplay'));
+        audio.addEventListener('playing', () => stopLoading('playing'));
+        audio.addEventListener('stalled', handleWaiting);
         audio.addEventListener('error', handleError);
 
         return () => {
+            audio.removeEventListener('loadstart', startLoading);
             audio.removeEventListener('waiting', handleWaiting);
-            audio.removeEventListener('canplay', handleCanPlay);
-            audio.removeEventListener('playing', handleCanPlay);
+            audio.removeEventListener('canplay', () => stopLoading('canplay'));
+            audio.removeEventListener('playing', () => stopLoading('playing'));
+            audio.removeEventListener('stalled', handleWaiting);
             audio.removeEventListener('error', handleError);
         }
     }, [onLoadingChange]);
@@ -330,7 +343,7 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
 
     return (
         <div className="flex flex-col w-full gap-4 bg-[#181818] p-4 rounded-xl border border-[#282828] select-none">
-            <audio ref={audioRef} onEnded={onEnded} />
+            <audio ref={audioRef} onEnded={onEnded} crossOrigin="anonymous" />
 
             {/* Header / Stats */}
             <div className="flex items-center justify-between text-xs text-subdued font-bold tracking-wider mb-2">

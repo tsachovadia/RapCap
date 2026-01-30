@@ -34,6 +34,7 @@ export default function LibraryPage() {
         } else {
             setActiveSessionId(id)
             setIsPlaying(true)
+            setIsBuffering(false)
         }
     }
 
