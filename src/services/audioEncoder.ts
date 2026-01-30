@@ -1,4 +1,4 @@
-import lamejs from 'lamejs/lame.all.js';
+import lamejs from './lame.all.js';
 
 /**
  * Converts an audio Blob (WebM/WAV) to an MP3 Blob using lamejs.
