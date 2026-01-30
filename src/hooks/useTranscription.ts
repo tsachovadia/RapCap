@@ -70,13 +70,27 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                         }))
                         setWordSegments(prev => [...prev, ...newWordSegments])
 
-                        const CHUNK_SIZE = 5
-                        for (let j = 0; j < words.length; j += CHUNK_SIZE) {
-                            const chunkWords = words.slice(j, j + CHUNK_SIZE)
-                            const chunkText = chunkWords.join(' ')
-                            const chunkTimestamp = newWordSegments[j]?.timestamp || ((now - startTimeRef.current) / 1000)
-                            setSegments(prev => [...prev, { text: chunkText, timestamp: chunkTimestamp }])
-                        }
+                        // Optimization: Split segments by punctuation OR fixed chunk size
+                        // This makes the UI update faster after natural pauses
+                        let currentChunk: string[] = []
+                        let currentTimestamp = newWordSegments[0].timestamp
+
+                        words.forEach((word: string, idx: number) => {
+                            currentChunk.push(word)
+                            const hasPunctuation = /[.,!?;:]/.test(word)
+                            const isChunkFull = currentChunk.length >= 4
+
+                            if (hasPunctuation || isChunkFull || idx === words.length - 1) {
+                                setSegments(prev => [...prev, {
+                                    text: currentChunk.join(' '),
+                                    timestamp: currentTimestamp
+                                }])
+                                currentChunk = []
+                                if (idx < words.length - 1) {
+                                    currentTimestamp = newWordSegments[idx + 1].timestamp
+                                }
+                            }
+                        })
                     }
                     isPhraseActiveRef.current = false
                     phraseStartTimeRef.current = 0
