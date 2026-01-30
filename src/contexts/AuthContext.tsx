@@ -79,9 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         provider.setCustomParameters({ prompt: 'select_account' });
 
         try {
-            console.log("🔑 Auth: Starting Sign-In Flow...");
+            console.log("🔑 Auth: Starting Sign-In Flow...", {
+                isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+                isStandalone: (window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches,
+                currentUrl: window.location.href
+            });
 
-            // On mobile/PWA, try redirect. On desktop, try popup.
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             const isStandalone = (window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches;
 
@@ -90,10 +93,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 await signInWithRedirect(auth, provider);
             } else {
                 console.log("💻 Desktop detected, using signInWithPopup");
-                await signInWithPopup(auth, provider);
+                const result = await signInWithPopup(auth, provider);
+                console.log("✅ Auth: Popup success for", result.user.email);
+                setUser(result.user);
             }
-        } catch (error) {
-            console.error("❌ Auth: Sign-In Error", error);
+        } catch (error: any) {
+            console.error("❌ Auth: Sign-In Error", {
+                code: error.code,
+                message: error.message,
+                detail: error
+            });
         }
     };
 

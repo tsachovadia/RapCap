@@ -16,6 +16,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'masked-icon.svg'],
+      workbox: {
+        // Essential: Prevent the Service Worker from intercepting Firebase Auth paths
+        navigateFallbackDenylist: [/^\/__\/auth/]
+      },
       manifest: {
         name: 'RapCap - AI Freestyle Coach',
         short_name: 'RapCap',
