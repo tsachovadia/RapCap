@@ -3,8 +3,11 @@ import {
     onAuthStateChanged,
     GoogleAuthProvider,
     signInWithRedirect,
+    signInWithPopup,
     getRedirectResult,
-    signOut
+    signOut,
+    setPersistence,
+    browserLocalPersistence
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { auth } from '../lib/firebase';
@@ -27,42 +30,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Handle redirect result
-        const checkRedirect = async () => {
-            console.log("🔍 Checking redirect result...");
+        let isMounted = true;
+
+        const initAuth = async () => {
+            console.log("🚀 Auth: Initializing...");
             try {
+                // 1. Set persistence explicitly
+                await setPersistence(auth, browserLocalPersistence);
+
+                // 2. Check for redirect result
+                console.log("🔍 Auth: Checking redirect result...");
                 const result = await getRedirectResult(auth);
-                if (result) {
-                    console.log("✅ Successfully logged in via redirect", {
-                        uid: result.user.uid,
-                        email: result.user.email,
-                        displayName: result.user.displayName
-                    });
+                if (result && isMounted) {
+                    console.log("✅ Auth: Redirect result found for", result.user.email);
                     setUser(result.user);
                 } else {
-                    console.log("ℹ️ No redirect result found");
+                    console.log("ℹ️ Auth: No redirect result found on this load");
                 }
             } catch (error) {
-                console.error("❌ Error handling redirect result", error);
+                console.error("❌ Auth: Initialization error", error);
             }
+
+            // 3. Setup long-term listener
+            const unsubscribe = onAuthStateChanged(auth, (u) => {
+                if (!isMounted) return;
+                console.log("👤 Auth: State Changed ->", u ? `Member (${u.email})` : "Guest");
+                setUser(u);
+                setLoading(false);
+            });
+
+            return unsubscribe;
         };
-        checkRedirect();
 
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            console.log("👤 Auth State Changed:", user ? `Logged in: ${user.uid}` : "Logged out");
-            setUser(user);
-            setLoading(false);
-        });
+        const authPromise = initAuth();
 
-        return unsubscribe;
+        return () => {
+            isMounted = false;
+            authPromise.then(unsub => unsub && unsub());
+        };
     }, []);
 
     const signInWithGoogle = async () => {
         const provider = new GoogleAuthProvider();
+        // Force account selection to help with debug/switching
+        provider.setCustomParameters({ prompt: 'select_account' });
+
         try {
-            await signInWithRedirect(auth, provider);
+            console.log("🔑 Auth: Starting Sign-In Flow...");
+
+            // On mobile/PWA, try redirect. On desktop, try popup.
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const isStandalone = (window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches;
+
+            if (isMobile || isStandalone) {
+                console.log("📱 Mobile/PWA detected, using signInWithRedirect");
+                await signInWithRedirect(auth, provider);
+            } else {
+                console.log("💻 Desktop detected, using signInWithPopup");
+                await signInWithPopup(auth, provider);
+            }
         } catch (error) {
-            console.error("Google Sign In Error", error);
+            console.error("❌ Auth: Sign-In Error", error);
         }
     };
 
