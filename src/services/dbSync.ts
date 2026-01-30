@@ -88,9 +88,13 @@ export const syncService = {
             if (!localSession) {
                 await localDb.sessions.add(sessionData);
             } else {
-                // Sessions are mostly immutable, but maybe metadata changed (lyrics)
-                // For now, just ensuring syncedAt is up to date if cloudId exists
-                await localDb.sessions.update(localSession.id!, { syncedAt: new Date() });
+                // Sessions are mostly immutable, but metadata (lyrics, cloudUrl) can change
+                // We merge metadata and update syncedAt
+                const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
+                await localDb.sessions.update(localSession.id!, {
+                    metadata: updatedMetadata,
+                    syncedAt: new Date()
+                });
             }
         }
     },
@@ -154,14 +158,19 @@ export const syncService = {
                 // 1. Upload Blob if needed
                 if (session.blob && !cloudUrl) {
                     try {
-                        const extension = session.blob.type.includes('mpeg') || session.blob.type.includes('mp3') ? 'mp3' : 'webm';
+                        const rawType = session.blob.type || '';
+                        const isMp3 = rawType.includes('mpeg') || rawType.includes('mp3');
+                        const isMp4 = rawType.includes('mp4') || rawType.includes('aac');
+                        const extension = isMp3 ? 'mp3' : (isMp4 ? 'm4a' : 'webm');
+                        const contentType = isMp3 ? 'audio/mpeg' : (isMp4 ? (rawType || 'audio/mp4') : 'audio/webm');
+
                         const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
                         const storageRef = ref(storage, `users/${uid}/${filename}`);
 
-                        console.log(`📤 Uploading blob of type: ${session.blob.type} as ${filename}`);
+                        console.log(`📤 Uploading blob of type: ${rawType} as ${filename} (${contentType})`);
 
                         const result = await uploadBytes(storageRef, session.blob, {
-                            contentType: session.blob.type
+                            contentType: contentType
                         });
                         cloudUrl = await getDownloadURL(result.ref);
 

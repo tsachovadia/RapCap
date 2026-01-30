@@ -41,7 +41,9 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
 
         const url = session.blob ? URL.createObjectURL(session.blob) : session.metadata.cloudUrl
         if (audioRef.current) {
-            audioRef.current.src = url
+            console.log("🔊 Setting audio source:", url);
+            audioRef.current.src = url;
+            audioRef.current.load(); // Force load
         }
 
         // Decode for Waveform
@@ -100,6 +102,22 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
         }
     }, [session.blob, session.metadata?.cloudUrl])
 
+    // Monitor Audio Errors
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const handleError = () => {
+            console.error("❌ Audio Element Error:", audio.error);
+            if (audio.error?.code === 4) {
+                console.warn("⚠️ Likely a CORS or Source error. Checking cloudUrl...");
+            }
+        };
+
+        audio.addEventListener('error', handleError);
+        return () => audio.removeEventListener('error', handleError);
+    }, []);
+
     if (!session.blob && !session.metadata?.cloudUrl) return null
 
     // Volume State
@@ -147,12 +165,20 @@ export default function SessionPlayer({ session, isPlaying, onEnded }: SessionPl
                         if (!audio.paused) audio.pause()
                     } else {
                         // Should be playing
+                        // Check if audio is ready
+                        if (audio.readyState < 2) {
+                            // Still loading data...
+                            return;
+                        }
+
                         if (audio.paused) {
                             audio.currentTime = targetAudioTime
-                            audio.play()
+                            audio.play().catch(err => {
+                                console.warn("Audio play blocked/failed:", err.message);
+                            });
                         } else {
                             // Drift Correction
-                            if (Math.abs(audio.currentTime - targetAudioTime) > 0.1) {
+                            if (Math.abs(audio.currentTime - targetAudioTime) > 0.15) { // Increased threshold slightly
                                 audio.currentTime = targetAudioTime
                             }
                         }
