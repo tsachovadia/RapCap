@@ -31,6 +31,7 @@ export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
 
     useEffect(() => {
         if (user) {
+            console.log("Onboarding AuthStep: User detected, updating profile and moving next...", user.uid);
             // Sync Google Profile to Local Profile
             updateProfile({
                 name: user.displayName || 'Unknown Rapper',
@@ -40,6 +41,8 @@ export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
 
             // Proceed to next step automatically
             onNext();
+        } else {
+            console.log("Onboarding AuthStep: No user detected in context");
         }
     }, [user, onNext, updateProfile]);
 

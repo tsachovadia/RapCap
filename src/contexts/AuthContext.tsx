@@ -29,19 +29,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         // Handle redirect result
         const checkRedirect = async () => {
+            console.log("🔍 Checking redirect result...");
             try {
                 const result = await getRedirectResult(auth);
                 if (result) {
-                    console.log("Successfully logged in via redirect", result.user);
+                    console.log("✅ Successfully logged in via redirect", {
+                        uid: result.user.uid,
+                        email: result.user.email,
+                        displayName: result.user.displayName
+                    });
                     setUser(result.user);
+                } else {
+                    console.log("ℹ️ No redirect result found");
                 }
             } catch (error) {
-                console.error("Error handling redirect result", error);
+                console.error("❌ Error handling redirect result", error);
             }
         };
         checkRedirect();
 
         const unsubscribe = onAuthStateChanged(auth, (user) => {
+            console.log("👤 Auth State Changed:", user ? `Logged in: ${user.uid}` : "Logged out");
             setUser(user);
             setLoading(false);
         });
