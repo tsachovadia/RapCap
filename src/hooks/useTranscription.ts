@@ -95,12 +95,15 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                             const isChunkFull = currentChunk.length >= 4
 
                             if (hasPunctuation || isChunkFull || idx === words.length - 1) {
+                                const text = currentChunk.join(' ')
+                                console.log(`📦 Adding Segment: "${text}" at ${currentTimestamp.toFixed(2)}s`)
                                 setSegments(prev => [...prev, {
-                                    text: currentChunk.join(' '),
+                                    text,
                                     timestamp: currentTimestamp
                                 }])
                                 currentChunk = []
                                 if (idx < words.length - 1) {
+                                    // Set the NEXT chunk's timestamp to the next word's timestamp
                                     currentTimestamp = newWordSegments[idx + 1].timestamp
                                 }
                             }
