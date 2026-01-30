@@ -106,9 +106,9 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 isRecordingRef.current = false
             }
 
-            if (event.error === 'network') {
-                consecutiveErrorsRef.current++
-            }
+            // Increment error count for any error that isn't expected 
+            // to help back-off correctly if it's failing in a loop
+            consecutiveErrorsRef.current++
         }
 
         recognition.onend = () => {

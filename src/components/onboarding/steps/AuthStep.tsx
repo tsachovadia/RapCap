@@ -8,15 +8,24 @@ interface AuthStepProps {
 }
 
 export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
-    const { signInWithGoogle, user, loading } = useAuth();
+    const { signInWithGoogle, user } = useAuth();
+    const [isLoggingIn, setIsLoggingIn] = React.useState(false);
     const { updateProfile } = useProfile();
 
     const handleLogin = async () => {
+        if (isLoggingIn) return;
+        setIsLoggingIn(true);
         try {
             await signInWithGoogle();
-            // onNext will be called by the useEffect below once user is detected
-        } catch (error) {
+        } catch (error: any) {
             console.error("Login failed in onboarding", error);
+            // reset loading if it was a cancel or close
+            if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
+                setIsLoggingIn(false);
+            }
+        } finally {
+            // Note: we don't set setIsLoggingIn(false) here if successful 
+            // because the useEffect will handle the transition once the user object arrives
         }
     };
 
@@ -47,10 +56,10 @@ export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
                 <div className="w-full max-w-sm space-y-4">
                     <button
                         onClick={handleLogin}
-                        disabled={loading}
+                        disabled={isLoggingIn}
                         className="w-full py-4 px-6 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-transform active:scale-95 flex items-center justify-center gap-3"
                     >
-                        {loading ? (
+                        {isLoggingIn ? (
                             <Loader2 className="animate-spin" />
                         ) : (
                             <img src="https://www.google.com/favicon.ico" alt="Google" className="w-6 h-6" />
