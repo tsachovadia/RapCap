@@ -33,7 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let isMounted = true;
 
         const initAuth = async () => {
-            console.log("🚀 Auth: Initializing...");
+            console.log("🚀 Auth: Initializing...", {
+                domain: auth.config.authDomain,
+                isPWA: (window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches
+            });
             try {
                 // 1. Set persistence explicitly
                 await setPersistence(auth, browserLocalPersistence);
