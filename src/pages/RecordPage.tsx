@@ -13,6 +13,7 @@ import RhymeTrainingModeUI from '../components/record/RhymeTrainingModeUI'
 import RecordingHeader from '../components/record/RecordingHeader'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import { useAuth } from '../contexts/AuthContext'
+import { Music, Mic, GraduationCap } from 'lucide-react'
 
 export type RecordingMode = 'freestyle' | 'thoughts' | 'training'
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
@@ -79,7 +80,6 @@ export default function RecordPage() {
             // different modes might have different pre-roll needs
             if (mode === 'freestyle') {
                 setFlowState('preroll')
-                // Pre-roll logic will be handled by FreestyleModeUI via a callback or ref
             } else {
                 await startRecording()
                 recordingStartTimeRef.current = Date.now()
@@ -117,11 +117,15 @@ export default function RecordPage() {
     }
 
     const handleSaveMoment = () => {
+        if (flowState !== 'recording') return // Prevent saving moments during pre-roll
         const now = Date.now()
         const preciseTime = recordingStartTimeRef.current > 0
             ? (now - recordingStartTimeRef.current) / 1000
             : duration
-        setMoments(prev => [...prev, preciseTime])
+
+        // Ensure we don't save 0 or negative values if the clock is weird
+        const finalTime = Math.max(0.01, preciseTime)
+        setMoments(prev => [...prev, finalTime])
     }
 
     const handleConfirmSave = async () => {
@@ -141,9 +145,19 @@ export default function RecordPage() {
             .map(s => ({ ...s, timestamp: s.timestamp - offset }))
             .filter(s => s.timestamp >= 0)
 
-        const finalSegments = enhancedTranscriptData ? enhancedTranscriptData.segments : processSegments(segments)
-        const finalWordSegments = enhancedTranscriptData ? enhancedTranscriptData.wordSegments : processSegments(wordSegments)
-        const finalText = enhancedTranscriptData ? enhancedTranscriptData.text : (transcript + (interimTranscript ? ' ' + interimTranscript : ''))
+        let finalSegments = enhancedTranscriptData ? enhancedTranscriptData.segments : processSegments(segments)
+        let finalWordSegments = enhancedTranscriptData ? enhancedTranscriptData.wordSegments : processSegments(wordSegments)
+        let finalText = enhancedTranscriptData ? enhancedTranscriptData.text : (transcript + (interimTranscript ? ' ' + interimTranscript : ''))
+
+        // Manual Fallback: if there's still interim text not in segments
+        if (!enhancedTranscriptData && interimTranscript.trim()) {
+            const hasInterim = segments.some(s => s.text.includes(interimTranscript.trim().split(' ')[0]))
+            if (!hasInterim) {
+                const ts = (Date.now() - transcriptionStartTimeRef.current) / 1000
+                const processedTs = Math.max(0, ts - offset)
+                finalSegments = [...finalSegments, { text: interimTranscript.trim(), timestamp: processedTs }]
+            }
+        }
 
         try {
             await db.sessions.add({
@@ -185,6 +199,7 @@ export default function RecordPage() {
 
     // Modal Callback for Pre-roll complete (Used by FreestyleModeUI)
     const onPreRollComplete = async () => {
+        if (flowState !== 'preroll') return
         await startRecording()
         recordingStartTimeRef.current = Date.now()
         setFlowState('recording')
@@ -197,8 +212,50 @@ export default function RecordPage() {
                 language={language}
                 onLanguageToggle={() => setLanguage(l => l === 'he' ? 'en' : 'he')}
                 onShowMicSetup={() => setShowMicSetup(true)}
-                permissionError={permissionError}
+                permissionError={!!permissionError}
             />
+
+            {/* Mode Switcher */}
+            <div className="flex-none flex justify-center py-2">
+                <div className="bg-[#1a1a1a] p-1 rounded-2xl flex items-center gap-1 border border-white/5 shadow-xl">
+                    <button
+                        onClick={() => navigate('/record?mode=freestyle')}
+                        disabled={flowState !== 'idle'}
+                        className={`
+                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
+                            ${mode === 'freestyle' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
+                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
+                        `}
+                    >
+                        <Music size={14} />
+                        <span>{language === 'he' ? 'פריסטייל' : 'Freestyle'}</span>
+                    </button>
+                    <button
+                        onClick={() => navigate('/record?mode=thoughts')}
+                        disabled={flowState !== 'idle'}
+                        className={`
+                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
+                            ${mode === 'thoughts' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
+                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
+                        `}
+                    >
+                        <Mic size={14} />
+                        <span>{language === 'he' ? 'מחשבות' : 'Thoughts'}</span>
+                    </button>
+                    <button
+                        onClick={() => navigate('/record?mode=training')}
+                        disabled={flowState !== 'idle'}
+                        className={`
+                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
+                            ${mode === 'training' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
+                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
+                        `}
+                    >
+                        <GraduationCap size={14} />
+                        <span>{language === 'he' ? 'אימון' : 'Training'}</span>
+                    </button>
+                </div>
+            </div>
 
             <main className="flex-1 flex flex-col gap-2 min-h-0 pb-4">
                 {mode === 'freestyle' && (

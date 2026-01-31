@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Link as LinkIcon, Disc, Layers } from 'lucide-react'
+import { Link as LinkIcon, Layers } from 'lucide-react'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import WordDropControls, { type WordDropSettings } from '../freestyle/WordDropControls'
 import { commonWordsHe, commonWordsEn } from '../../data/wordBank'
@@ -242,9 +242,9 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                 </div>
 
                 {/* Volume Column */}
-                <div className="w-12 bg-[#181818] rounded-xl flex flex-col items-center py-4 gap-4 border border-[#282828] h-full">
+                <div className="w-12 bg-[#181818] rounded-xl flex flex-col items-center py-4 gap-4 border border-[#282828]">
                     <div className="text-[10px] text-subdued font-bold uppercase tracking-wider -rotate-90 mt-2">VOL</div>
-                    <div className="flex-1 w-full flex justify-center py-2">
+                    <div className="flex-1 w-full flex justify-center py-2 min-h-0">
                         <input
                             type="range"
                             min="0"

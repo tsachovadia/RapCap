@@ -23,10 +23,10 @@ export default function MomentsList({ moments, onSeek }: MomentsListProps) {
         <div className="flex flex-col gap-2 mt-4">
             <h3 className="text-xs font-bold text-subdued uppercase tracking-wider mb-1">רגעים נבחרים</h3>
             <div className="space-y-2">
-                {moments && moments.length > 0 ? moments.map((moment) => {
+                {moments && moments.length > 0 ? moments.map((moment, idx) => {
                     const isExpanded = expandedId === moment.id
                     return (
-                        <div key={moment.id} className="bg-[#282828] rounded-lg overflow-hidden border border-transparent hover:border-white/10 transition-colors">
+                        <div key={moment.id || idx} className="bg-[#282828] rounded-lg overflow-hidden border border-transparent hover:border-white/10 transition-colors">
                             <div
                                 className="flex items-center justify-between p-3 cursor-pointer"
                                 onClick={() => setExpandedId(isExpanded ? null : moment.id)}

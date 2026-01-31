@@ -179,62 +179,65 @@ export const syncService = {
     },
 
     async syncSessions(uid: string) {
-        const sessions = await localDb.sessions.toArray();
+        // Since Dexie doesn't support complex null/undefined queries well in some versions, 
+        // let's just filter the whole array for simplicity and safety
+        const allSessions = await localDb.sessions.toArray();
+        const pendingSessions = allSessions.filter(s => !s.syncedAt || !s.cloudId);
 
-        for (const session of sessions) {
-            if (!session.syncedAt) {
-                let cloudUrl = session.metadata?.cloudUrl;
+        for (const session of pendingSessions) {
+            let cloudUrl = session.metadata?.cloudUrl;
 
-                if (session.blob && !cloudUrl) {
-                    try {
-                        const rawType = session.blob.type || '';
-                        const isMp3 = rawType.includes('mpeg') || rawType.includes('mp3');
-                        const isMp4 = rawType.includes('mp4') || rawType.includes('aac');
-                        const extension = isMp3 ? 'mp3' : (isMp4 ? 'm4a' : 'webm');
-                        const contentType = isMp3 ? 'audio/mpeg' : (isMp4 ? (rawType || 'audio/mp4') : 'audio/webm');
-
-                        const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
-                        const storageRef = ref(storage, `users/${uid}/${filename}`);
-
-                        const result = await uploadBytes(storageRef, session.blob, { contentType });
-                        cloudUrl = await getDownloadURL(result.ref);
-
-                        const newMetadata = { ...session.metadata, cloudUrl };
-                        await localDb.sessions.update(session.id!, { metadata: newMetadata });
-                        session.metadata = newMetadata;
-                    } catch (e) {
-                        console.error(`❌ Failed to upload audio for session ${session.id}:`, e);
-                        continue;
-                    }
-                }
-
-                const dataToSync = {
-                    title: session.title,
-                    type: session.type,
-                    subtype: session.subtype,
-                    beatId: session.beatId,
-                    duration: session.duration,
-                    date: Timestamp.fromDate(session.date || session.createdAt),
-                    createdAt: Timestamp.fromDate(session.createdAt),
-                    metadata: session.metadata || {},
-                    content: session.content,
-                    userId: uid
-                };
-
+            // 1. Upload Audio if needed
+            if (session.blob && !cloudUrl) {
                 try {
-                    const cleanPayload = cleanData(dataToSync);
-                    if (session.cloudId) {
-                        const docRef = doc(firestore, 'users', uid, 'sessions', session.cloudId);
-                        await setDoc(docRef, cleanPayload, { merge: true });
-                    } else {
-                        const colRef = collection(firestore, 'users', uid, 'sessions');
-                        const docRef = await addDoc(colRef, cleanPayload);
-                        await localDb.sessions.update(session.id!, { cloudId: docRef.id });
-                    }
-                    await localDb.sessions.update(session.id!, { syncedAt: new Date() });
+                    console.log(`📤 Uploading audio for session: ${session.title}`);
+                    const rawType = session.blob.type || '';
+                    const isMp3 = rawType.includes('mpeg') || rawType.includes('mp3');
+                    const isMp4 = rawType.includes('mp4') || rawType.includes('aac');
+                    const extension = isMp3 ? 'mp3' : (isMp4 ? 'm4a' : 'webm');
+                    const contentType = isMp3 ? 'audio/mpeg' : (isMp4 ? (rawType || 'audio/mp4') : 'audio/webm');
+
+                    const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
+                    const storageRef = ref(storage, `users/${uid}/${filename}`);
+
+                    const result = await uploadBytes(storageRef, session.blob, { contentType });
+                    cloudUrl = await getDownloadURL(result.ref);
+
+                    const newMetadata = { ...session.metadata, cloudUrl };
+                    await localDb.sessions.update(session.id!, { metadata: newMetadata });
+                    session.metadata = newMetadata;
                 } catch (e) {
-                    console.error(`Failed to sync Session ${session.id}:`, e);
+                    console.error(`❌ Failed to upload audio for session ${session.id}:`, e);
+                    continue; // Stay local until next sync attempt
                 }
+            }
+
+            const dataToSync = {
+                title: session.title,
+                type: session.type,
+                subtype: session.subtype,
+                beatId: session.beatId,
+                duration: session.duration,
+                date: Timestamp.fromDate(session.date || session.createdAt),
+                createdAt: Timestamp.fromDate(session.createdAt),
+                metadata: session.metadata || {},
+                content: session.content,
+                userId: uid
+            };
+
+            try {
+                const cleanPayload = cleanData(dataToSync);
+                if (session.cloudId) {
+                    const docRef = doc(firestore, 'users', uid, 'sessions', session.cloudId);
+                    await setDoc(docRef, cleanPayload, { merge: true });
+                } else {
+                    const colRef = collection(firestore, 'users', uid, 'sessions');
+                    const docRef = await addDoc(colRef, cleanPayload);
+                    await localDb.sessions.update(session.id!, { cloudId: docRef.id });
+                }
+                await localDb.sessions.update(session.id!, { syncedAt: new Date() });
+            } catch (e) {
+                console.error(`Failed to sync Session ${session.id}:`, e);
             }
         }
     },

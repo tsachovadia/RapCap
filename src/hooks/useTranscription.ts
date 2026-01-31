@@ -22,19 +22,56 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     const isRecordingRef = useRef(isRecording)
     const interimTranscriptRef = useRef('') // Keep tracked for final flush
 
+    // Logic to commit interim transcript as a finalized segment
+    const commitInterim = () => {
+        const text = interimTranscriptRef.current.trim()
+        if (!text) return
+
+        console.log("📤 Committing interim segment:", text)
+        const now = Date.now()
+
+        // Use phraseStartTime if available, otherwise estimate based on duration
+        const phraseStart = phraseStartTimeRef.current || (now - Math.min(text.length * 80, 5000))
+        const duration = now - phraseStart
+        const words = text.split(/\s+/)
+
+        if (words.length > 0) {
+            const step = duration / words.length
+            const newWordSegments = words.map((w: string, idx: number) => ({
+                word: w,
+                timestamp: ((phraseStart + (idx * step)) - startTimeRef.current) / 1000
+            }))
+
+            setWordSegments(prev => [...prev, ...newWordSegments])
+
+            // Add the final segment
+            const ts = (phraseStart - startTimeRef.current) / 1000
+            setSegments(prev => [...prev, { text, timestamp: ts }])
+            console.log(`📦 Segment added via commitInterim: "${text}" at ${ts.toFixed(2)}s`)
+        }
+
+        setTranscript(prev => prev + text + " ")
+        setInterimTranscript('')
+        interimTranscriptRef.current = ''
+        phraseStartTimeRef.current = 0
+    }
+
+    // Silence detection: if interim transcript doesn't change for a while, commit it
+    useEffect(() => {
+        if (!isListening || !interimTranscript) return
+
+        const timeout = setTimeout(() => {
+            console.log("🤫 Silence detected in interim...")
+            commitInterim()
+        }, 2500) // Commit if silent for 2.5s
+
+        return () => clearTimeout(timeout)
+    }, [interimTranscript, isListening])
+
     useEffect(() => {
         isRecordingRef.current = isRecording
         if (!isRecording && interimTranscriptRef.current) {
-            // Manual Flush: When recording stops, if there's leftover interim, save it
-            const text = interimTranscriptRef.current.trim()
-            if (text) {
-                console.log("📤 Flushing final interim segment:", text)
-                const ts = (Date.now() - startTimeRef.current) / 1000
-                setSegments(prev => [...prev, { text, timestamp: ts }])
-                setTranscript(prev => prev + text + " ")
-                setInterimTranscript('')
-                interimTranscriptRef.current = ''
-            }
+            commitInterim()
         }
     }, [isRecording])
 
@@ -66,6 +103,8 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
                     const text = event.results[i][0].transcript.trim()
+                    if (!text) continue
+
                     finalTranscript += text + ' '
                     console.log("📝 Final Result:", text)
 
@@ -85,7 +124,6 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                         setWordSegments(prev => [...prev, ...newWordSegments])
 
                         // Optimization: Split segments by punctuation OR fixed chunk size
-                        // This makes the UI update faster after natural pauses
                         let currentChunk: string[] = []
                         let currentTimestamp = newWordSegments[0].timestamp
 
@@ -95,15 +133,14 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                             const isChunkFull = currentChunk.length >= 4
 
                             if (hasPunctuation || isChunkFull || idx === words.length - 1) {
-                                const text = currentChunk.join(' ')
-                                console.log(`📦 Adding Segment: "${text}" at ${currentTimestamp.toFixed(2)}s`)
+                                const chunkText = currentChunk.join(' ')
+                                console.log(`📦 Adding Segment: "${chunkText}" at ${currentTimestamp.toFixed(2)}s`)
                                 setSegments(prev => [...prev, {
-                                    text,
+                                    text: chunkText,
                                     timestamp: currentTimestamp
                                 }])
                                 currentChunk = []
                                 if (idx < words.length - 1) {
-                                    // Set the NEXT chunk's timestamp to the next word's timestamp
                                     currentTimestamp = newWordSegments[idx + 1].timestamp
                                 }
                             }
@@ -139,6 +176,12 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         recognition.onend = () => {
             if (!isEffectActive) return
             console.log("🛑 Speech Recognition Ended")
+
+            // If it ended while we have interim, commit it before restarting
+            if (interimTranscriptRef.current) {
+                console.log("⚠️ End detected with pending interim. Committing.")
+                commitInterim()
+            }
 
             if (consecutiveErrorsRef.current > 10) {
                 console.warn("Too many consecutive transcription errors, stopping auto-restart")
@@ -179,18 +222,10 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             isEffectActive = false
             if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
 
-            // Final Flush: If stopping and we have interim text, try to commit it
-            if (isRecordingRef.current) {
-                console.log("📝 Finalizing transcription before cleanup...");
-                // Note: We can't easily wait for async setState here, 
-                // but the parent component (FreestylePage) should have the last state.
-            }
-
             try {
                 recognition.stop() // Better than abort() - allows final results
             } catch (e) { /* ignore */ }
             setIsListening(false)
-            setInterimTranscript('')
         }
     }, [language, isRecording])
 

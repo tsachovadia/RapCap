@@ -103,7 +103,7 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                     }
 
                     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
-                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0))
 
                     const rawData = audioBuffer.getChannelData(0)
                     const samples = 200
@@ -387,16 +387,18 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
     // We normalize to the interface expected by MomentsList
     const rawMoments = session.metadata?.moments || [];
     const moments = rawMoments.map((m: any, idx: number) => {
-        // If it's already an object with time/label, use it.
-        // If it's just a number (legacy), wrap it.
-        // If it comes from the recorder, check the structure.
-        // Assuming user feedback "saved as 0:00" means the data might be 0 or formatting fails.
-        // We'll trust the value if it exists, otherwise default.
         if (typeof m === 'object' && m !== null) {
-            return { timestamp: m.timestamp || 0, label: m.label || `Moment ${idx + 1}` };
+            return {
+                id: m.id || `moment-${idx}`,
+                timestamp: m.timestamp || 0,
+                label: m.label || `Moment ${idx + 1}`
+            };
         }
-        // Fallback for number or other types
-        return { timestamp: Number(m) || 0, label: `Moment ${idx + 1}` };
+        return {
+            id: `moment-${idx}`,
+            timestamp: Number(m) || 0,
+            label: `Moment ${idx + 1}`
+        };
     });
 
     return (
