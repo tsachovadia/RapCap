@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db, type WordGroup } from '../db/db'
-import { Plus, Trash2, Save, ArrowLeft, Sparkles, Loader2, Search, X, Check } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Sparkles, Loader2, Search, X, Check, ChevronDown, ChevronUp, Mic } from 'lucide-react'
 import { generateMnemonicStory } from '../services/gemini'
 import { getVocalization, getRhymes } from '../services/dicta'
+import { syncService } from '../services/dbSync'
 
 export default function RhymeEditorPage() {
     const { id } = useParams()
@@ -14,12 +15,19 @@ export default function RhymeEditorPage() {
     const [name, setName] = useState('')
     const [items, setItems] = useState<string[]>([])
     const [story, setStory] = useState('')
+    const [mnemonicLogic, setMnemonicLogic] = useState('')
+    const [bars, setBars] = useState('')
     const [newItem, setNewItem] = useState('')
 
     // AI / Dicta State
-    const [mnemonicLogic, setMnemonicLogic] = useState('')
     const [isGenerating, setIsGenerating] = useState(false)
     const [isEditingStory, setIsEditingStory] = useState(false)
+
+    // View State (Collapsible Sections)
+    const [isWordBankOpen, setIsWordBankOpen] = useState(true)
+    const [isStoryOpen, setIsStoryOpen] = useState(true)
+    const [isLogicOpen, setIsLogicOpen] = useState(true)
+    const [isBarsOpen, setIsBarsOpen] = useState(true)
 
     // Dicta Modal State
     const [isDictaOpen, setIsDictaOpen] = useState(false)
@@ -37,6 +45,7 @@ export default function RhymeEditorPage() {
                     setItems(group.items)
                     setStory(group.story || '')
                     setMnemonicLogic(group.mnemonicLogic || '')
+                    setBars(group.bars || '')
                 }
             })
         }
@@ -50,6 +59,7 @@ export default function RhymeEditorPage() {
             items,
             story,
             mnemonicLogic,
+            bars,
             createdAt: new Date(),
             lastUsedAt: new Date(),
             // Preserve ID if editing
@@ -58,6 +68,9 @@ export default function RhymeEditorPage() {
 
         try {
             await db.wordGroups.put(groupData)
+            // Trigger background sync (non-blocking)
+            syncService.syncInBackground()
+
             navigate('/rhyme-library') // Go back to library
         } catch (err) {
             console.error("Failed to save:", err)
@@ -90,6 +103,10 @@ export default function RhymeEditorPage() {
         }
 
         setIsGenerating(true);
+        // Ensure section is open to see result
+        setIsStoryOpen(true);
+        setIsLogicOpen(true);
+
         try {
             const result = await generateMnemonicStory(items);
             setStory(result.story);
@@ -139,6 +156,9 @@ export default function RhymeEditorPage() {
         setDictaQuery('');
         setDictaResults([]);
         setSelectedDictaWords([]);
+
+        // Ensure word bank is open to see new items
+        setIsWordBankOpen(true);
     }
 
 
@@ -149,7 +169,7 @@ export default function RhymeEditorPage() {
     // 4. Categories (Bottom - Placeholder)
 
     return (
-        <div className="flex flex-col bg-[#121212] text-white relative">
+        <div className="flex flex-col h-full bg-[#121212] text-white relative">
             {/* Header */}
             <div className="sticky top-0 z-30 flex items-center justify-between p-4 border-b border-white/5 bg-[#1a1a1a]">
                 <button onClick={() => navigate(-1)} className="text-white/60 p-2">
@@ -173,58 +193,95 @@ export default function RhymeEditorPage() {
                 </button>
             </div>
 
-            <div className="p-4 space-y-6">
+            {/* Main Content Scrollable Area - Added pb-40 to fix scrolling issue */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6 pb-40">
 
                 {/* 1. WORD BANK & ADDER */}
                 <div className="space-y-4">
-
-                    {/* Input Bar */}
-                    <div className="flex gap-2">
-                        <div className="flex-1 flex items-center bg-[#252525] rounded-lg border border-white/10 px-3 focus-within:border-green-500/50 transition-colors">
-                            <input
-                                value={newItem}
-                                onChange={(e) => setNewItem(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && addItem()}
-                                placeholder="Add a word..."
-                                className="flex-1 bg-transparent py-3 text-sm focus:outline-none text-white placeholder-white/20"
-                            />
-                            <button
-                                onClick={addItem}
-                                className="bg-green-500/10 text-green-500 p-1.5 rounded-md hover:bg-green-500/20"
-                            >
-                                <Plus size={16} />
-                            </button>
-                        </div>
-                        <button
-                            onClick={() => setIsDictaOpen(true)}
-                            className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex flex-col items-center justify-center leading-tight shadow-lg hover:bg-purple-500"
-                        >
-                            <span>Find</span>
-                            <span className="opacity-70">Rhymes</span>
-                        </button>
-                    </div>
-
-                    {/* Word Chips */}
-                    <div className="flex flex-wrap gap-2">
-                        {items.length === 0 && <span className="text-white/20 text-xs italic p-2">No words yet. Add some or use the Finder!</span>}
-                        {items.map((item, i) => (
-                            <span key={i} className="px-3 py-1.5 bg-[#252525] rounded-lg text-xs text-white/80 border border-white/5 relative group cursor-pointer hover:bg-[#333] hover:text-white transition-colors">
-                                {item}
-                                <button
-                                    onClick={() => removeItem(i)}
-                                    className="absolute -top-1.5 -right-1.5 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                                >
-                                    <Trash2 size={10} className="text-white" />
-                                </button>
+                    {/* Collapsible Header */}
+                    <button
+                        onClick={() => setIsWordBankOpen(!isWordBankOpen)}
+                        className="flex items-center gap-2 w-full text-left group"
+                    >
+                        {isWordBankOpen ?
+                            <ChevronDown size={16} className="text-white/40 group-hover:text-white transition-colors" /> :
+                            <ChevronUp size={16} className="text-white/40 group-hover:text-white transition-colors" />
+                        }
+                        <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest group-hover:text-white/60 transition-colors">
+                            Word Bank ({items.length})
+                        </h3>
+                        {!isWordBankOpen && items.length > 0 && (
+                            <span className="text-[10px] text-white/30 ml-auto truncate max-w-[200px]">
+                                {items.slice(0, 3).join(', ')}{items.length > 3 ? '...' : ''}
                             </span>
-                        ))}
+                        )}
+                    </button>
+
+                    {/* Collapsible Content */}
+                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isWordBankOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="space-y-4 pl-1">
+                            {/* Input Bar */}
+                            <div className="flex gap-2">
+                                <div className="flex-1 flex items-center bg-[#252525] rounded-lg border border-white/10 px-3 focus-within:border-green-500/50 transition-colors">
+                                    <input
+                                        value={newItem}
+                                        onChange={(e) => setNewItem(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && addItem()}
+                                        placeholder="Add a word..."
+                                        className="flex-1 bg-transparent py-3 text-sm focus:outline-none text-white placeholder-white/20"
+                                    />
+                                    <button
+                                        onClick={addItem}
+                                        className="bg-green-500/10 text-green-500 p-1.5 rounded-md hover:bg-green-500/20"
+                                    >
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={() => setIsDictaOpen(true)}
+                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex flex-col items-center justify-center leading-tight shadow-lg hover:bg-purple-500"
+                                >
+                                    <span>Find</span>
+                                    <span className="opacity-70">Rhymes</span>
+                                </button>
+                            </div>
+
+                            {/* Word Chips */}
+                            <div className="flex flex-wrap gap-2">
+                                {items.length === 0 && <span className="text-white/20 text-xs italic p-2">No words yet. Add some or use the Finder!</span>}
+                                {items.map((item, i) => (
+                                    <span key={i} className="px-3 py-1.5 bg-[#252525] rounded-lg text-xs text-white/80 border border-white/5 relative group cursor-pointer hover:bg-[#333] hover:text-white transition-colors">
+                                        {item}
+                                        <button
+                                            onClick={() => removeItem(i)}
+                                            className="absolute -top-1.5 -right-1.5 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        >
+                                            <Trash2 size={10} className="text-white" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
+                <div className="h-px bg-white/5 w-full my-4" />
+
                 {/* 2. THE STORY (Main Focus) */}
                 <div className="space-y-2">
+                    {/* Header with Magic Button */}
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest">Mnemonic Story</h3>
+                        <button
+                            onClick={() => setIsStoryOpen(!isStoryOpen)}
+                            className="flex items-center gap-2 group"
+                        >
+                            {isStoryOpen ?
+                                <ChevronDown size={16} className="text-green-400 group-hover:text-green-300 transition-colors" /> :
+                                <ChevronUp size={16} className="text-green-400 group-hover:text-green-300 transition-colors" />
+                            }
+                            <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest group-hover:text-green-300 transition-colors">Mnemonic Story</h3>
+                        </button>
+
                         <button
                             onClick={handleMagicStory}
                             disabled={isGenerating}
@@ -236,132 +293,185 @@ export default function RhymeEditorPage() {
                         </button>
                     </div>
 
-                    {isEditingStory ? (
-                        <textarea
-                            value={story}
-                            onChange={(e) => setStory(e.target.value)}
-                            onBlur={() => setIsEditingStory(false)}
-                            autoFocus
-                            placeholder="Write the story here..."
-                            className="w-full min-h-[300px] bg-[#1a1a1a] rounded-xl p-4 text-lg leading-loose text-white/90 focus:outline-none border border-green-500/30 resize-y font-hebrew shadow-inner"
-                            style={{ direction: 'rtl', lineHeight: '2' }}
-                        />
-                    ) : (
-                        <div
-                            onClick={() => setIsEditingStory(true)}
-                            className="w-full min-h-[300px] bg-[#1a1a1a] rounded-xl p-4 text-lg leading-loose text-white/90 border border-white/5 font-hebrew cursor-text hover:border-white/10 transition-colors whitespace-pre-wrap"
-                            style={{ direction: 'rtl', lineHeight: '2' }}
-                            dangerouslySetInnerHTML={{
-                                __html: story
-                                    ? story.replace(/\*\*(.*?)\*\*/g, '<strong class="text-green-400 font-bold">$1</strong>')
-                                    : '<span class="text-white/20">Click here to write or generate a story...</span>'
-                            }}
-                        />
-                    )}
-                </div>
-
-                {/* 3. MNEMONIC LOGIC (Story Summary) */}
-                <div className="space-y-2 pb-8">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest">תמצית הסיפור (לוגיקה)</h3>
-                        <span className="text-[10px] text-white/20">איך לזכור את זה?</span>
-                    </div>
-                    <textarea
-                        value={mnemonicLogic}
-                        onChange={(e) => setMnemonicLogic(e.target.value)}
-                        placeholder="פרק את הסיפור לבתים, שלבים או רעיון מרכזי..."
-                        className="w-full min-h-[200px] bg-[#1a1a1a] rounded-xl p-4 text-sm leading-relaxed text-white/80 focus:outline-none border border-white/5 resize-y font-mono"
-                        style={{ direction: 'rtl' }}
-                    />
-                </div>
-                {/* Dicta Modal */}
-                {isDictaOpen && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 pb-24 sm:pb-4">
-                        <div className="bg-[#1e1e1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[70vh] sm:max-h-[80vh]">
-                            {/* Modal Header */}
-                            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#252525] rounded-t-2xl">
-                                <h2 className="font-bold flex items-center gap-2">
-                                    <Search size={16} className="text-purple-400" />
-                                    Dicta Rhyme Finder
-                                </h2>
-                                <button onClick={() => setIsDictaOpen(false)} className="text-white/50 hover:text-white">
-                                    <X size={20} />
-                                </button>
-                            </div>
-
-                            {/* Search Bar */}
-                            <div className="p-4 border-b border-white/5 flex gap-2">
-                                <input
-                                    value={dictaQuery}
-                                    onChange={(e) => setDictaQuery(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleDictaSearch()}
-                                    placeholder="Enter a word (e.g. חבר)..."
-                                    className="flex-1 bg-[#121212] rounded-lg px-4 py-2 border border-white/10 focus:border-purple-500 focus:outline-none text-right font-hebrew"
+                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isStoryOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="pl-1 pt-2">
+                            {isEditingStory ? (
+                                <textarea
+                                    value={story}
+                                    onChange={(e) => setStory(e.target.value)}
+                                    onBlur={() => setIsEditingStory(false)}
                                     autoFocus
+                                    placeholder="Write the story here..."
+                                    className="w-full min-h-[300px] bg-[#1a1a1a] rounded-xl p-4 text-lg leading-loose text-white/90 focus:outline-none border border-green-500/30 resize-y font-hebrew shadow-inner"
+                                    style={{ direction: 'rtl', lineHeight: '2' }}
                                 />
-                                <button
-                                    onClick={handleDictaSearch}
-                                    disabled={isSearchingDicta}
-                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold disabled:opacity-50"
-                                >
-                                    {isSearchingDicta ? <Loader2 className="animate-spin" /> : 'Search'}
-                                </button>
-                            </div>
-
-                            {/* Results Area */}
-                            <div className="flex-1 overflow-y-auto p-4">
-                                {isSearchingDicta ? (
-                                    <div className="flex flex-col items-center justify-center py-10 opacity-50 space-y-2">
-                                        <Loader2 className="animate-spin" size={32} />
-                                        <p className="text-xs">Consulting Dicta...</p>
-                                    </div>
-                                ) : dictaResults.length > 0 ? (
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {dictaResults.map((word, i) => {
-                                            const isSelected = selectedDictaWords.includes(word);
-                                            return (
-                                                <button
-                                                    key={i}
-                                                    onClick={() => toggleDictaSelection(word)}
-                                                    className={`
-                                                    px-2 py-3 rounded-lg text-sm border transition-all flex items-center justify-center gap-2 relative
-                                                    ${isSelected
-                                                            ? 'bg-purple-600 border-purple-400 text-white shadow-lg scale-[1.02]'
-                                                            : 'bg-[#252525] border-white/5 text-white/70 hover:bg-[#333]'
-                                                        }
-                                                `}
-                                                >
-                                                    {word}
-                                                    {isSelected && <Check size={12} className="absolute top-1 right-1" />}
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-10 opacity-30">
-                                        <p>Enter a word to find rhymes.</p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Footer / Actions */}
-                            <div className="p-4 border-t border-white/5 bg-[#252525] rounded-b-2xl flex justify-between items-center">
-                                <span className="text-xs text-white/40">
-                                    {selectedDictaWords.length} selected
-                                </span>
-                                <button
-                                    onClick={addSelectedDictaWords}
-                                    disabled={selectedDictaWords.length === 0}
-                                    className="bg-green-500 text-black font-bold px-6 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
-                                >
-                                    Add Selection
-                                </button>
-                            </div>
+                            ) : (
+                                <div
+                                    onClick={() => setIsEditingStory(true)}
+                                    className="w-full min-h-[300px] bg-[#1a1a1a] rounded-xl p-4 text-lg leading-loose text-white/90 border border-white/5 font-hebrew cursor-text hover:border-white/10 transition-colors whitespace-pre-wrap"
+                                    style={{ direction: 'rtl', lineHeight: '2' }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: story
+                                            ? story.replace(/\*\*(.*?)\*\*/g, '<strong class="text-green-400 font-bold">$1</strong>')
+                                            : '<span class="text-white/20">Click here to write or generate a story...</span>'
+                                    }}
+                                />
+                            )}
                         </div>
                     </div>
-                )}
+                </div>
+
+                <div className="h-px bg-white/5 w-full my-4" />
+
+                {/* 3. MNEMONIC LOGIC (Story Summary) */}
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <button
+                            onClick={() => setIsLogicOpen(!isLogicOpen)}
+                            className="flex items-center gap-2 group"
+                        >
+                            {isLogicOpen ?
+                                <ChevronDown size={16} className="text-blue-400 group-hover:text-blue-300 transition-colors" /> :
+                                <ChevronUp size={16} className="text-blue-400 group-hover:text-blue-300 transition-colors" />
+                            }
+                            <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest group-hover:text-blue-300 transition-colors">תמצית הסיפור (לוגיקה)</h3>
+                        </button>
+                        <span className="text-[10px] text-white/20">איך לזכור את זה?</span>
+                    </div>
+
+                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isLogicOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="pl-1 pt-2">
+                            <textarea
+                                value={mnemonicLogic}
+                                onChange={(e) => setMnemonicLogic(e.target.value)}
+                                placeholder="פרק את הסיפור לבתים, שלבים או רעיון מרכזי..."
+                                className="w-full min-h-[200px] bg-[#1a1a1a] rounded-xl p-4 text-sm leading-relaxed text-white/80 focus:outline-none border border-white/5 resize-y font-mono"
+                                style={{ direction: 'rtl' }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-px bg-white/5 w-full my-4" />
+
+                {/* 4. BARS / SENTENCES (New Section) */}
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <button
+                            onClick={() => setIsBarsOpen(!isBarsOpen)}
+                            className="flex items-center gap-2 group"
+                        >
+                            {isBarsOpen ?
+                                <ChevronDown size={16} className="text-amber-400 group-hover:text-amber-300 transition-colors" /> :
+                                <ChevronUp size={16} className="text-amber-400 group-hover:text-amber-300 transition-colors" />
+                            }
+                            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-widest group-hover:text-amber-300 transition-colors">Bars & Sentences</h3>
+                        </button>
+                        <Mic size={14} className="text-white/20" />
+                    </div>
+
+                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isBarsOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="pl-1 pt-2">
+                            <textarea
+                                value={bars}
+                                onChange={(e) => setBars(e.target.value)}
+                                placeholder="Write your bars, sentences, or punchlines here..."
+                                className="w-full min-h-[150px] bg-[#1a1a1a] rounded-xl p-4 text-base leading-relaxed text-white/90 focus:outline-none border border-white/5 resize-y font-sans focus:border-amber-500/50 transition-colors"
+                                style={{ direction: 'rtl' }}
+                            />
+                        </div>
+                    </div>
+                </div>
 
             </div>
+
+            {/* Dicta Modal */}
+            {isDictaOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 pb-24 sm:pb-4">
+                    <div className="bg-[#1e1e1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[70vh] sm:max-h-[80vh]">
+                        {/* Modal Header */}
+                        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#252525] rounded-t-2xl">
+                            <h2 className="font-bold flex items-center gap-2">
+                                <Search size={16} className="text-purple-400" />
+                                Dicta Rhyme Finder
+                            </h2>
+                            <button onClick={() => setIsDictaOpen(false)} className="text-white/50 hover:text-white">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Search Bar */}
+                        <div className="p-4 border-b border-white/5 flex gap-2">
+                            <input
+                                value={dictaQuery}
+                                onChange={(e) => setDictaQuery(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleDictaSearch()}
+                                placeholder="Enter a word (e.g. חבר)..."
+                                className="flex-1 bg-transparent rounded-lg px-4 py-2 border border-white/10 focus:border-purple-500 focus:outline-none text-right font-hebrew text-white"
+                                autoFocus
+                            />
+                            <button
+                                onClick={handleDictaSearch}
+                                disabled={isSearchingDicta}
+                                className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold disabled:opacity-50"
+                            >
+                                {isSearchingDicta ? <Loader2 className="animate-spin" /> : 'Search'}
+                            </button>
+                        </div>
+
+                        {/* Results Area */}
+                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                            {isSearchingDicta ? (
+                                <div className="flex flex-col items-center justify-center py-10 opacity-50 space-y-2">
+                                    <Loader2 className="animate-spin" size={32} />
+                                    <p className="text-xs">Consulting Dicta...</p>
+                                </div>
+                            ) : dictaResults.length > 0 ? (
+                                <div className="grid grid-cols-3 gap-2">
+                                    {dictaResults.map((word, i) => {
+                                        const isSelected = selectedDictaWords.includes(word);
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => toggleDictaSelection(word)}
+                                                className={`
+                                                px-2 py-3 rounded-lg text-sm border transition-all flex items-center justify-center gap-2 relative
+                                                ${isSelected
+                                                        ? 'bg-purple-600 border-purple-400 text-white shadow-lg scale-[1.02]'
+                                                        : 'bg-[#252525] border-white/5 text-white/70 hover:bg-[#333]'
+                                                    }
+                                            `}
+                                            >
+                                                {word}
+                                                {isSelected && <Check size={12} className="absolute top-1 right-1" />}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-10 opacity-30">
+                                    <p>Enter a word to find rhymes.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer / Actions */}
+                        <div className="p-4 border-t border-white/5 bg-[#252525] rounded-b-2xl flex justify-between items-center">
+                            <span className="text-xs text-white/40">
+                                {selectedDictaWords.length} selected
+                            </span>
+                            <button
+                                onClick={addSelectedDictaWords}
+                                disabled={selectedDictaWords.length === 0}
+                                className="bg-green-500 text-black font-bold px-6 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
+                            >
+                                Add Selection
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     )
 }

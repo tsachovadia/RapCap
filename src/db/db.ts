@@ -6,6 +6,7 @@ export interface WordGroup {
     items: string[]; // Supports single words or phrases
     story?: string;
     mnemonicLogic?: string; // How to memorize this? (Houses, Logic)
+    bars?: string; // User written lyrics/sentences
     defaultInterval?: number;
     createdAt: Date;
     lastUsedAt: Date;
