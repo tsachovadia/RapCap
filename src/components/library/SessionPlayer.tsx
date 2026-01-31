@@ -47,89 +47,102 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         if (!blob && !cloudUrl) return
 
         const currentKey = cloudUrl || (blob ? `blob-${(session as any).id}` : '')
-        if (currentKey && currentKey === lastSourceKeyRef.current) {
-            console.log("⏭️ Source identical, skipping reload");
-            return;
-        }
-        lastSourceKeyRef.current = currentKey;
+        const isNewSource = currentKey !== lastSourceKeyRef.current
 
-        // Cleanup previous blob URL if it exists
-        if (lastBlobUrlRef.current) {
-            URL.revokeObjectURL(lastBlobUrlRef.current);
-            lastBlobUrlRef.current = null;
-        }
+        let activeUrl = ''
+        if (isNewSource) {
+            console.log("🔊 New audio source key:", currentKey);
+            // Cleanup previous blob URL
+            if (lastBlobUrlRef.current) {
+                URL.revokeObjectURL(lastBlobUrlRef.current);
+                lastBlobUrlRef.current = null;
+            }
 
-        const url = blob ? URL.createObjectURL(blob) : cloudUrl
-        if (blob) lastBlobUrlRef.current = url;
-
-        if (audioRef.current) {
-            console.log("🔊 Setting audio source:", url);
-            setIsBuffering(true);
-            onLoadingChange?.(true);
-            audioRef.current.src = url;
-            audioRef.current.load(); // Force load
+            activeUrl = blob ? URL.createObjectURL(blob) : (cloudUrl || '')
+            if (blob) lastBlobUrlRef.current = activeUrl
+            lastSourceKeyRef.current = currentKey
+        } else {
+            activeUrl = blob ? (lastBlobUrlRef.current || '') : (cloudUrl || '')
         }
 
-        // Decode for Waveform
-        const decodeAudio = async () => {
-            setIsProcessingAudio(true)
-            try {
-                let arrayBuffer: ArrayBuffer
-                if (blob) {
-                    arrayBuffer = await blob.arrayBuffer()
-                } else if (cloudUrl) {
-                    const response = await fetch(cloudUrl)
-                    arrayBuffer = await response.arrayBuffer()
-                } else {
-                    return
+        // Always ensure the audio element has the correct source
+        // This handles cases where the element might have been recreated 
+        // but the source key remained identical.
+        if (audioRef.current && activeUrl) {
+            const currentSrc = audioRef.current.src
+            // Standardize comparison (blob URLs are unique, cloud URLs might have different origins)
+            if (currentSrc !== activeUrl && !currentSrc.includes(activeUrl)) {
+                console.log("🔊 Syncing audio element source:", activeUrl);
+                audioRef.current.src = activeUrl;
+                if (isNewSource) {
+                    setIsBuffering(true);
+                    onLoadingChange?.(true);
+                    audioRef.current.load();
                 }
-
-                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
-                const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
-
-                // Extract Peak Data
-                const rawData = audioBuffer.getChannelData(0)
-                const samples = 200
-                const blockSize = Math.floor(rawData.length / samples)
-                const peaks = []
-
-                for (let i = 0; i < samples; i++) {
-                    const start = i * blockSize
-                    let sum = 0
-                    const stride = Math.floor(blockSize / 50) || 1
-                    let count = 0
-
-                    for (let j = 0; j < blockSize; j += stride) {
-                        sum += Math.abs(rawData[start + j])
-                        count++
-                    }
-                    peaks.push(sum / count)
-                }
-
-                const max = Math.max(...peaks)
-                const normalized = peaks.map(p => p / max)
-                setAudioPeaks(normalized)
-            } catch (e) {
-                console.error("Audio Decode Failed", e)
-            } finally {
-                setIsProcessingAudio(false)
             }
         }
 
-        decodeAudio()
+        // Only decode waveform if it's a new source OR we don't have peaks yet
+        if (isNewSource || audioPeaks.length === 0) {
+            const decodeAudio = async () => {
+                setIsProcessingAudio(true)
+                try {
+                    let arrayBuffer: ArrayBuffer
+                    if (blob) {
+                        arrayBuffer = await blob.arrayBuffer()
+                    } else if (cloudUrl) {
+                        const response = await fetch(cloudUrl)
+                        arrayBuffer = await response.arrayBuffer()
+                    } else {
+                        return
+                    }
+
+                    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+
+                    const rawData = audioBuffer.getChannelData(0)
+                    const samples = 200
+                    const blockSize = Math.floor(rawData.length / samples)
+                    const peaks = []
+
+                    for (let i = 0; i < samples; i++) {
+                        const start = i * blockSize
+                        let sum = 0
+                        const stride = Math.floor(blockSize / 50) || 1
+                        let count = 0
+                        for (let j = 0; j < blockSize; j += stride) {
+                            sum += Math.abs(rawData[start + j])
+                            count++
+                        }
+                        peaks.push(sum / count)
+                    }
+
+                    const max = Math.max(...peaks)
+                    const normalized = peaks.map(p => p / max)
+                    setAudioPeaks(normalized)
+                } catch (e) {
+                    console.error("Audio Decode Failed", e)
+                } finally {
+                    setIsProcessingAudio(false)
+                }
+            }
+            decodeAudio()
+        }
 
         return () => {
-            // Note: We don't revokeObjectURL here anymore to keep it stable during re-renders 
-            // unless the source actually changes (handled above).
-            // But we SHOULD revoke on final unmount if it's a blob.
+            // Source-specific cleanup handled at start of next effect
         }
-    }, [session.blob, session.metadata?.cloudUrl])
+    }, [session.blob, session.metadata?.cloudUrl, (session as any).id, onLoadingChange])
 
     // Final Cleanup on Unmount
     useEffect(() => {
         return () => {
             if (lastBlobUrlRef.current) {
+                console.log("🧹 Final cleanup of blob URL");
                 URL.revokeObjectURL(lastBlobUrlRef.current);
+            }
+            if (bufferingTimeoutRef.current) {
+                clearTimeout(bufferingTimeoutRef.current);
             }
         }
     }, [])
