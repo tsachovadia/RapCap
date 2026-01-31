@@ -20,7 +20,7 @@ export interface Session {
     cloudId?: string;
     syncedAt?: Date;
     title: string;
-    type: 'freestyle' | 'drill';
+    type: 'freestyle' | 'drill' | 'thoughts' | 'training';
     subtype?: string;
     beatId?: string;
     duration: number;

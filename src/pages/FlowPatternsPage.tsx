@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import { ArrowLeft, Clock, Pause, Play, Waves, Volume2, Save, Share2, SkipForward, Activity } from 'lucide-react'
 import BeatPlayer from '../components/freestyle/BeatPlayer'
+import { syncService } from '../services/dbSync'
 
 // Flow patterns to cycle through
 const FLOW_PATTERNS = [
@@ -96,6 +97,7 @@ export default function FlowPatternsPage() {
                     bpm: bpm
                 }
             })
+            syncService.syncInBackground()
             navigate('/drills')
         } catch (e) {
             console.error('Failed to save drill', e)

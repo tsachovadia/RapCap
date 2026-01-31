@@ -25,10 +25,10 @@ export default function HomePage() {
     const recentSessions = sessions?.slice(0, 4) || []
 
     const quickAccessItems = [
-        { id: 'freestyle', title: 'פריסטייל מהיר', icon: Mic, color: '#1DB954', path: '/freestyle' },
+        { id: 'freestyle', title: 'פריסטייל', icon: Mic, color: '#1DB954', path: '/record?mode=freestyle' },
+        { id: 'thoughts', title: 'מחשבות', icon: BrainCircuit, color: '#B91D8B', path: '/record?mode=thoughts' },
+        { id: 'training', title: 'אימון חרוזים', icon: Link2, color: '#E91429', path: '/record?mode=training' },
         { id: 'flow-patterns', title: 'אימון פלואו', icon: Waves, color: '#1E3264', path: '/drills/flow-patterns' },
-        { id: 'rhyme-chains', title: 'שרשרת חרוזים', icon: Link2, color: '#E91429', path: '/drills/rhyme-chains' },
-        { id: 'word-association', title: 'אסוציאציות', icon: BrainCircuit, color: '#E8115B', path: '/drills/word-association' },
     ]
 
     const streak = calculateStreak(sessions || [])
@@ -109,7 +109,7 @@ export default function HomePage() {
                         <h3 className="text-lg font-bold mb-2">מוכן לזרום?</h3>
                         <p className="text-subdued text-sm mb-4">תפוס את הרגע והקלט את ה-Flow שלך</p>
                         <button
-                            onClick={() => navigate('/freestyle')}
+                            onClick={() => navigate('/record?mode=freestyle')}
                             className="btn-spotify w-full py-3 font-bold"
                         >
                             התחל הקלטה
@@ -226,7 +226,7 @@ export default function HomePage() {
                             <div className="text-center py-6 bg-[#181818] rounded-lg">
                                 <p className="text-subdued text-sm mb-3">אין הקלטות עדיין</p>
                                 <button
-                                    onClick={() => navigate('/freestyle')}
+                                    onClick={() => navigate('/record?mode=freestyle')}
                                     className="text-sm font-bold text-white hover:underline"
                                 >
                                     התחל להקליט עכשיו

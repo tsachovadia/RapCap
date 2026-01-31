@@ -21,6 +21,19 @@ export const syncService = {
         console.log("✅ Sync Complete");
     },
 
+    /**
+     * Silent background sync - doesn't throw errors to UI
+     * Use after save operations to keep data in sync automatically
+     */
+    async syncInBackground() {
+        try {
+            await this.syncAll();
+        } catch (err) {
+            console.error('🔄 Background sync failed (silent):', err);
+            // Don't throw - let it fail silently without interrupting user flow
+        }
+    },
+
     async pullWordGroups(uid: string) {
         console.log("📥 Pulling WordGroups from cloud...");
         const colRef = collection(firestore, 'users', uid, 'wordGroups');

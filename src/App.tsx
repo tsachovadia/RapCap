@@ -7,7 +7,7 @@ import AppLayout from './layouts/AppLayout'
 import ReloadPrompt from './components/ReloadPrompt'
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import HomePage from './pages/HomePage'
-import FreestylePage from './pages/FreestylePage'
+import RecordPage from './pages/RecordPage'
 import LibraryPage from './pages/LibraryPage'
 import DrillsPage from './pages/DrillsPage'
 import ObjectWritingPage from './pages/ObjectWritingPage'
@@ -48,7 +48,8 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<AuthPage />} />
-              <Route path="/freestyle" element={<FreestylePage />} />
+              <Route path="/record" element={<RecordPage />} />
+              <Route path="/freestyle" element={<Navigate to="/record?mode=freestyle" replace />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/drills" element={<DrillsPage />} />
               <Route path="/drills/object-writing" element={<ObjectWritingPage />} />

@@ -8,6 +8,7 @@ import { getDrillById, getRandomPrompt, type DrillPrompt } from '../data/drills'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import { ArrowLeft, Clock, Pause, Play, Send, Link as LinkIcon, Save, Share2 } from 'lucide-react'
+import { syncService } from '../services/dbSync'
 
 export default function RhymeChainsPage() {
     const navigate = useNavigate()
@@ -69,6 +70,7 @@ export default function RhymeChainsPage() {
                 }
             })
             // alert('האימון נשמר בהצלחה! 💾')
+            syncService.syncInBackground()
             navigate('/drills')
         } catch (e) {
             console.error('Failed to save drill', e)

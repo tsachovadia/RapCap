@@ -14,6 +14,7 @@ import { ArrowLeft, MoreHorizontal, Mic, Sparkles, Hash, Link as LinkIcon, Layer
 import { useNavigate } from 'react-router-dom'
 import { commonWordsHe, commonWordsEn } from '../data/wordBank'
 import { convertBlobToMp3 } from '../services/audioEncoder'
+import { syncService } from '../services/dbSync'
 
 // Better static ID: 'HAFijG6kyRk' (User provided beat)
 const STATIC_BEAT_ID = 'HAFijG6kyRk'
@@ -421,6 +422,9 @@ export default function FreestylePage() {
             setMoments([])
             resetTranscript()
             setPendingSessionBlob(null) // Ensure blob is cleared
+
+            // Trigger background sync (non-blocking)
+            syncService.syncInBackground();
 
             // Explicit Navigation to Library (Fixes iOS PWA "Home" bug)
             navigate('/library')

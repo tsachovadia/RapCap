@@ -1,0 +1,275 @@
+import { useState, useRef, useEffect } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useAudioRecorder } from '../hooks/useAudioRecorder'
+import { useTranscription } from '../hooks/useTranscription'
+import { db } from '../db/db'
+import { convertBlobToMp3 } from '../services/audioEncoder'
+import { syncService } from '../services/dbSync'
+import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
+import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
+import FreestyleModeUI from '../components/record/FreestyleModeUI'
+import ThoughtsModeUI from '../components/record/ThoughtsModeUI'
+import RhymeTrainingModeUI from '../components/record/RhymeTrainingModeUI'
+import RecordingHeader from '../components/record/RecordingHeader'
+import RecordingControls from '../components/freestyle/RecordingControls'
+
+export type RecordingMode = 'freestyle' | 'thoughts' | 'training'
+export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
+
+export default function RecordPage() {
+    const [searchParams] = useSearchParams()
+    const mode = (searchParams.get('mode') as RecordingMode) || 'freestyle'
+    const navigate = useNavigate()
+
+    // --- Core Hooks ---
+    const {
+        initializeStream,
+        permissionError,
+        startRecording,
+        stopRecording,
+        isRecording,
+        duration,
+        analyser,
+        availableDevices,
+        selectedDeviceId,
+        setDeviceId,
+        audioConstraints,
+        setAudioConstraints,
+        availableOutputDevices,
+        selectedOutputId,
+        setOutputId,
+        resetAudioState
+    } = useAudioRecorder()
+
+    const [language, setLanguage] = useState<'he' | 'en'>('he')
+    const [isTranscribing, setIsTranscribing] = useState(false)
+    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isTranscribing, language)
+
+    // --- Flow State ---
+    const [flowState, setFlowState] = useState<FlowState>('idle')
+    const [moments, setMoments] = useState<number[]>([])
+    const [showReviewModal, setShowReviewModal] = useState(false)
+    const [pendingSessionBlob, setPendingSessionBlob] = useState<Blob | null>(null)
+    const [showMicSetup, setShowMicSetup] = useState(false)
+    const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{ text: string, segments: any[], wordSegments: any[] } | null>(null)
+
+    // Precise timing refs
+    const recordingStartTimeRef = useRef<number>(0)
+    const transcriptionStartTimeRef = useRef<number>(0)
+
+    // Ensure stream is initialized
+    useEffect(() => {
+        initializeStream().catch(err => console.error("Stream init failed", err))
+    }, [initializeStream])
+
+    // Trigger mic setup on error
+    useEffect(() => {
+        if (permissionError) setShowMicSetup(true)
+    }, [permissionError])
+
+    // --- Shared Actions ---
+    const handleStartFlow = async () => {
+        setIsTranscribing(true)
+        transcriptionStartTimeRef.current = Date.now()
+
+        try {
+            await initializeStream()
+            // different modes might have different pre-roll needs
+            if (mode === 'freestyle') {
+                setFlowState('preroll')
+                // Pre-roll logic will be handled by FreestyleModeUI via a callback or ref
+            } else {
+                await startRecording()
+                recordingStartTimeRef.current = Date.now()
+                setFlowState('recording')
+            }
+            resetTranscript()
+            setMoments([])
+        } catch (e) {
+            console.error('Failed to start flow:', e)
+            setFlowState('idle')
+            setIsTranscribing(false)
+        }
+    }
+
+    const handlePauseFlow = () => {
+        setFlowState('paused')
+        setIsTranscribing(false)
+    }
+
+    const handleResumeFlow = () => {
+        setFlowState('recording')
+        setIsTranscribing(true)
+    }
+
+    const handleFinishFlow = async () => {
+        setFlowState('idle')
+        setIsTranscribing(false)
+        if (isRecording) {
+            const blob = await stopRecording()
+            if (blob.size > 0) {
+                setPendingSessionBlob(blob)
+                setShowReviewModal(true)
+            }
+        }
+    }
+
+    const handleSaveMoment = () => {
+        const now = Date.now()
+        const preciseTime = recordingStartTimeRef.current > 0
+            ? (now - recordingStartTimeRef.current) / 1000
+            : duration
+        setMoments(prev => [...prev, preciseTime])
+    }
+
+    const handleConfirmSave = async () => {
+        if (!pendingSessionBlob) return
+
+        let finalBlob = pendingSessionBlob
+        try {
+            finalBlob = await convertBlobToMp3(pendingSessionBlob)
+        } catch (e) {
+            console.error("MP3 conversion failed", e)
+        }
+
+        const offset = Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000
+
+        // Correct segments if needed (shared logic)
+        const processSegments = (segs: any[]) => segs
+            .map(s => ({ ...s, timestamp: s.timestamp - offset }))
+            .filter(s => s.timestamp >= 0)
+
+        const finalSegments = enhancedTranscriptData ? enhancedTranscriptData.segments : processSegments(segments)
+        const finalWordSegments = enhancedTranscriptData ? enhancedTranscriptData.wordSegments : processSegments(wordSegments)
+        const finalText = enhancedTranscriptData ? enhancedTranscriptData.text : (transcript + (interimTranscript ? ' ' + interimTranscript : ''))
+
+        try {
+            await db.sessions.add({
+                title: `${mode === 'freestyle' ? 'Freestyle' : 'Thoughts'} ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
+                blob: finalBlob,
+                duration: duration,
+                createdAt: new Date(),
+                date: new Date(),
+                type: mode,
+                metadata: {
+                    moments,
+                    lyrics: finalText,
+                    lyricsSegments: finalSegments,
+                    lyricsWords: finalWordSegments,
+                    language
+                }
+            })
+            syncService.syncInBackground()
+            navigate('/library')
+        } catch (e) {
+            console.error('Failed to save session', e)
+            alert('Error saving session')
+        }
+    }
+
+    const handleDiscard = () => {
+        if (confirm('Discard this session?')) {
+            setShowReviewModal(false)
+            setPendingSessionBlob(null)
+            setEnhancedTranscriptData(null)
+            resetTranscript()
+            setMoments([])
+        }
+    }
+
+    // Modal Callback for Pre-roll complete (Used by FreestyleModeUI)
+    const onPreRollComplete = async () => {
+        await startRecording()
+        recordingStartTimeRef.current = Date.now()
+        setFlowState('recording')
+    }
+
+    return (
+        <div className="h-[100dvh] flex flex-col relative overflow-hidden bg-black text-white px-4" dir={language === 'he' ? 'rtl' : 'ltr'}>
+            <RecordingHeader
+                mode={mode}
+                language={language}
+                onLanguageToggle={() => setLanguage(l => l === 'he' ? 'en' : 'he')}
+                onShowMicSetup={() => setShowMicSetup(true)}
+                permissionError={permissionError}
+            />
+
+            <main className="flex-1 flex flex-col gap-2 min-h-0 pb-4">
+                {mode === 'freestyle' && (
+                    <FreestyleModeUI
+                        flowState={flowState}
+                        language={language}
+                        onPreRollComplete={onPreRollComplete}
+                        segments={segments}
+                        interimTranscript={interimTranscript}
+                    />
+                )}
+                {mode === 'thoughts' && (
+                    <ThoughtsModeUI
+                        flowState={flowState}
+                        language={language}
+                        segments={segments}
+                        interimTranscript={interimTranscript}
+                    />
+                )}
+                {mode === 'training' && (
+                    <RhymeTrainingModeUI />
+                )}
+            </main>
+
+            <footer className="relative flex-none py-2 flex flex-col items-center gap-2 z-30">
+                {moments.length > 0 && (
+                    <div className="absolute top-0 right-4 flex items-center gap-2 text-xs text-subdued bg-[#181818] px-2 py-1 rounded-lg border border-[#282828] z-20">
+                        <span>{moments.length} Saved</span>
+                    </div>
+                )}
+                <RecordingControls
+                    flowState={flowState}
+                    duration={duration}
+                    onStart={handleStartFlow}
+                    onPause={handlePauseFlow}
+                    onResume={handleResumeFlow}
+                    onFinish={handleFinishFlow}
+                    onSaveMarker={handleSaveMoment}
+                    analyser={analyser}
+                    availableDevices={availableDevices}
+                    selectedDeviceId={selectedDeviceId}
+                    onDeviceChange={setDeviceId}
+                    audioConstraints={audioConstraints}
+                    setAudioConstraints={setAudioConstraints}
+                    availableOutputDevices={availableOutputDevices}
+                    selectedOutputId={selectedOutputId}
+                    onOutputChange={setOutputId}
+                />
+            </footer>
+
+            <ReviewSessionModal
+                isOpen={showReviewModal}
+                onClose={() => setShowReviewModal(false)}
+                onSave={handleConfirmSave}
+                onDiscard={handleDiscard}
+                audioBlob={pendingSessionBlob}
+                onUpdateTranscript={(text, segs, words) => setEnhancedTranscriptData({ text, segments: segs, wordSegments: words })}
+                data={{
+                    transcript: enhancedTranscriptData ? enhancedTranscriptData.text : transcript,
+                    duration,
+                    beatId: '', // Added dummy beatId to satisfy modal, might need more refinement later
+                    date: new Date(),
+                    segments: enhancedTranscriptData ? enhancedTranscriptData.segments : segments
+                }}
+            />
+
+            <MicrophoneSetupModal
+                isOpen={showMicSetup}
+                onClose={() => setShowMicSetup(false)}
+                permissionError={permissionError}
+                initializeStream={initializeStream}
+                audioAnalyser={analyser}
+                availableDevices={availableDevices}
+                selectedDeviceId={selectedDeviceId}
+                setDeviceId={setDeviceId}
+                resetAudioState={resetAudioState}
+            />
+        </div>
+    )
+}
