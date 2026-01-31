@@ -10,13 +10,28 @@ import WordDropControls, { type WordDropSettings } from '../components/freestyle
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
 import { db } from '../db/db'
-import { ArrowLeft, MoreHorizontal, Mic, Sparkles, Hash, Link as LinkIcon, Check, X, Layers } from 'lucide-react'
+import { ArrowLeft, MoreHorizontal, Mic, Sparkles, Hash, Link as LinkIcon, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { commonWordsHe, commonWordsEn } from '../data/wordBank'
 import { convertBlobToMp3 } from '../services/audioEncoder'
 
 // Better static ID: 'HAFijG6kyRk' (User provided beat)
 const STATIC_BEAT_ID = 'HAFijG6kyRk'
+
+const PRESET_BEATS = [
+    { id: 'vSsbbJlZJmc', name: 'ON MY MIND', title: '[FREE] Melodic Emotional Rap Beat “ON MY MIND” | Sad Piano Instrumental' },
+    { id: 'vG2S2rL3wNo', name: 'Prestige', title: '[FREE] "Prestige" (Dark Type Beat) | Hard Boom Bap Rap Beat 2025' },
+    { id: 'liJVSwOiiwg', name: 'Unchanged', title: '(FREE) Boom Bap Freestyle Joey Bada$$ x 90s Type Beat [2024] - Unchanged' },
+    { id: 'P2GOkrU1vnQ', name: 'The Supply', title: '(free) 90s Old School Boom Bap type beat x Freestyle Hip hop | "The Supply"' },
+    { id: 'qU_fJ6O1j7M', name: 'Behind Barz', title: 'Freestyle Rap Beat | Hard Boom Bap Type Beat - "Behind Barz"' },
+    { id: 'L9Jz6yN6jE0', name: 'Streets', title: '(FREE) Old School Freestyle Boom Bap Type Beat - Streets' },
+    { id: '8_v1-T-8y4Y', name: 'Dolla', title: '(FREE) Freestyle Rap Beat - Dolla | Old School Boom Bap' },
+    { id: 'x_7O9zV6G3U', name: 'BLAME ME', title: '[FREE] "BLAME ME" - Rap Freestyle Type Beat 2023' },
+    { id: 'p0-T-v_wE-Y', name: 'Banknotes', title: '(FREE) Boom Bap Freestyle x Old School Rap [2024] - Banknotes' },
+    { id: 'Bl_z_v5_A_E', name: 'My Life', title: '"My Life" - Freestyle Rap Beat | Free Hip Hop Instrumental 2023' },
+    { id: 'j_p_b_8_8_8', name: 'Bushido', title: '"Bushido" - Rap Freestyle Beat | Japanese Underground Boom Bap' },
+    { id: '0mX7P-v14I4', name: 'Sing About Me', title: 'Kendrick Lamar - Sing About Me (Instrumental)' }
+]
 
 export default function FreestylePage() {
     const navigate = useNavigate()
@@ -500,8 +515,40 @@ export default function FreestylePage() {
                                 <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
                                     <div className="w-full max-w-md bg-[#181818] p-4 rounded-xl border border-[#333] shadow-2xl space-y-4">
                                         <h3 className="text-lg font-bold text-white text-center">
-                                            {language === 'he' ? 'בחר ביט מיוטיוב' : 'Select YouTube Beat'}
+                                            {language === 'he' ? 'בחר ביט' : 'Select Beat'}
                                         </h3>
+
+                                        {/* Dropdown for Featured Beats */}
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-subdued uppercase tracking-widest px-1">
+                                                {language === 'he' ? 'ביטים נבחרים' : 'Featured Beats'}
+                                            </label>
+                                            <select
+                                                className="w-full bg-[#222] border border-[#333] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#1DB954] cursor-pointer"
+                                                onChange={(e) => {
+                                                    if (e.target.value) {
+                                                        setVideoId(e.target.value)
+                                                        setShowUrlInput(false)
+                                                    }
+                                                }}
+                                                value={PRESET_BEATS.some(b => b.id === videoId) ? videoId : ''}
+                                            >
+                                                <option value="" disabled>{language === 'he' ? 'בחר מהרשימה...' : 'Choose from list...'}</option>
+                                                {PRESET_BEATS.map(beat => (
+                                                    <option key={beat.id} value={beat.id}>
+                                                        {beat.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="relative pt-2">
+                                            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-[#333]" />
+                                            <span className="relative z-10 bg-[#181818] px-4 text-[10px] font-bold text-subdued uppercase tracking-widest block mx-auto w-fit">
+                                                {language === 'he' ? 'או הדבק קישור' : 'Or Paste Link'}
+                                            </span>
+                                        </div>
+
                                         <div className="flex w-full gap-2">
                                             <input
                                                 type="text"
@@ -512,9 +559,16 @@ export default function FreestylePage() {
                                                 onKeyDown={e => e.key === 'Enter' && handleUrlSubmit()}
                                                 autoFocus
                                             />
-                                            <button onClick={handleUrlSubmit} className="bg-[#1DB954] text-black p-1.5 rounded hover:bg-[#1ed760] transition-colors"><Check size={14} /></button>
-                                            <button onClick={() => setShowUrlInput(false)} className="bg-[#333] text-white p-1.5 rounded hover:bg-[#444] transition-colors"><X size={14} /></button>
+                                            <button onClick={handleUrlSubmit} className="bg-[#1DB954] text-black px-4 py-3 rounded-lg font-bold hover:bg-[#1ed760] transition-colors">
+                                                {language === 'he' ? 'אישור' : 'Go'}
+                                            </button>
                                         </div>
+                                        <button
+                                            onClick={() => setShowUrlInput(false)}
+                                            className="w-full py-2 text-sm text-subdued hover:text-white transition-colors"
+                                        >
+                                            {language === 'he' ? 'ביטול' : 'Cancel'}
+                                        </button>
                                     </div>
                                 </div>
                             ) : (
