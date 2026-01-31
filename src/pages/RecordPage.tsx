@@ -12,6 +12,7 @@ import ThoughtsModeUI from '../components/record/ThoughtsModeUI'
 import RhymeTrainingModeUI from '../components/record/RhymeTrainingModeUI'
 import RecordingHeader from '../components/record/RecordingHeader'
 import RecordingControls from '../components/freestyle/RecordingControls'
+import { useAuth } from '../contexts/AuthContext'
 
 export type RecordingMode = 'freestyle' | 'thoughts' | 'training'
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
@@ -20,6 +21,7 @@ export default function RecordPage() {
     const [searchParams] = useSearchParams()
     const mode = (searchParams.get('mode') as RecordingMode) || 'freestyle'
     const navigate = useNavigate()
+    const { user } = useAuth()
 
     // --- Core Hooks ---
     const {
@@ -159,7 +161,11 @@ export default function RecordPage() {
                     language
                 }
             })
-            syncService.syncInBackground()
+
+            if (user) {
+                syncService.syncSessions(user.uid).catch(console.error);
+            }
+
             navigate('/library')
         } catch (e) {
             console.error('Failed to save session', e)

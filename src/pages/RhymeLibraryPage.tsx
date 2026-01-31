@@ -3,10 +3,13 @@ import { db } from '../db/db'
 import { Plus, Book, Trash2, CheckCircle2, Circle } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
+import { syncService } from '../services/dbSync'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function RhymeLibraryPage() {
     const list = useLiveQuery(() => db.wordGroups.toArray())
     const navigate = useNavigate()
+    const { user } = useAuth()
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
     const [isSelectionMode, setIsSelectionMode] = useState(false)
@@ -23,7 +26,11 @@ export default function RhymeLibraryPage() {
     const handleBulkDelete = async () => {
         if (!selectedIds.length) return
         if (confirm(`Delete ${selectedIds.length} groups?`)) {
-            await db.wordGroups.bulkDelete(selectedIds)
+            if (user) {
+                await syncService.deleteWordGroups(user.uid, selectedIds)
+            } else {
+                await db.wordGroups.bulkDelete(selectedIds)
+            }
             setSelectedIds([])
             setIsSelectionMode(false)
         }

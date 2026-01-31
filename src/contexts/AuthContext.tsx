@@ -84,8 +84,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.error("❌ Auth: Background sync failed", err);
             });
         } else if (!user) {
+            if (lastSyncedUserRef.current) {
+                console.log("📡 Auth: User logged out, stopping listeners...");
+                syncService.stopListeners();
+            }
             lastSyncedUserRef.current = null;
         }
+
+        return () => {
+            // Usually AuthProvider stays mounted, but if it unmounts, stop listeners
+            syncService.stopListeners();
+        };
     }, [user]);
 
     const signInWithGoogle = async () => {

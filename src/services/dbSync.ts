@@ -1,20 +1,29 @@
 import { db as localDb } from '../db/db';
 import { db as firestore, storage, auth } from '../lib/firebase';
-import { collection, doc, setDoc, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
+import {
+    collection,
+    doc,
+    setDoc,
+    addDoc,
+    Timestamp,
+    onSnapshot,
+    deleteDoc
+} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const syncService = {
+    unsubscribes: [] as (() => void)[],
+
     async syncAll() {
         const user = auth.currentUser;
         if (!user) throw new Error("User not authenticated");
 
         console.log("🔄 Starting Sync for user:", user.uid);
 
-        // 1. Pull from cloud first (Cloud -> Local)
-        await this.pullWordGroups(user.uid);
-        await this.pullSessions(user.uid);
+        // 1. Setup listeners first to catch changes while syncing
+        this.setupRealtimeListeners(user.uid);
 
-        // 2. Push to cloud (Local -> Cloud)
+        // 2. Push local changes to cloud (incremental sync is now handled by listeners)
         await this.syncWordGroups(user.uid);
         await this.syncSessions(user.uid);
 
@@ -22,92 +31,105 @@ export const syncService = {
     },
 
     /**
-     * Silent background sync - doesn't throw errors to UI
-     * Use after save operations to keep data in sync automatically
+     * Listen for real-time changes in Firestore and update Dexie
      */
-    async syncInBackground() {
-        try {
-            await this.syncAll();
-        } catch (err) {
-            console.error('🔄 Background sync failed (silent):', err);
-            // Don't throw - let it fail silently without interrupting user flow
-        }
-    },
+    setupRealtimeListeners(uid: string) {
+        // Clear previous listeners if any
+        this.stopListeners();
 
-    async pullWordGroups(uid: string) {
-        console.log("📥 Pulling WordGroups from cloud...");
-        const colRef = collection(firestore, 'users', uid, 'wordGroups');
-        const snapshot = await getDocs(colRef);
+        console.log("📡 Setting up Real-time Listeners...");
 
-        await localDb.transaction('rw', localDb.wordGroups, async () => {
-            for (const docSnap of snapshot.docs) {
-                const cloudData = docSnap.data();
-                const cloudId = docSnap.id;
+        // Word Groups Listener
+        const wgUnsub = onSnapshot(collection(firestore, 'users', uid, 'wordGroups'), async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+                const cloudData = change.doc.data();
+                const cloudId = change.doc.id;
 
-                const localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
+                if (change.type === 'removed') {
+                    console.log(`🗑️ Cloud deleted WordGroup: ${cloudId}`);
+                    await localDb.wordGroups.where('cloudId').equals(cloudId).delete();
+                } else {
+                    const localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
+                    const groupData = {
+                        name: cloudData.name,
+                        items: cloudData.items,
+                        story: cloudData.story,
+                        mnemonicLogic: cloudData.mnemonicLogic,
+                        bars: cloudData.bars,
+                        defaultInterval: cloudData.defaultInterval,
+                        createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
+                        lastUsedAt: cloudData.updatedAt instanceof Timestamp ? cloudData.updatedAt.toDate() : new Date(cloudData.updatedAt || cloudData.lastUsedAt),
+                        isSystem: cloudData.isSystem || false,
+                        cloudId: cloudId,
+                        syncedAt: new Date()
+                    };
 
-                const groupData = {
-                    name: cloudData.name,
-                    items: cloudData.items,
-                    story: cloudData.story,
-                    mnemonicLogic: cloudData.mnemonicLogic,
-                    defaultInterval: cloudData.defaultInterval,
-                    createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
-                    lastUsedAt: cloudData.updatedAt instanceof Timestamp ? cloudData.updatedAt.toDate() : new Date(cloudData.updatedAt || cloudData.lastUsedAt),
-                    isSystem: cloudData.isSystem || false,
-                    cloudId: cloudId,
-                    syncedAt: new Date()
-                };
-
-                if (localGroup) {
-                    if (groupData.lastUsedAt > localGroup.lastUsedAt) {
+                    if (!localGroup) {
+                        await localDb.wordGroups.add(groupData);
+                    } else if (groupData.lastUsedAt > localGroup.lastUsedAt) {
                         await localDb.wordGroups.update(localGroup.id!, groupData);
                     }
-                } else {
-                    await localDb.wordGroups.add(groupData);
                 }
             }
         });
+
+        // Sessions Listener
+        const sUnsub = onSnapshot(collection(firestore, 'users', uid, 'sessions'), async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+                const cloudData = change.doc.data();
+                const cloudId = change.doc.id;
+
+                if (change.type === 'removed') {
+                    console.log(`🗑️ Cloud deleted Session: ${cloudId}`);
+                    await localDb.sessions.where('cloudId').equals(cloudId).delete();
+                } else {
+                    const localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
+                    const sessionData = {
+                        title: cloudData.title,
+                        type: cloudData.type,
+                        subtype: cloudData.subtype,
+                        beatId: cloudData.beatId,
+                        duration: cloudData.duration,
+                        date: cloudData.date instanceof Timestamp ? cloudData.date.toDate() : new Date(cloudData.date),
+                        createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
+                        metadata: cloudData.metadata || {},
+                        content: cloudData.content,
+                        cloudId: cloudId,
+                        syncedAt: new Date()
+                    };
+
+                    if (!localSession) {
+                        await localDb.sessions.add(sessionData);
+                    } else {
+                        // Merge metadata - clouds usually wins if newer
+                        const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
+                        await localDb.sessions.update(localSession.id!, {
+                            ...sessionData,
+                            metadata: updatedMetadata,
+                            syncedAt: new Date()
+                        });
+                    }
+                }
+            }
+        });
+
+        this.unsubscribes.push(wgUnsub, sUnsub);
     },
 
-    async pullSessions(uid: string) {
-        console.log("📥 Pulling Sessions from cloud...");
-        const colRef = collection(firestore, 'users', uid, 'sessions');
-        const q = query(colRef, orderBy('createdAt', 'desc'));
-        const snapshot = await getDocs(q);
+    stopListeners() {
+        this.unsubscribes.forEach(unsub => unsub());
+        this.unsubscribes = [];
+    },
 
-        await localDb.transaction('rw', localDb.sessions, async () => {
-            for (const docSnap of snapshot.docs) {
-                const cloudData = docSnap.data();
-                const cloudId = docSnap.id;
-
-                const localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
-
-                const sessionData = {
-                    title: cloudData.title,
-                    type: cloudData.type,
-                    subtype: cloudData.subtype,
-                    beatId: cloudData.beatId,
-                    duration: cloudData.duration,
-                    date: cloudData.date instanceof Timestamp ? cloudData.date.toDate() : new Date(cloudData.date),
-                    createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
-                    metadata: cloudData.metadata || {},
-                    content: cloudData.content,
-                    cloudId: cloudId,
-                    syncedAt: new Date()
-                };
-
-                if (!localSession) {
-                    await localDb.sessions.add(sessionData);
-                } else {
-                    const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
-                    await localDb.sessions.update(localSession.id!, {
-                        metadata: updatedMetadata,
-                        syncedAt: new Date()
-                    });
-                }
-            }
-        });
+    async syncInBackground() {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+            await this.syncWordGroups(user.uid);
+            await this.syncSessions(user.uid);
+        } catch (err) {
+            console.error('🔄 Background sync failed:', err);
+        }
     },
 
     async syncWordGroups(uid: string) {
@@ -118,7 +140,6 @@ export const syncService = {
             const isDirty = !group.syncedAt || group.lastUsedAt > group.syncedAt;
 
             if (isDirty) {
-                console.log(`Uploading WordGroup: ${group.name}`);
                 const dataToSync = {
                     ...group,
                     updatedAt: Timestamp.fromDate(group.lastUsedAt),
@@ -146,12 +167,22 @@ export const syncService = {
         }
     },
 
+    async deleteWordGroups(uid: string, ids: number[]) {
+        for (const id of ids) {
+            const group = await localDb.wordGroups.get(id);
+            if (group?.cloudId) {
+                const docRef = doc(firestore, 'users', uid, 'wordGroups', group.cloudId);
+                await deleteDoc(docRef);
+            }
+            await localDb.wordGroups.delete(id);
+        }
+    },
+
     async syncSessions(uid: string) {
         const sessions = await localDb.sessions.toArray();
 
         for (const session of sessions) {
             if (!session.syncedAt) {
-                console.log(`Uploading Session: ${session.title}`);
                 let cloudUrl = session.metadata?.cloudUrl;
 
                 if (session.blob && !cloudUrl) {
@@ -165,11 +196,7 @@ export const syncService = {
                         const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
                         const storageRef = ref(storage, `users/${uid}/${filename}`);
 
-                        console.log(`📤 Uploading blob of type: ${rawType} as ${filename} (${contentType})`);
-
-                        const result = await uploadBytes(storageRef, session.blob, {
-                            contentType: contentType
-                        });
+                        const result = await uploadBytes(storageRef, session.blob, { contentType });
                         cloudUrl = await getDownloadURL(result.ref);
 
                         const newMetadata = { ...session.metadata, cloudUrl };
@@ -209,6 +236,17 @@ export const syncService = {
                     console.error(`Failed to sync Session ${session.id}:`, e);
                 }
             }
+        }
+    },
+
+    async deleteSessions(uid: string, ids: number[]) {
+        for (const id of ids) {
+            const session = await localDb.sessions.get(id);
+            if (session?.cloudId) {
+                const docRef = doc(firestore, 'users', uid, 'sessions', session.cloudId);
+                await deleteDoc(docRef);
+            }
+            await localDb.sessions.delete(id);
         }
     }
 };

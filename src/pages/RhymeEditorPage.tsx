@@ -5,10 +5,12 @@ import { Plus, Trash2, Save, ArrowLeft, Sparkles, Loader2, Search, X, Check, Che
 import { generateMnemonicStory } from '../services/gemini'
 import { getVocalization, getRhymes } from '../services/dicta'
 import { syncService } from '../services/dbSync'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function RhymeEditorPage() {
     const { id } = useParams()
     const navigate = useNavigate()
+    const { user } = useAuth()
     const isNew = !id || id === 'new'
 
     // Form State
@@ -68,8 +70,11 @@ export default function RhymeEditorPage() {
 
         try {
             await db.wordGroups.put(groupData)
+
             // Trigger background sync (non-blocking)
-            syncService.syncInBackground()
+            if (user) {
+                syncService.syncWordGroups(user.uid).catch(console.error);
+            }
 
             navigate('/rhyme-library') // Go back to library
         } catch (err) {
@@ -80,7 +85,14 @@ export default function RhymeEditorPage() {
 
     const handleDelete = async () => {
         if (confirm('Are you sure you want to delete this deck?')) {
-            if (id) await db.wordGroups.delete(parseInt(id))
+            if (id) {
+                const numericId = parseInt(id);
+                if (user) {
+                    await syncService.deleteWordGroups(user.uid, [numericId]);
+                } else {
+                    await db.wordGroups.delete(numericId);
+                }
+            }
             navigate('/rhyme-library')
         }
     }
