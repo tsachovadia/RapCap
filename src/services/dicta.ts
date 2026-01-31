@@ -46,6 +46,13 @@ export async function getVocalization(word: string): Promise<string[]> {
 }
 
 /**
+ * Utility to strip Hebrew Nikkud from a string for comparison.
+ */
+export function stripNikkud(text: string): string {
+    return text.replace(/[\u0591-\u05C7]/g, "");
+}
+
+/**
  * Step 2: Get rhymes for a vocalized word
  */
 export async function getRhymes(vocalizedWord: string): Promise<string[]> {
@@ -87,25 +94,29 @@ export async function getRhymes(vocalizedWord: string): Promise<string[]> {
 
         const data = await response.json();
 
-        // Extract all words from the results hierarchy
-        // data.results[].results[].forms[]
-        let allRhymes: string[] = [];
+        // Extract all words from the results hierarchy using a Map for Nikkud-aware deduping
+        // Key: Stripped word, Value: Vocalized word (preserves first found variant)
+        const rhymeMap = new Map<string, string>();
 
         if (data.results && Array.isArray(data.results)) {
             data.results.forEach((category: any) => {
-                // category.mode could be "Rhyme", "Rhyme_Tanakh", etc.
                 if (category.results && Array.isArray(category.results)) {
                     category.results.forEach((cluster: any) => {
                         if (cluster.forms && Array.isArray(cluster.forms)) {
-                            allRhymes.push(...cluster.forms);
+                            cluster.forms.forEach((word: string) => {
+                                const stripped = stripNikkud(word);
+                                if (!rhymeMap.has(stripped)) {
+                                    rhymeMap.set(stripped, word);
+                                }
+                            });
                         }
                     });
                 }
             });
         }
 
-        // Dedup and limit
-        return Array.from(new Set(allRhymes)).slice(0, 50); // Limit to top 50 for now
+        // Return unique vocalized forms, limited to top 50
+        return Array.from(rhymeMap.values()).slice(0, 50);
     } catch (e) {
         console.error("Dicta API Error:", e);
         return [];
