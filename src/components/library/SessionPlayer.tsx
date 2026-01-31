@@ -36,12 +36,32 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
     const dragStartX = useRef<number>(0)
     const dragStartOffset = useRef<number>(0)
     const trackRef = useRef<HTMLDivElement>(null)
+    const lastSourceKeyRef = useRef<string>('')
+    const lastBlobUrlRef = useRef<string | null>(null)
+    const bufferingTimeoutRef = useRef<any>(null)
 
     // Setup Audio & Decode Peaks
     useEffect(() => {
-        if (!session.blob && !session.metadata?.cloudUrl) return
+        const cloudUrl = session.metadata?.cloudUrl
+        const blob = session.blob
+        if (!blob && !cloudUrl) return
 
-        const url = session.blob ? URL.createObjectURL(session.blob) : session.metadata.cloudUrl
+        const currentKey = cloudUrl || (blob ? `blob-${(session as any).id}` : '')
+        if (currentKey && currentKey === lastSourceKeyRef.current) {
+            console.log("⏭️ Source identical, skipping reload");
+            return;
+        }
+        lastSourceKeyRef.current = currentKey;
+
+        // Cleanup previous blob URL if it exists
+        if (lastBlobUrlRef.current) {
+            URL.revokeObjectURL(lastBlobUrlRef.current);
+            lastBlobUrlRef.current = null;
+        }
+
+        const url = blob ? URL.createObjectURL(blob) : cloudUrl
+        if (blob) lastBlobUrlRef.current = url;
+
         if (audioRef.current) {
             console.log("🔊 Setting audio source:", url);
             setIsBuffering(true);
@@ -55,10 +75,10 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
             setIsProcessingAudio(true)
             try {
                 let arrayBuffer: ArrayBuffer
-                if (session.blob) {
-                    arrayBuffer = await session.blob.arrayBuffer()
-                } else if (session.metadata?.cloudUrl) {
-                    const response = await fetch(session.metadata.cloudUrl)
+                if (blob) {
+                    arrayBuffer = await blob.arrayBuffer()
+                } else if (cloudUrl) {
+                    const response = await fetch(cloudUrl)
                     arrayBuffer = await response.arrayBuffer()
                 } else {
                     return
@@ -68,16 +88,14 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
 
                 // Extract Peak Data
-                const rawData = audioBuffer.getChannelData(0) // Left channel
-                const samples = 200 // Desired resolution
+                const rawData = audioBuffer.getChannelData(0)
+                const samples = 200
                 const blockSize = Math.floor(rawData.length / samples)
                 const peaks = []
 
                 for (let i = 0; i < samples; i++) {
                     const start = i * blockSize
                     let sum = 0
-                    // Optimization: Skip samples to speed up large files
-                    // Stride of 50-100 is visually indistinguishable for a UI waveform
                     const stride = Math.floor(blockSize / 50) || 1
                     let count = 0
 
@@ -88,7 +106,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                     peaks.push(sum / count)
                 }
 
-                // Normalize
                 const max = Math.max(...peaks)
                 const normalized = peaks.map(p => p / max)
                 setAudioPeaks(normalized)
@@ -102,9 +119,20 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         decodeAudio()
 
         return () => {
-            if (session.blob) URL.revokeObjectURL(url)
+            // Note: We don't revokeObjectURL here anymore to keep it stable during re-renders 
+            // unless the source actually changes (handled above).
+            // But we SHOULD revoke on final unmount if it's a blob.
         }
     }, [session.blob, session.metadata?.cloudUrl])
+
+    // Final Cleanup on Unmount
+    useEffect(() => {
+        return () => {
+            if (lastBlobUrlRef.current) {
+                URL.revokeObjectURL(lastBlobUrlRef.current);
+            }
+        }
+    }, [])
 
     // Monitor Audio Events (Loading, Errors, Buffering)
     useEffect(() => {
@@ -118,13 +146,22 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         };
         const stopLoading = (e: string) => {
             console.log(`✅ Audio Load Stop (${e}), readyState: ${audio.readyState}`);
+            if (bufferingTimeoutRef.current) {
+                clearTimeout(bufferingTimeoutRef.current);
+                bufferingTimeoutRef.current = null;
+            }
             setIsBuffering(false);
             onLoadingChange?.(false);
         };
         const handleWaiting = () => {
             console.log("⏳ Audio Waiting (Stalled)");
-            setIsBuffering(true);
-            onLoadingChange?.(true);
+            // Debounce buffering state to prevent flickering loop
+            if (!bufferingTimeoutRef.current) {
+                bufferingTimeoutRef.current = setTimeout(() => {
+                    setIsBuffering(true);
+                    onLoadingChange?.(true);
+                }, 300);
+            }
         };
         const handleError = () => {
             console.error("❌ Audio Element Error:", audio.error);

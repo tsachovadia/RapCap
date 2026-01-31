@@ -26,37 +26,35 @@ export const syncService = {
         const colRef = collection(firestore, 'users', uid, 'wordGroups');
         const snapshot = await getDocs(colRef);
 
-        for (const docSnap of snapshot.docs) {
-            const cloudData = docSnap.data();
-            const cloudId = docSnap.id;
+        await localDb.transaction('rw', localDb.wordGroups, async () => {
+            for (const docSnap of snapshot.docs) {
+                const cloudData = docSnap.data();
+                const cloudId = docSnap.id;
 
-            // Check if exists locally
-            const localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
+                const localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
 
-            const groupData = {
-                name: cloudData.name,
-                items: cloudData.items,
-                story: cloudData.story,
-                mnemonicLogic: cloudData.mnemonicLogic,
-                defaultInterval: cloudData.defaultInterval,
-                createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
-                lastUsedAt: cloudData.updatedAt instanceof Timestamp ? cloudData.updatedAt.toDate() : new Date(cloudData.updatedAt || cloudData.lastUsedAt),
-                isSystem: cloudData.isSystem || false,
-                cloudId: cloudId,
-                syncedAt: new Date()
-            };
+                const groupData = {
+                    name: cloudData.name,
+                    items: cloudData.items,
+                    story: cloudData.story,
+                    mnemonicLogic: cloudData.mnemonicLogic,
+                    defaultInterval: cloudData.defaultInterval,
+                    createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
+                    lastUsedAt: cloudData.updatedAt instanceof Timestamp ? cloudData.updatedAt.toDate() : new Date(cloudData.updatedAt || cloudData.lastUsedAt),
+                    isSystem: cloudData.isSystem || false,
+                    cloudId: cloudId,
+                    syncedAt: new Date()
+                };
 
-            if (localGroup) {
-                // Update local if cloud is newer
-                const cloudLastUsed = groupData.lastUsedAt;
-                if (cloudLastUsed > localGroup.lastUsedAt) {
-                    await localDb.wordGroups.update(localGroup.id!, groupData);
+                if (localGroup) {
+                    if (groupData.lastUsedAt > localGroup.lastUsedAt) {
+                        await localDb.wordGroups.update(localGroup.id!, groupData);
+                    }
+                } else {
+                    await localDb.wordGroups.add(groupData);
                 }
-            } else {
-                // New from cloud
-                await localDb.wordGroups.add(groupData);
             }
-        }
+        });
     },
 
     async pullSessions(uid: string) {
@@ -65,51 +63,45 @@ export const syncService = {
         const q = query(colRef, orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
 
-        for (const docSnap of snapshot.docs) {
-            const cloudData = docSnap.data();
-            const cloudId = docSnap.id;
+        await localDb.transaction('rw', localDb.sessions, async () => {
+            for (const docSnap of snapshot.docs) {
+                const cloudData = docSnap.data();
+                const cloudId = docSnap.id;
 
-            const localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
+                const localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
 
-            const sessionData = {
-                title: cloudData.title,
-                type: cloudData.type,
-                subtype: cloudData.subtype,
-                beatId: cloudData.beatId,
-                duration: cloudData.duration,
-                date: cloudData.date instanceof Timestamp ? cloudData.date.toDate() : new Date(cloudData.date),
-                createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
-                metadata: cloudData.metadata || {},
-                content: cloudData.content,
-                cloudId: cloudId,
-                syncedAt: new Date()
-            };
-
-            if (!localSession) {
-                await localDb.sessions.add(sessionData);
-            } else {
-                // Sessions are mostly immutable, but metadata (lyrics, cloudUrl) can change
-                // We merge metadata and update syncedAt
-                const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
-                await localDb.sessions.update(localSession.id!, {
-                    metadata: updatedMetadata,
+                const sessionData = {
+                    title: cloudData.title,
+                    type: cloudData.type,
+                    subtype: cloudData.subtype,
+                    beatId: cloudData.beatId,
+                    duration: cloudData.duration,
+                    date: cloudData.date instanceof Timestamp ? cloudData.date.toDate() : new Date(cloudData.date),
+                    createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
+                    metadata: cloudData.metadata || {},
+                    content: cloudData.content,
+                    cloudId: cloudId,
                     syncedAt: new Date()
-                });
+                };
+
+                if (!localSession) {
+                    await localDb.sessions.add(sessionData);
+                } else {
+                    const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
+                    await localDb.sessions.update(localSession.id!, {
+                        metadata: updatedMetadata,
+                        syncedAt: new Date()
+                    });
+                }
             }
-        }
+        });
     },
 
     async syncWordGroups(uid: string) {
-        // Find unsynced or modified groups
-        // For simplicity in this version, we look for items without syncedAt or where syncedAt < lastUsedAt
-        // Dexie filtering limitations mean we might iterate.
         const groups = await localDb.wordGroups.toArray();
 
         for (const group of groups) {
-            // Check if needs sync
-            if (group.isSystem) continue; // Don't sync system default groups? Or do we? Maybe user modified them?
-            // Let's sync everything for now, but only if dirty.
-            // Simplified dirty check: !syncedAt or lastUsedAt > syncedAt
+            if (group.isSystem) continue;
             const isDirty = !group.syncedAt || group.lastUsedAt > group.syncedAt;
 
             if (isDirty) {
@@ -119,7 +111,7 @@ export const syncService = {
                     updatedAt: Timestamp.fromDate(group.lastUsedAt),
                     userId: uid
                 };
-                delete (dataToSync as any).id; // Don't sync local ID
+                delete (dataToSync as any).id;
                 delete (dataToSync as any).cloudId;
                 delete (dataToSync as any).syncedAt;
 
@@ -133,7 +125,6 @@ export const syncService = {
                         const docRef = await addDoc(colRef, cleanPayload);
                         await localDb.wordGroups.update(group.id!, { cloudId: docRef.id });
                     }
-                    // Mark synced
                     await localDb.wordGroups.update(group.id!, { syncedAt: new Date() });
                 } catch (e) {
                     console.error(`Failed to sync WordGroup ${group.id}:`, e);
@@ -146,16 +137,10 @@ export const syncService = {
         const sessions = await localDb.sessions.toArray();
 
         for (const session of sessions) {
-            // Dirty check: !syncedAt (Sessions are immutable usually, so created once)
-            // But if we edit metadata (lyrics), we might update.
-            // Let's assume if !syncedAt, we sync.
-            // If we add editing later, we need a 'updatedAt' field in Session.
-
             if (!session.syncedAt) {
                 console.log(`Uploading Session: ${session.title}`);
                 let cloudUrl = session.metadata?.cloudUrl;
 
-                // 1. Upload Blob if needed
                 if (session.blob && !cloudUrl) {
                     try {
                         const rawType = session.blob.type || '';
@@ -174,23 +159,15 @@ export const syncService = {
                         });
                         cloudUrl = await getDownloadURL(result.ref);
 
-                        // Update local metadata immediately
                         const newMetadata = { ...session.metadata, cloudUrl };
                         await localDb.sessions.update(session.id!, { metadata: newMetadata });
-                        session.metadata = newMetadata; // Update in memory object for next step
-                        console.log(`✅ Uploaded audio: ${cloudUrl}`);
+                        session.metadata = newMetadata;
                     } catch (e) {
                         console.error(`❌ Failed to upload audio for session ${session.id}:`, e);
-                        // Log more details if possible
-                        if (e instanceof Error) {
-                            console.error("Error Message:", e.message);
-                            if ('code' in e) console.error("Error Code:", (e as any).code);
-                        }
-                        continue; // Skip DB sync if audio upload failed
+                        continue;
                     }
                 }
 
-                // 2. Sync to Firestore
                 const dataToSync = {
                     title: session.title,
                     type: session.type,
@@ -203,9 +180,6 @@ export const syncService = {
                     content: session.content,
                     userId: uid
                 };
-
-                // Remove blob from firestore data
-                // (Already not in dataToSync structure, but ensuring we don't accidentally send it)
 
                 try {
                     const cleanPayload = cleanData(dataToSync);
@@ -226,9 +200,8 @@ export const syncService = {
     }
 };
 
-// Helper: Remove undefined fields which Firestore rejects
 function cleanData(data: any) {
     const clean = { ...data };
-    Object.keys(clean).forEach(key => clean[key] === undefined && delete clean[key]);
+    Object.keys(clean).forEach(key => (clean[key] === undefined || clean[key] === null) && delete clean[key]);
     return clean;
 }
