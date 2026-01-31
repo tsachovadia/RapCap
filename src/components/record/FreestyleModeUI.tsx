@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Link as LinkIcon, Sparkles, Layers, Mic, Hash } from 'lucide-react'
+import { Link as LinkIcon, Disc, Layers } from 'lucide-react'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import WordDropControls, { type WordDropSettings } from '../freestyle/WordDropControls'
 import { commonWordsHe, commonWordsEn } from '../../data/wordBank'
@@ -225,7 +225,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                         <div className="absolute inset-0 overflow-y-auto flex flex-col items-center justify-start pt-14 p-4 min-h-[120px]">
                             {wordDropSettings.enabled && flowState === 'recording' ? (
                                 <div className="flex flex-wrap justify-center gap-6 animate-in fade-in zoom-in duration-300">
-                                    {currentRandomWords.map((word, i) => (
+                                    {currentRandomWords.map((word: string, i: number) => (
                                         <span key={i} className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#1DB954] to-[#1ED760]">
                                             {word}
                                         </span>
