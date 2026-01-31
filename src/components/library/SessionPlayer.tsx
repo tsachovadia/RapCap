@@ -18,6 +18,9 @@ interface SessionPlayerProps {
     onLoadingChange?: (isLoading: boolean) => void
 }
 
+// Module-level blob URL cache to survive component remounts (e.g., StrictMode)
+const blobUrlCache: Record<string, string> = {}
+
 export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingChange }: SessionPlayerProps) {
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const youtubeRef = useRef<any>(null)
@@ -37,7 +40,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
     const dragStartOffset = useRef<number>(0)
     const trackRef = useRef<HTMLDivElement>(null)
     const lastSourceKeyRef = useRef<string>('')
-    const lastBlobUrlRef = useRef<string | null>(null)
     const bufferingTimeoutRef = useRef<any>(null)
 
     // Setup Audio & Decode Peaks
@@ -46,31 +48,34 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         const blob = session.blob
         if (!blob && !cloudUrl) return
 
-        const currentKey = cloudUrl || (blob ? `blob-${(session as any).id}` : '')
+        const sessionId = (session as any).id
+        const currentKey = cloudUrl || (blob ? `blob-${sessionId}` : '')
         const isNewSource = currentKey !== lastSourceKeyRef.current
 
         let activeUrl = ''
         if (isNewSource) {
             console.log("🔊 New audio source key:", currentKey);
-            // Cleanup previous blob URL
-            if (lastBlobUrlRef.current) {
-                URL.revokeObjectURL(lastBlobUrlRef.current);
-                lastBlobUrlRef.current = null;
+
+            // For blobs, use or create cached URL
+            if (blob) {
+                if (!blobUrlCache[sessionId]) {
+                    blobUrlCache[sessionId] = URL.createObjectURL(blob)
+                    console.log("📦 Created and cached blob URL for session:", sessionId);
+                }
+                activeUrl = blobUrlCache[sessionId]
+            } else {
+                activeUrl = cloudUrl || ''
             }
 
-            activeUrl = blob ? URL.createObjectURL(blob) : (cloudUrl || '')
-            if (blob) lastBlobUrlRef.current = activeUrl
             lastSourceKeyRef.current = currentKey
         } else {
-            activeUrl = blob ? (lastBlobUrlRef.current || '') : (cloudUrl || '')
+            // Reuse existing URL
+            activeUrl = blob ? (blobUrlCache[sessionId] || '') : (cloudUrl || '')
         }
 
         // Always ensure the audio element has the correct source
-        // This handles cases where the element might have been recreated 
-        // but the source key remained identical.
         if (audioRef.current && activeUrl) {
             const currentSrc = audioRef.current.src
-            // Standardize comparison (blob URLs are unique, cloud URLs might have different origins)
             if (currentSrc !== activeUrl && !currentSrc.includes(activeUrl)) {
                 console.log("🔊 Syncing audio element source:", activeUrl);
                 audioRef.current.src = activeUrl;
@@ -130,17 +135,13 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         }
 
         return () => {
-            // Source-specific cleanup handled at start of next effect
+            // Cleanup handled by module-level cache
         }
-    }, [session.blob, session.metadata?.cloudUrl, (session as any).id, onLoadingChange])
+    }, [session.blob, session.metadata?.cloudUrl, (session as any).id, onLoadingChange, audioPeaks.length])
 
     // Final Cleanup on Unmount
     useEffect(() => {
         return () => {
-            if (lastBlobUrlRef.current) {
-                console.log("🧹 Final cleanup of blob URL");
-                URL.revokeObjectURL(lastBlobUrlRef.current);
-            }
             if (bufferingTimeoutRef.current) {
                 clearTimeout(bufferingTimeoutRef.current);
             }
@@ -167,13 +168,20 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
             onLoadingChange?.(false);
         };
         const handleWaiting = () => {
-            console.log("⏳ Audio Waiting (Stalled)");
-            // Debounce buffering state to prevent flickering loop
-            if (!bufferingTimeoutRef.current) {
-                bufferingTimeoutRef.current = setTimeout(() => {
-                    setIsBuffering(true);
-                    onLoadingChange?.(true);
-                }, 300);
+            // Only trigger buffering if we don't have enough data
+            // readyState: 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 
+            //             3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
+            if (audio.readyState < 3) {
+                console.log(`⏳ Audio Waiting (readyState: ${audio.readyState})`);
+                // Debounce buffering state to prevent flickering
+                if (!bufferingTimeoutRef.current) {
+                    bufferingTimeoutRef.current = setTimeout(() => {
+                        setIsBuffering(true);
+                        onLoadingChange?.(true);
+                    }, 300);
+                }
+            } else {
+                console.log(`⏭️ Ignoring stall event (readyState: ${audio.readyState} - sufficient data)`);
             }
         };
         const handleError = () => {
