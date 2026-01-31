@@ -26,10 +26,12 @@ export default function RhymeEditorPage() {
     const [isEditingStory, setIsEditingStory] = useState(false)
 
     // View State (Collapsible Sections)
-    const [isWordBankOpen, setIsWordBankOpen] = useState(true)
-    const [isStoryOpen, setIsStoryOpen] = useState(true)
-    const [isLogicOpen, setIsLogicOpen] = useState(true)
-    const [isBarsOpen, setIsBarsOpen] = useState(true)
+    const [isWordBankOpen, setIsWordBankOpen] = useState(false)
+    const [isStoryOpen, setIsStoryOpen] = useState(false)
+    const [isLogicOpen, setIsLogicOpen] = useState(false)
+    const [isBarsOpen, setIsBarsOpen] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [createdAt, setCreatedAt] = useState<Date>(new Date())
 
     // Dicta Modal State
     const [isDictaOpen, setIsDictaOpen] = useState(false)
@@ -48,21 +50,24 @@ export default function RhymeEditorPage() {
                     setStory(group.story || '')
                     setMnemonicLogic(group.mnemonicLogic || '')
                     setBars(group.bars || '')
+                    if (group.createdAt) setCreatedAt(new Date(group.createdAt))
                 }
             })
         }
     }, [id, isNew])
 
     const handleSave = async () => {
+        if (isSaving) return
         if (!name.trim()) return alert('Please give your rhyme group a name!')
 
+        setIsSaving(true)
         const groupData: WordGroup = {
             name,
             items,
             story,
             mnemonicLogic,
             bars,
-            createdAt: new Date(),
+            createdAt: createdAt,
             lastUsedAt: new Date(),
             // Preserve ID if editing
             ...(isNew ? {} : { id: parseInt(id!) })
@@ -80,6 +85,7 @@ export default function RhymeEditorPage() {
         } catch (err) {
             console.error("Failed to save:", err)
             alert("Error saving group.")
+            setIsSaving(false)
         }
     }
 
@@ -200,8 +206,12 @@ export default function RhymeEditorPage() {
                         <Trash2 size={20} />
                     </button>
                 )}
-                <button onClick={handleSave} className="text-green-400 p-2 font-bold ml-2">
-                    <Save size={24} />
+                <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className={`p-2 font-bold ml-2 transition-opacity ${isSaving ? 'text-green-400/50' : 'text-green-400'}`}
+                >
+                    {isSaving ? <Loader2 size={24} className="animate-spin" /> : <Save size={24} />}
                 </button>
             </div>
 

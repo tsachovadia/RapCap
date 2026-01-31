@@ -19,9 +19,17 @@ export async function convertBlobToMp3(blob: Blob): Promise<Blob> {
 
             let audioBuffer: AudioBuffer;
             try {
+                if (arrayBuffer.byteLength === 0) {
+                    throw new Error("Empty ArrayBuffer. The source blob may be corrupted or empty.");
+                }
                 audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
             } catch (decodeError) {
-                console.warn("⚠️ Audio decoding failed for MP3 conversion. Returning original blob.", decodeError);
+                console.warn("⚠️ Audio decoding failed for MP3 conversion. Returning original blob.", {
+                    error: decodeError,
+                    blobType: blob.type,
+                    blobSize: blob.size,
+                    bufferSize: arrayBuffer.byteLength
+                });
                 audioContext.close();
                 return resolve(blob); // Fallback to original blob instead of failing completely
             }

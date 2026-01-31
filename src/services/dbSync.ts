@@ -4,7 +4,6 @@ import {
     collection,
     doc,
     setDoc,
-    addDoc,
     Timestamp,
     onSnapshot,
     deleteDoc
@@ -156,8 +155,10 @@ export const syncService = {
                         await setDoc(docRef, cleanPayload, { merge: true });
                     } else {
                         const colRef = collection(firestore, 'users', uid, 'wordGroups');
-                        const docRef = await addDoc(colRef, cleanPayload);
+                        const docRef = doc(colRef);
+                        // Update local with cloudId FIRST to prevent duplication by snapshot listener
                         await localDb.wordGroups.update(group.id!, { cloudId: docRef.id });
+                        await setDoc(docRef, cleanPayload);
                     }
                     await localDb.wordGroups.update(group.id!, { syncedAt: new Date() });
                 } catch (e) {
@@ -232,8 +233,10 @@ export const syncService = {
                     await setDoc(docRef, cleanPayload, { merge: true });
                 } else {
                     const colRef = collection(firestore, 'users', uid, 'sessions');
-                    const docRef = await addDoc(colRef, cleanPayload);
+                    const docRef = doc(colRef);
+                    // Update local with cloudId FIRST to prevent duplication by snapshot listener
                     await localDb.sessions.update(session.id!, { cloudId: docRef.id });
+                    await setDoc(docRef, cleanPayload);
                 }
                 await localDb.sessions.update(session.id!, { syncedAt: new Date() });
             } catch (e) {

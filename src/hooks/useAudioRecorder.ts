@@ -177,45 +177,59 @@ export function useAudioRecorder() {
 
             const ctx = audioContext.current;
 
-            if (!sourceNode.current) sourceNode.current = ctx.createMediaStreamSource(stream);
-            else {
-                sourceNode.current.disconnect();
-                sourceNode.current = ctx.createMediaStreamSource(stream);
-            }
+            // CRITICAL: Recreate ALL nodes if they don't exist OR belong to a different (closed) context
+            const needsRebuild = !sourceNode.current || sourceNode.current.context !== ctx;
 
-            if (!eqLowNode.current) {
+            if (needsRebuild) {
+                console.log("🏗️ Building/Rebuilding Audio Graph...");
+
+                // Cleanup old nodes if they exist (though context mismatch usually means they're dead)
+                [sourceNode, eqLowNode, eqHighNode, compressorNode, gainNode, analyserNode, destNode].forEach(ref => {
+                    if (ref.current) {
+                        try { ref.current.disconnect(); } catch (e) { }
+                        ref.current = null;
+                    }
+                });
+
+                sourceNode.current = ctx.createMediaStreamSource(stream);
                 eqLowNode.current = ctx.createBiquadFilter();
                 eqLowNode.current.type = 'lowshelf';
                 eqLowNode.current.frequency.value = 200;
-            }
-            if (!eqHighNode.current) {
+
                 eqHighNode.current = ctx.createBiquadFilter();
                 eqHighNode.current.type = 'highshelf';
                 eqHighNode.current.frequency.value = 3000;
-            }
-            if (!compressorNode.current) {
+
                 compressorNode.current = ctx.createDynamicsCompressor();
                 compressorNode.current.knee.value = 40;
                 compressorNode.current.attack.value = 0.003;
                 compressorNode.current.release.value = 0.25;
-            }
-            if (!gainNode.current) gainNode.current = ctx.createGain();
-            if (!analyserNode.current) {
+
+                gainNode.current = ctx.createGain();
+
                 analyserNode.current = ctx.createAnalyser();
                 analyserNode.current.fftSize = 256;
+
+                destNode.current = ctx.createMediaStreamDestination();
+
+                // Build Chain
+                sourceNode.current.connect(eqLowNode.current);
+                eqLowNode.current.connect(eqHighNode.current);
+                eqHighNode.current.connect(compressorNode.current);
+                compressorNode.current.connect(gainNode.current);
+                gainNode.current.connect(analyserNode.current);
+                gainNode.current.connect(destNode.current);
+
+                console.log("✅ Audio Graph Built & Routed");
+            } else {
+                // Just update source if we are reusing nodes but have a new stream
+                sourceNode.current?.disconnect();
+                sourceNode.current = ctx.createMediaStreamSource(stream);
+                sourceNode.current.connect(eqLowNode.current!);
+                console.log("🎤 Stream updated on existing graph");
             }
-            if (!destNode.current) destNode.current = ctx.createMediaStreamDestination();
 
-            sourceNode.current.connect(eqLowNode.current);
-            eqLowNode.current.connect(eqHighNode.current);
-            eqHighNode.current.connect(compressorNode.current);
-            compressorNode.current.connect(gainNode.current);
-
-            gainNode.current.connect(analyserNode.current);
-            gainNode.current.connect(destNode.current);
-
-            processedStreamRef.current = destNode.current.stream;
-            console.log("✅ Audio Graph Built & Routed");
+            processedStreamRef.current = destNode.current?.stream || null;
 
             // Force state update to expose analyser
             setRecorderState(prev => ({ ...prev, analyser: analyserNode.current || undefined }));
@@ -358,8 +372,13 @@ export function useAudioRecorder() {
     useEffect(() => {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
-            if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-            if (audioContext.current) audioContext.current.close();
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+            }
+            if (audioContext.current) {
+                console.log("🚪 Closing AudioContext on cleanup");
+                audioContext.current.close().catch(e => console.warn("Error closing AudioContext", e));
+            }
         };
     }, []);
 
