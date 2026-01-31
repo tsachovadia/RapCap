@@ -20,6 +20,8 @@ interface SessionPlayerProps {
 
 // Module-level blob URL cache to survive component remounts (e.g., StrictMode)
 const blobUrlCache: Record<string, string> = {}
+// Module-level decode context to avoid exceeding AudioContext limit
+let decodeCtx: AudioContext | null = null;
 
 export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingChange }: SessionPlayerProps) {
     const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -102,8 +104,15 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                         return
                     }
 
-                    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
-                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0))
+                    if (arrayBuffer.byteLength === 0) {
+                        throw new Error("Empty ArrayBuffer. Data might be corrupted.");
+                    }
+
+                    if (!decodeCtx || decodeCtx.state === 'closed') {
+                        decodeCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+                    }
+
+                    const audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer.slice(0))
 
                     const rawData = audioBuffer.getChannelData(0)
                     const samples = 200
@@ -126,7 +135,13 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                     const normalized = peaks.map(p => p / max)
                     setAudioPeaks(normalized)
                 } catch (e) {
-                    console.error("Audio Decode Failed", e)
+                    console.warn("⚠️ Audio Waveform Decode Failed:", {
+                        error: e,
+                        blobSize: blob?.size,
+                        cloudUrl: !!cloudUrl
+                    })
+                    // Fallback to flat line instead of breaking the player
+                    setAudioPeaks(new Array(200).fill(0.1))
                 } finally {
                     setIsProcessingAudio(false)
                 }
@@ -168,12 +183,8 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
             onLoadingChange?.(false);
         };
         const handleWaiting = () => {
-            // Only trigger buffering if we don't have enough data
-            // readyState: 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 
-            //             3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
             if (audio.readyState < 3) {
                 console.log(`⏳ Audio Waiting (readyState: ${audio.readyState})`);
-                // Debounce buffering state to prevent flickering
                 if (!bufferingTimeoutRef.current) {
                     bufferingTimeoutRef.current = setTimeout(() => {
                         setIsBuffering(true);
@@ -234,32 +245,24 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         const loop = () => {
             animationFrame = requestAnimationFrame(loop)
 
-            // If playing, sync Audio to YouTube (Master)
             if (isPlaying && youtubeRef.current && typeof youtubeRef.current.getCurrentTime === 'function') {
                 const ytTime = youtubeRef.current.getCurrentTime()
                 setCurrentTime(ytTime)
 
-                // Sync Logic
-                // Audio Time = YT Time - (Offset / 1000)
                 const offsetSeconds = syncOffset / 1000
                 const targetAudioTime = ytTime - offsetSeconds
                 const audio = audioRef.current
 
                 if (audio) {
                     if (targetAudioTime < 0) {
-                        // Wait for cue
                         if (!audio.paused) {
                             audio.pause()
                             audio.currentTime = 0
                         }
                     } else if (targetAudioTime >= audio.duration) {
-                        // End of audio
                         if (!audio.paused) audio.pause()
                     } else {
-                        // Should be playing
-                        // Check if audio is ready
                         if (audio.readyState < 2) {
-                            // Still loading data...
                             return;
                         }
 
@@ -269,15 +272,13 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                                 console.warn("Audio play blocked/failed:", err.message);
                             });
                         } else {
-                            // Drift Correction
-                            if (Math.abs(audio.currentTime - targetAudioTime) > 0.15) { // Increased threshold slightly
+                            if (Math.abs(audio.currentTime - targetAudioTime) > 0.15) {
                                 audio.currentTime = targetAudioTime
                             }
                         }
                     }
                 }
             } else if (isPlaying && !session.beatId && audioRef.current) {
-                // Freestyle with NO Beat (Master = Audio)
                 setCurrentTime(audioRef.current.currentTime)
             }
         }
@@ -305,7 +306,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX
         const deltaPixels = clientX - dragStartX.current
 
-        // Convert Pixels to Time
         const containerWidth = trackRef.current.offsetWidth
         const msPerPixel = (session.duration * 1000) / containerWidth
         const deltaMs = deltaPixels * msPerPixel
@@ -333,7 +333,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         }
     }, [isDraggingSync, session.duration])
 
-    // Manual Seek
     const handleTimelineClick = (e: React.MouseEvent) => {
         if (isDraggingSync) return
 
@@ -382,9 +381,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         URL.revokeObjectURL(url)
     }
 
-    // Fix for 0:00 Moments: Ensure generic moments have timestamps
-    // Sometimes moments might be stored as just numbers (timestamps) or objects.
-    // We normalize to the interface expected by MomentsList
     const rawMoments = session.metadata?.moments || [];
     const moments = rawMoments.map((m: any, idx: number) => {
         if (typeof m === 'object' && m !== null) {
@@ -405,7 +401,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
         <div className="flex flex-col w-full gap-4 bg-[#181818] p-4 rounded-xl border border-[#282828] select-none">
             <audio ref={audioRef} onEnded={onEnded} crossOrigin="anonymous" />
 
-            {/* Header / Stats */}
             <div className="flex items-center justify-between text-xs text-subdued font-bold tracking-wider mb-2">
                 <div className="flex items-center gap-2">
                     <span>{formatTime(currentTime)}</span>
@@ -424,7 +419,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                 <span>{formatTime(session.duration)}</span>
             </div>
 
-            {/* Volume Controls */}
             <div className="grid grid-cols-2 gap-4 bg-[#121212] p-2 rounded mb-2">
                 <div className="flex flex-col gap-1">
                     <label className="text-[10px] uppercase text-subdued font-bold">Vocals</label>
@@ -451,23 +445,19 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                 </div>
             </div>
 
-            {/* TIMELINE STUDIO CONTAINER */}
             <div
                 ref={trackRef}
                 className="relative w-full h-40 bg-[#121212] rounded-lg overflow-hidden border border-[#282828] cursor-crosshair"
                 onClick={handleTimelineClick}
             >
-                {/* 1. BEAT TRACK (Background Ref) */}
                 <div className="absolute top-0 w-full h-1/2 border-b border-[#282828] bg-black/40">
                     <span className="absolute top-1 left-2 text-[10px] text-subdued pointer-events-none">BEAT</span>
-                    {/* Beat Progress Overlay */}
                     <div
                         className="absolute inset-y-0 left-0 bg-white/5 pointer-events-none"
                         style={{ width: `${(currentTime / session.duration) * 100}%` }}
                     />
                 </div>
 
-                {/* 2. VOCAL TRACK (Draggable) */}
                 <div
                     className="absolute bottom-0 h-1/2 flex items-center transition-transform hover:bg-[#282828]/50"
                     style={{
@@ -476,14 +466,10 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                     }}
                     onMouseDown={(e) => { e.stopPropagation(); handleDragStart(e) }}
                     onTouchStart={(e) => { e.stopPropagation(); handleDragStart(e) }}
-                    onClick={(e) => e.stopPropagation()} // Prevent seek when clicking track handle
+                    onClick={(e) => e.stopPropagation()}
                 >
                     <span className="absolute top-1 left-2 text-[10px] text-[#1DB954] pointer-events-none z-10">VOCALS</span>
-
-                    {/* Drag Handle Indicator */}
                     <div className="absolute left-0 inset-y-0 w-1 bg-[#1DB954] z-20 shadow-[0_0_10px_#1DB954]" />
-
-                    {/* Waveform */}
                     <div className="w-full h-full opacity-80 pl-1">
                         {isProcessingAudio ? (
                             <div className="w-full h-full flex items-center justify-center text-xs text-subdued">Analyzing...</div>
@@ -493,13 +479,11 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                     </div>
                 </div>
 
-                {/* 3. PLAYHEAD */}
                 <div
                     className="absolute top-0 bottom-0 w-0.5 bg-white z-30 pointer-events-none shadow-[0_0_10px_rgba(255,255,255,0.5)]"
                     style={{ left: `${(currentTime / session.duration) * 100}%` }}
                 />
 
-                {/* 4. MARKERS */}
                 {moments.map((m: any, i: number) => (
                     <div
                         key={i}
@@ -511,7 +495,6 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                 ))}
             </div>
 
-            {/* Action Bar */}
             <div className="flex items-center justify-between mt-2">
                 <div className="flex gap-2">
                     <button onClick={() => setSyncOffset(s => s - 50)} className="btn-secondary text-xs py-1 px-3 h-8">
@@ -531,11 +514,9 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                         <Download size={14} />
                         MP3
                     </button>
-                    {/* Share Button Removed */}
                 </div>
             </div>
 
-            {/* Hidden YT */}
             <div className="hidden">
                 {session.beatId && (
                     <YouTube
@@ -546,9 +527,7 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                 )}
             </div>
 
-            {/* Content Area: Lyrics & Moments */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-right" dir="rtl">
-                {/* 1. Lyrics Column */}
                 <div className="h-[300px] flex flex-col">
                     <div className="flex items-center justify-between mb-2 pl-2">
                         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -574,7 +553,7 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                     <LyricsDisplay
                         lyrics={session.metadata?.lyrics}
                         segments={session.metadata?.lyricsSegments}
-                        onSeek={(t) => {
+                        onSeek={(t: number) => {
                             if (youtubeRef.current) youtubeRef.current.seekTo(t)
                             if (audioRef.current) audioRef.current.currentTime = Math.max(0, t - syncOffset / 1000)
                         }}
@@ -582,9 +561,8 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                     />
                 </div>
 
-                {/* 2. Moments Column */}
                 <div>
-                    <MomentsList moments={moments} onSeek={(t) => youtubeRef.current?.seekTo(t)} />
+                    <MomentsList moments={moments} onSeek={(t: number) => youtubeRef.current?.seekTo(t)} />
                 </div>
             </div>
         </div>

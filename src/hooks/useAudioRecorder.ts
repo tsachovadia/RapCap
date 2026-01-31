@@ -220,7 +220,13 @@ export function useAudioRecorder() {
                 gainNode.current.connect(analyserNode.current);
                 gainNode.current.connect(destNode.current);
 
-                console.log("✅ Audio Graph Built & Routed");
+                // Hidden destination node to keep context "alive" and clock ticking in all browsers
+                const silentGain = ctx.createGain();
+                silentGain.gain.value = 0;
+                gainNode.current.connect(silentGain);
+                silentGain.connect(ctx.destination);
+
+                console.log("✅ Audio Graph Built, Routed, and Connected to Destination (Silent)");
             } else {
                 // Just update source if we are reusing nodes but have a new stream
                 sourceNode.current?.disconnect();
@@ -292,7 +298,12 @@ export function useAudioRecorder() {
             audioChunks.current = [];
 
             recorder.ondataavailable = (event) => {
-                if (event.data.size > 0) audioChunks.current.push(event.data);
+                if (event.data.size > 0) {
+                    if (audioChunks.current.length % 50 === 0) {
+                        console.log(`📦 Audio chunk received: ${event.data.size} bytes (Total chunks: ${audioChunks.current.length + 1})`);
+                    }
+                    audioChunks.current.push(event.data);
+                }
             };
 
             recorder.start(100);
