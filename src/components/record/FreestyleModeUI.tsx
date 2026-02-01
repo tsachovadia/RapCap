@@ -3,24 +3,10 @@ import { Link as LinkIcon, Layers } from 'lucide-react'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import WordDropControls, { type WordDropSettings } from '../freestyle/WordDropControls'
 import { commonWordsHe, commonWordsEn } from '../../data/wordBank'
+import { PRESET_BEATS, DEFAULT_BEAT_ID } from '../../data/beats'
 import { db } from '../../db/db'
 import type { FlowState } from '../../pages/RecordPage'
 
-const STATIC_BEAT_ID = 'HAFijG6kyRk'
-const PRESET_BEATS = [
-    { id: 'vSsbbJlZJmc', name: 'ON MY MIND', title: '[FREE] Melodic Emotional Rap Beat “ON MY MIND” | Sad Piano Instrumental' },
-    { id: 'vG2S2rL3wNo', name: 'Prestige', title: '[FREE] "Prestige" (Dark Type Beat) | Hard Boom Bap Rap Beat 2025' },
-    { id: 'liJVSwOiiwg', name: 'Unchanged', title: '(FREE) Boom Bap Freestyle Joey Bada$$ x 90s Type Beat [2024] - Unchanged' },
-    { id: 'P2GOkrU1vnQ', name: 'The Supply', title: '(free) 90s Old School Boom Bap type beat x Freestyle Hip hop | "The Supply"' },
-    { id: 'qU_fJ6O1j7M', name: 'Behind Barz', title: 'Freestyle Rap Beat | Hard Boom Bap Type Beat - "Behind Barz"' },
-    { id: 'L9Jz6yN6jE0', name: 'Streets', title: '(FREE) Old School Freestyle Boom Bap Type Beat - Streets' },
-    { id: '8_v1-T-8y4Y', name: 'Dolla', title: '(FREE) Freestyle Rap Beat - Dolla | Old School Boom Bap' },
-    { id: 'x_7O9zV6G3U', name: 'BLAME ME', title: '[FREE] "BLAME ME" - Rap Freestyle Type Beat 2023' },
-    { id: 'p0-T-v_wE-Y', name: 'Banknotes', title: '(FREE) Boom Bap Freestyle x Old School Rap [2024] - Banknotes' },
-    { id: 'Bl_z_v5_A_E', name: 'My Life', title: '"My Life" - Freestyle Rap Beat | Free Hip Hop Instrumental 2023' },
-    { id: 'j_p_b_8_8_8', name: 'Bushido', title: '"Bushido" - Rap Freestyle Beat | Japanese Underground Boom Bap' },
-    { id: '0mX7P-v14I4', name: 'Sing About Me', title: 'Kendrick Lamar - Sing About Me (Instrumental)' }
-]
 
 interface Props {
     flowState: FlowState
@@ -31,7 +17,7 @@ interface Props {
 }
 
 export default function FreestyleModeUI({ flowState, language, onPreRollComplete, segments, interimTranscript }: Props) {
-    const [videoId, setVideoId] = useState(STATIC_BEAT_ID)
+    const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)
     const [beatVolume, setBeatVolume] = useState(50)
     const [youtubePlayer, setYoutubePlayer] = useState<any>(null)
     const [showUrlInput, setShowUrlInput] = useState(false)
