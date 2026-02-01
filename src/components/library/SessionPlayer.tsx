@@ -7,6 +7,8 @@ import WaveformTrack from './WaveformTrack'
 import LyricsPanel from './LyricsPanel'
 import MomentsList from './MomentsList'
 import { ysFixWebmDuration } from '../../services/webmFix'
+import { getBeatName } from '../../data/beats'
+import { Music } from 'lucide-react'
 
 interface SessionPlayerProps {
     session: {
@@ -318,6 +320,16 @@ export default function SessionPlayer({
                 onClose={onClose}
                 onSeek={handleSeek}
             />
+
+            {/* Beat Indicator */}
+            {session.beatId && (
+                <div className="flex items-center gap-2 bg-[#121212] px-3 py-2 rounded-lg">
+                    <Music size={16} className="text-purple-500" />
+                    <span className="text-sm text-white/80">
+                        🎵 {getBeatName(session.beatId)}
+                    </span>
+                </div>
+            )}
 
             {/* Volume Controls */}
             <VolumeControls
