@@ -14,6 +14,7 @@ import RecordingHeader from '../components/record/RecordingHeader'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import { useAuth } from '../contexts/AuthContext'
 import { Music, Mic, GraduationCap } from 'lucide-react'
+import { DEFAULT_BEAT_ID } from '../data/beats'
 
 export type RecordingMode = 'freestyle' | 'thoughts' | 'training'
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
@@ -55,6 +56,7 @@ export default function RecordPage() {
     const [pendingSessionBlob, setPendingSessionBlob] = useState<Blob | null>(null)
     const [showMicSetup, setShowMicSetup] = useState(false)
     const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{ text: string, segments: any[], wordSegments: any[] } | null>(null)
+    const [currentBeatId, setCurrentBeatId] = useState(DEFAULT_BEAT_ID)
 
     // Precise timing refs
     const recordingStartTimeRef = useRef<number>(0)
@@ -271,6 +273,7 @@ export default function RecordPage() {
                         flowState={flowState}
                         language={language}
                         onPreRollComplete={onPreRollComplete}
+                        onBeatChange={setCurrentBeatId}
                         segments={segments}
                         interimTranscript={interimTranscript}
                     />
@@ -324,7 +327,7 @@ export default function RecordPage() {
                 data={{
                     transcript: enhancedTranscriptData ? enhancedTranscriptData.text : transcript,
                     duration,
-                    beatId: '', // Added dummy beatId to satisfy modal, might need more refinement later
+                    beatId: currentBeatId,
                     date: new Date(),
                     segments: enhancedTranscriptData ? enhancedTranscriptData.segments : segments
                 }}
