@@ -92,7 +92,7 @@ export function useAudioRecorder() {
     const destNode = useRef<MediaStreamAudioDestinationNode | null>(null);
 
     const streamRef = useRef<MediaStream | null>(null);
-    const processedStreamRef = useRef<MediaStream | null>(null);
+    // NOTE: We no longer cache processedStreamRef - fresh stream is obtained from destNode at record time
 
     const getDevices = useCallback(async () => {
         try {
