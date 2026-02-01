@@ -177,6 +177,7 @@ export default function RecordPage() {
                 createdAt: new Date(),
                 date: new Date(),
                 type: mode,
+                beatId: currentBeatId,
                 metadata: {
                     moments,
                     lyrics: finalText,
