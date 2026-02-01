@@ -1,300 +1,246 @@
-import { useState, useEffect, useRef } from 'react'
+/**
+ * useTranscription Hook - Live speech-to-text transcription
+ * Uses Web Speech API for real-time transcription during recording
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import type { WordSegment, TranscriptSegment } from '../types/transcription'
+import {
+    createRecognition,
+    isSpeechRecognitionSupported,
+    getRestartDelay,
+    MAX_CONSECUTIVE_ERRORS
+} from '../services/speechRecognition'
+import {
+    interpolateWordTimestamps,
+    chunkIntoSegments,
+    estimatePhraseStart
+} from '../services/transcriptProcessor'
+
+/** Silence threshold in ms - commit interim if no change */
+const SILENCE_THRESHOLD_MS = 2500
 
 export function useTranscription(isRecording: boolean, language: 'he' | 'en' = 'he') {
+    // State
     const [transcript, setTranscript] = useState('')
     const [interimTranscript, setInterimTranscript] = useState('')
-    const [wordSegments, setWordSegments] = useState<Array<{ word: string, timestamp: number }>>([])
-    const [segments, setSegments] = useState<Array<{ text: string, timestamp: number }>>([])
+    const [wordSegments, setWordSegments] = useState<WordSegment[]>([])
+    const [segments, setSegments] = useState<TranscriptSegment[]>([])
     const [isListening, setIsListening] = useState(false)
 
+    // Refs for callbacks (avoid stale closures)
     const recognitionRef = useRef<any>(null)
     const startTimeRef = useRef<number>(0)
-
-    // Logic for word-level timestamps (Interpolation)
-    const phraseStartTimeRef = useRef<number>(0)
-    const lastSegmentEndRef = useRef<number>(0)
-    const isPhraseActiveRef = useRef<boolean>(false)
-
-    // Track restart timeout to prevent loops
-    const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const consecutiveErrorsRef = useRef<number>(0)
-    const processedFinalIndexes = useRef<Set<number>>(new Set())
-
-    // Keep ref synced for callbacks
+    const phraseStartRef = useRef<number>(0)
     const isRecordingRef = useRef(isRecording)
-    const interimTranscriptRef = useRef('') // Keep tracked for final flush
-    const isRestartingRef = useRef(false) // Flag to prevent double-starts during manual restart
+    const interimRef = useRef('')
+    const errorCountRef = useRef(0)
+    const processedIndexes = useRef<Set<number>>(new Set())
+    const isRestartingRef = useRef(false)
+    const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    // Logic to commit interim transcript as a finalized segment
-    const commitInterim = (reason: string = 'manual') => {
-        const text = interimTranscriptRef.current.trim()
+    // Sync ref with prop
+    useEffect(() => {
+        isRecordingRef.current = isRecording
+    }, [isRecording])
+
+    // Commit interim transcript as final segment
+    const commitInterim = useCallback((reason: string = 'manual') => {
+        const text = interimRef.current.trim()
         if (!text) return
 
-        console.log(`📤 Committing interim segment (${reason}):`, text)
+        console.log(`📤 Committing interim (${reason}):`, text)
         const now = Date.now()
+        const phraseStart = phraseStartRef.current || estimatePhraseStart(text, now)
 
-        // Use phraseStartTime if available, otherwise estimate based on duration
-        const phraseStart = phraseStartTimeRef.current || (now - Math.min(text.length * 80, 5000))
-        const duration = now - phraseStart
-        const words = text.split(/\s+/)
+        // Create word segments
+        const newWordSegments = interpolateWordTimestamps(
+            text,
+            phraseStart,
+            now,
+            startTimeRef.current
+        )
+        setWordSegments(prev => [...prev, ...newWordSegments])
 
-        if (words.length > 0) {
-            const step = duration / words.length
-            const newWordSegments = words.map((w: string, idx: number) => ({
-                word: w,
-                timestamp: ((phraseStart + (idx * step)) - startTimeRef.current) / 1000
-            }))
+        // Create segment
+        const timestamp = (phraseStart - startTimeRef.current) / 1000
+        setSegments(prev => [...prev, { text, timestamp }])
+        setTranscript(prev => prev + text + ' ')
 
-            setWordSegments(prev => [...prev, ...newWordSegments])
-
-            // Add the final segment
-            const ts = (phraseStart - startTimeRef.current) / 1000
-            setSegments(prev => [...prev, { text, timestamp: ts }])
-            console.log(`📦 Segment added via commitInterim: "${text}" at ${ts.toFixed(2)}s`)
-        }
-
-        setTranscript(prev => prev + text + " ")
+        // Reset interim state
         setInterimTranscript('')
-        interimTranscriptRef.current = ''
-        phraseStartTimeRef.current = 0
-        isPhraseActiveRef.current = false
+        interimRef.current = ''
+        phraseStartRef.current = 0
 
-        // CRITICAL: Restart recognition to clear internal buffer and prevent duplicate "isFinal"
-        if (reason !== 'stop' && isListening && recognitionRef.current) {
-            console.log("🔄 Restarting recognition to clear buffer after manual commit...")
+        // Restart recognition to clear buffer (prevent duplicate finals)
+        if (reason !== 'stop' && recognitionRef.current) {
             isRestartingRef.current = true
             try {
                 recognitionRef.current.stop()
-                // restart will happen in onend
             } catch (e) {
-                console.warn("Failed to stop for restart:", e)
+                console.warn('Failed to stop for restart:', e)
             }
         }
-    }
+    }, [])
 
-    // Silence detection: if interim transcript doesn't change for a while, commit it
+    // Silence detection - commit if no change for threshold
     useEffect(() => {
         if (!isListening || !interimTranscript) return
 
         const timeout = setTimeout(() => {
-            console.log("🤫 Silence detected in interim...")
+            console.log('🤫 Silence detected')
             commitInterim('silence')
-        }, 2500) // Commit if silent for 2.5s
+        }, SILENCE_THRESHOLD_MS)
 
         return () => clearTimeout(timeout)
-    }, [interimTranscript, isListening])
+    }, [interimTranscript, isListening, commitInterim])
 
+    // Commit on stop
     useEffect(() => {
-        isRecordingRef.current = isRecording
-        if (!isRecording && interimTranscriptRef.current) {
+        if (!isRecording && interimRef.current) {
             commitInterim('stop')
         }
-    }, [isRecording])
+    }, [isRecording, commitInterim])
 
+    // Main recognition effect
     useEffect(() => {
-        // Initialize SpeechRecognition
-        if (!('webkitSpeechRecognition' in window)) {
-            console.warn("Speech Recognition not supported")
+        if (!isSpeechRecognitionSupported()) {
+            console.warn('Speech Recognition not supported')
             return
         }
 
-        let isEffectActive = true
-        // cleanup previous instance if any
+        let isActive = true
+
+        // Cleanup previous
         if (recognitionRef.current) {
-            try { recognitionRef.current.abort() } catch (e) { }
+            try { recognitionRef.current.abort() } catch (e) { /* ignore */ }
         }
 
-        const recognition = new (window as any).webkitSpeechRecognition()
-        recognition.continuous = true
-        recognition.interimResults = true
-        recognition.lang = language === 'he' ? 'he-IL' : 'en-US'
+        const recognition = createRecognition(
+            { language },
+            {
+                onStart: () => {
+                    if (!isActive) return
+                    setIsListening(true)
+                    errorCountRef.current = 0
+                    isRestartingRef.current = false
+                },
 
-        recognition.onstart = () => {
-            if (!isEffectActive) return
-            console.log(`🎤 Speech Recognition Started (${language})`)
-            setIsListening(true)
-            consecutiveErrorsRef.current = 0
-            isRestartingRef.current = false
-        }
-
-        recognition.onresult = (event: any) => {
-            if (!isEffectActive) return
-            let finalTranscript = ''
-            let localInterim = ''
-
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                // Check if this index was already processed to avoid duplicates
-                if (processedFinalIndexes.current.has(i)) continue;
-
-                if (event.results[i].isFinal) {
-                    const text = event.results[i][0].transcript.trim()
-                    processedFinalIndexes.current.add(i)
-
-                    if (!text) continue
-
-                    // If we just committed manually, this "Final" might be the same text.
-                    // However, restarting the engine usually prevents this event from firing or makes it irrelevant.
-                    // We can add a fuzzy check if needed, but the restart strategy is stronger.
-
-                    finalTranscript += text + ' '
-                    console.log("📝 Final Result (Engine):", text)
-
-                    const now = Date.now()
-                    const estimatedDuration = Math.min(text.length * 80, 5000)
-                    const phraseStart = phraseStartTimeRef.current || (now - estimatedDuration)
-                    const duration = now - phraseStart
-                    lastSegmentEndRef.current = now
-                    const words = text.split(/\s+/)
-
-                    if (words.length > 0) {
-                        const step = duration / words.length
-                        const newWordSegments = words.map((w: string, idx: number) => ({
-                            word: w,
-                            timestamp: ((phraseStart + (idx * step)) - startTimeRef.current) / 1000
-                        }))
-                        setWordSegments(prev => [...prev, ...newWordSegments])
-
-                        // Optimization: Split segments by punctuation OR fixed chunk size
-                        let currentChunk: string[] = []
-                        let currentTimestamp = newWordSegments[0].timestamp
-
-                        words.forEach((word: string, idx: number) => {
-                            currentChunk.push(word)
-                            const hasPunctuation = /[.,!?;:]/.test(word)
-                            const isChunkFull = currentChunk.length >= 4
-
-                            if (hasPunctuation || isChunkFull || idx === words.length - 1) {
-                                const chunkText = currentChunk.join(' ')
-                                console.log(`📦 Adding Segment: "${chunkText}" at ${currentTimestamp.toFixed(2)}s`)
-                                setSegments(prev => [...prev, {
-                                    text: chunkText,
-                                    timestamp: currentTimestamp
-                                }])
-                                currentChunk = []
-                                if (idx < words.length - 1) {
-                                    currentTimestamp = newWordSegments[idx + 1].timestamp
-                                }
-                            }
-                        })
+                onInterim: (text) => {
+                    if (!isActive) return
+                    if (!phraseStartRef.current) {
+                        phraseStartRef.current = Date.now()
                     }
-                    isPhraseActiveRef.current = false
-                    phraseStartTimeRef.current = 0
+                    if (text !== interimRef.current) {
+                        interimRef.current = text
+                        setInterimTranscript(text)
+                    }
+                },
 
-                    // Clear interim since it's now final
+                onFinal: (text, resultIndex) => {
+                    if (!isActive || !text) return
+                    if (processedIndexes.current.has(resultIndex)) return
+                    processedIndexes.current.add(resultIndex)
+
+                    console.log('📝 Final:', text)
+                    const now = Date.now()
+                    const phraseStart = phraseStartRef.current || estimatePhraseStart(text, now)
+
+                    // Word segments
+                    const newWordSegments = interpolateWordTimestamps(
+                        text,
+                        phraseStart,
+                        now,
+                        startTimeRef.current
+                    )
+                    setWordSegments(prev => [...prev, ...newWordSegments])
+
+                    // Chunk into segments
+                    const words = text.split(/\s+/)
+                    const newSegments = chunkIntoSegments(words, newWordSegments)
+                    setSegments(prev => [...prev, ...newSegments])
+                    setTranscript(prev => prev + text + ' ')
+
+                    // Clear interim
                     setInterimTranscript('')
-                    interimTranscriptRef.current = ''
+                    interimRef.current = ''
+                    phraseStartRef.current = 0
+                },
 
-                } else {
-                    localInterim += event.results[i][0].transcript
+                onEnd: () => {
+                    if (!isActive) return
+                    processedIndexes.current.clear()
+
+                    if (errorCountRef.current > MAX_CONSECUTIVE_ERRORS) {
+                        console.warn('Too many errors, stopping auto-restart')
+                        setIsListening(false)
+                        return
+                    }
+
+                    if (isRecordingRef.current) {
+                        const delay = getRestartDelay(errorCountRef.current, isRestartingRef.current)
+                        console.log(`🔄 Restarting in ${Math.round(delay)}ms...`)
+
+                        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
+                        restartTimeoutRef.current = setTimeout(() => {
+                            if (!isActive || !isRecordingRef.current) return
+                            try {
+                                recognition?.start()
+                            } catch (e) { /* already started */ }
+                        }, delay)
+                    } else {
+                        setIsListening(false)
+                    }
+                    isRestartingRef.current = false
+                },
+
+                onError: (error) => {
+                    if (!isActive) return
+                    if (error === 'not-allowed' || error === 'service-not-allowed') {
+                        isRecordingRef.current = false
+                    }
+                    errorCountRef.current++
                 }
             }
-
-            if (localInterim.length > 0 && !isPhraseActiveRef.current) {
-                isPhraseActiveRef.current = true
-                phraseStartTimeRef.current = Date.now()
-            }
-
-            if (localInterim) console.log("🗣️ Interim:", localInterim)
-
-            // Only update if changed
-            if (localInterim !== interimTranscriptRef.current) {
-                interimTranscriptRef.current = localInterim
-                setInterimTranscript(localInterim)
-            }
-
-            if (finalTranscript) {
-                setTranscript(prev => prev + finalTranscript)
-            }
-        }
-
-        recognition.onerror = (event: any) => {
-            if (!isEffectActive) return
-            // Ignore 'no-speech' errors which are common
-            if (event.error !== 'no-speech') {
-                console.error("Transcription error:", event.error)
-            }
-
-            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                isRecordingRef.current = false
-            }
-            consecutiveErrorsRef.current++
-        }
-
-        recognition.onend = () => {
-            if (!isEffectActive) return
-            console.log("🛑 Speech Recognition Ended")
-
-            processedFinalIndexes.current.clear()
-
-            // If it ended while we have interim, commit it before restarting
-            if (interimTranscriptRef.current) {
-                console.log("⚠️ End detected with pending interim. Committing.")
-                // commitInterim('end') // We'll rely on the manual flush from caller if needed, or silence detection
-                // Actually, if it crashes or stops, we should probably save what we have.
-                // But commitInterim calls stop() which called onEnd... infinite loop risk if not careful.
-                // We'll trust silence detection or manual stop for now.
-            }
-
-            if (consecutiveErrorsRef.current > 10) {
-                console.warn("Too many consecutive transcription errors, stopping auto-restart")
-                setIsListening(false)
-                return
-            }
-
-            if (isRecordingRef.current) {
-                // If this was a planned restart (isRestartingRef) or just a random drop
-                const delay = isRestartingRef.current ? 50 : Math.min(200 * Math.pow(1.5, consecutiveErrorsRef.current), 5000)
-
-                console.log(`🔄 Restarting in ${Math.round(delay)}ms...`)
-                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
-
-                restartTimeoutRef.current = setTimeout(() => {
-                    if (!isEffectActive || !isRecordingRef.current) return
-                    try {
-                        recognition.start()
-                    } catch (e) {
-                        // already started or ignored
-                    }
-                }, delay)
-            } else {
-                setIsListening(false)
-            }
-
-            isRestartingRef.current = false
-        }
+        )
 
         recognitionRef.current = recognition
 
-        // Start if initially recording
-        if (isRecording) {
+        // Start if recording
+        if (isRecording && recognition) {
             startTimeRef.current = Date.now()
             try {
                 recognition.start()
             } catch (e) {
-                console.error("Failed to start initial transcription:", e)
+                console.error('Failed to start transcription:', e)
             }
         }
 
         return () => {
-            isEffectActive = false
+            isActive = false
             if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
-
             try {
-                recognition.stop() // Better than abort() - allows final results
+                recognition?.stop()
             } catch (e) { /* ignore */ }
             setIsListening(false)
         }
     }, [language, isRecording])
 
-
-    const resetTranscript = () => {
+    const resetTranscript = useCallback(() => {
         setTranscript('')
         setInterimTranscript('')
         setSegments([])
         setWordSegments([])
-        processedFinalIndexes.current.clear()
-        consecutiveErrorsRef.current = 0
-    }
+        processedIndexes.current.clear()
+        errorCountRef.current = 0
+    }, [])
 
-    return { transcript, interimTranscript, segments, wordSegments, isListening, resetTranscript }
+    return {
+        transcript,
+        interimTranscript,
+        segments,
+        wordSegments,
+        isListening,
+        resetTranscript
+    }
 }
