@@ -307,8 +307,18 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
             }
         }
 
-        if (isPlaying) loop()
-        else {
+        if (isPlaying) {
+            // Start playback when isPlaying becomes true
+            if (session.beatId && youtubeRef.current) {
+                youtubeRef.current.playVideo()
+            } else if (!session.beatId && audioRef.current) {
+                // For sessions without a beat, play audio directly
+                audioRef.current.play().catch(err => {
+                    console.warn("Audio play blocked/failed:", err.message)
+                })
+            }
+            loop()
+        } else {
             audioRef.current?.pause()
             youtubeRef.current?.pauseVideo()
         }
