@@ -22,12 +22,11 @@ import RecordingControls from '../components/freestyle/RecordingControls'
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
 
-// Services
+// Services & Data
 import { db } from '../db/db'
 import { convertBlobToMp3 } from '../services/audioEncoder'
 import { syncService } from '../services/dbSync'
-
-const DEFAULT_BEAT_ID = 'HAFijG6kyRk'
+import { DEFAULT_BEAT_ID } from '../data/beats'
 
 export default function FreestylePage() {
     const navigate = useNavigate()

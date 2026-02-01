@@ -1,6 +1,7 @@
-import { Play, Pause, Loader2, FileText, Cloud } from 'lucide-react'
+import { Play, Pause, Loader2, FileText, Cloud, Music } from 'lucide-react'
 import SessionActionsMenu from './SessionActionsMenu'
 import type { Session } from '../../db/db'
+import { getBeatName } from '../../data/beats'
 
 interface SessionCardProps {
     session: Session
@@ -32,6 +33,7 @@ export default function SessionCard({
     const hasLyrics = !!session.metadata?.lyrics
     const isCloudSynced = !!session.metadata?.cloudUrl
     const hasBlob = !!session.blob
+    const beatName = getBeatName(session.beatId)
 
     return (
         <div
@@ -94,6 +96,15 @@ export default function SessionCard({
                             }`}>
                             {session.beatId ? 'Freestyle' : 'Drill'}
                         </span>
+                        {beatName && (
+                            <>
+                                <span>•</span>
+                                <span className="flex items-center gap-1 text-[#1DB954]/80">
+                                    <Music size={10} />
+                                    {beatName}
+                                </span>
+                            </>
+                        )}
                         <span>•</span>
                         <span>{formatDuration(session.duration)}</span>
                         <span>•</span>
