@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Download, Copy, Check } from 'lucide-react'
 import MomentsList from './MomentsList'
 import WaveformTrack from './WaveformTrack'
 import LyricsDisplay from './LyricsDisplay'
+import { ysFixWebmDuration } from '../../services/webmFix'
 
 interface SessionPlayerProps {
     session: {
@@ -95,11 +96,14 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                 setIsProcessingAudio(true)
                 try {
                     let arrayBuffer: ArrayBuffer
+                    let sourceBlob: Blob | null = blob || null
+
                     if (blob) {
                         arrayBuffer = await blob.arrayBuffer()
                     } else if (cloudUrl) {
                         const response = await fetch(cloudUrl)
-                        arrayBuffer = await response.arrayBuffer()
+                        sourceBlob = await response.blob()
+                        arrayBuffer = await sourceBlob.arrayBuffer()
                     } else {
                         return
                     }
@@ -112,7 +116,27 @@ export default function SessionPlayer({ session, isPlaying, onEnded, onLoadingCh
                         decodeCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
                     }
 
-                    const audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer.slice(0))
+                    let audioBuffer: AudioBuffer
+                    try {
+                        audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer.slice(0))
+                    } catch (initialError) {
+                        console.warn("⚠️ Initial Decode Failed. Attempting WebM Duration Fix...", initialError)
+
+                        // Retry with Fix
+                        if (sourceBlob && session.duration && sourceBlob.type.includes('webm')) {
+                            try {
+                                const fixedBlob = await ysFixWebmDuration(sourceBlob, session.duration * 1000, true)
+                                const fixedBuffer = await fixedBlob.arrayBuffer()
+                                audioBuffer = await decodeCtx.decodeAudioData(fixedBuffer)
+                                console.log("✅ WebM Fix Successful for Waveform!")
+                            } catch (fixErr) {
+                                console.error("❌ Waveform Fix Failed:", fixErr)
+                                throw fixErr // Re-throw to hit outer catch
+                            }
+                        } else {
+                            throw initialError
+                        }
+                    }
 
                     const rawData = audioBuffer.getChannelData(0)
                     const samples = 200

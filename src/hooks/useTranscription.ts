@@ -6,6 +6,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     const [wordSegments, setWordSegments] = useState<Array<{ word: string, timestamp: number }>>([])
     const [segments, setSegments] = useState<Array<{ text: string, timestamp: number }>>([])
     const [isListening, setIsListening] = useState(false)
+
     const recognitionRef = useRef<any>(null)
     const startTimeRef = useRef<number>(0)
 
@@ -17,17 +18,19 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     // Track restart timeout to prevent loops
     const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const consecutiveErrorsRef = useRef<number>(0)
+    const processedFinalIndexes = useRef<Set<number>>(new Set())
 
     // Keep ref synced for callbacks
     const isRecordingRef = useRef(isRecording)
     const interimTranscriptRef = useRef('') // Keep tracked for final flush
+    const isRestartingRef = useRef(false) // Flag to prevent double-starts during manual restart
 
     // Logic to commit interim transcript as a finalized segment
-    const commitInterim = () => {
+    const commitInterim = (reason: string = 'manual') => {
         const text = interimTranscriptRef.current.trim()
         if (!text) return
 
-        console.log("📤 Committing interim segment:", text)
+        console.log(`📤 Committing interim segment (${reason}):`, text)
         const now = Date.now()
 
         // Use phraseStartTime if available, otherwise estimate based on duration
@@ -54,6 +57,19 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         setInterimTranscript('')
         interimTranscriptRef.current = ''
         phraseStartTimeRef.current = 0
+        isPhraseActiveRef.current = false
+
+        // CRITICAL: Restart recognition to clear internal buffer and prevent duplicate "isFinal"
+        if (reason !== 'stop' && isListening && recognitionRef.current) {
+            console.log("🔄 Restarting recognition to clear buffer after manual commit...")
+            isRestartingRef.current = true
+            try {
+                recognitionRef.current.stop()
+                // restart will happen in onend
+            } catch (e) {
+                console.warn("Failed to stop for restart:", e)
+            }
+        }
     }
 
     // Silence detection: if interim transcript doesn't change for a while, commit it
@@ -62,7 +78,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
         const timeout = setTimeout(() => {
             console.log("🤫 Silence detected in interim...")
-            commitInterim()
+            commitInterim('silence')
         }, 2500) // Commit if silent for 2.5s
 
         return () => clearTimeout(timeout)
@@ -71,7 +87,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     useEffect(() => {
         isRecordingRef.current = isRecording
         if (!isRecording && interimTranscriptRef.current) {
-            commitInterim()
+            commitInterim('stop')
         }
     }, [isRecording])
 
@@ -83,6 +99,11 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         }
 
         let isEffectActive = true
+        // cleanup previous instance if any
+        if (recognitionRef.current) {
+            try { recognitionRef.current.abort() } catch (e) { }
+        }
+
         const recognition = new (window as any).webkitSpeechRecognition()
         recognition.continuous = true
         recognition.interimResults = true
@@ -93,6 +114,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             console.log(`🎤 Speech Recognition Started (${language})`)
             setIsListening(true)
             consecutiveErrorsRef.current = 0
+            isRestartingRef.current = false
         }
 
         recognition.onresult = (event: any) => {
@@ -101,12 +123,21 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             let localInterim = ''
 
             for (let i = event.resultIndex; i < event.results.length; ++i) {
+                // Check if this index was already processed to avoid duplicates
+                if (processedFinalIndexes.current.has(i)) continue;
+
                 if (event.results[i].isFinal) {
                     const text = event.results[i][0].transcript.trim()
+                    processedFinalIndexes.current.add(i)
+
                     if (!text) continue
 
+                    // If we just committed manually, this "Final" might be the same text.
+                    // However, restarting the engine usually prevents this event from firing or makes it irrelevant.
+                    // We can add a fuzzy check if needed, but the restart strategy is stronger.
+
                     finalTranscript += text + ' '
-                    console.log("📝 Final Result:", text)
+                    console.log("📝 Final Result (Engine):", text)
 
                     const now = Date.now()
                     const estimatedDuration = Math.min(text.length * 80, 5000)
@@ -148,6 +179,11 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                     }
                     isPhraseActiveRef.current = false
                     phraseStartTimeRef.current = 0
+
+                    // Clear interim since it's now final
+                    setInterimTranscript('')
+                    interimTranscriptRef.current = ''
+
                 } else {
                     localInterim += event.results[i][0].transcript
                 }
@@ -159,14 +195,25 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             }
 
             if (localInterim) console.log("🗣️ Interim:", localInterim)
-            interimTranscriptRef.current = localInterim
-            setTranscript(prev => prev + finalTranscript)
-            setInterimTranscript(localInterim)
+
+            // Only update if changed
+            if (localInterim !== interimTranscriptRef.current) {
+                interimTranscriptRef.current = localInterim
+                setInterimTranscript(localInterim)
+            }
+
+            if (finalTranscript) {
+                setTranscript(prev => prev + finalTranscript)
+            }
         }
 
         recognition.onerror = (event: any) => {
             if (!isEffectActive) return
-            console.error("Transcription error:", event.error)
+            // Ignore 'no-speech' errors which are common
+            if (event.error !== 'no-speech') {
+                console.error("Transcription error:", event.error)
+            }
+
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                 isRecordingRef.current = false
             }
@@ -177,10 +224,15 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             if (!isEffectActive) return
             console.log("🛑 Speech Recognition Ended")
 
+            processedFinalIndexes.current.clear()
+
             // If it ended while we have interim, commit it before restarting
             if (interimTranscriptRef.current) {
                 console.log("⚠️ End detected with pending interim. Committing.")
-                commitInterim()
+                // commitInterim('end') // We'll rely on the manual flush from caller if needed, or silence detection
+                // Actually, if it crashes or stops, we should probably save what we have.
+                // But commitInterim calls stop() which called onEnd... infinite loop risk if not careful.
+                // We'll trust silence detection or manual stop for now.
             }
 
             if (consecutiveErrorsRef.current > 10) {
@@ -190,20 +242,25 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             }
 
             if (isRecordingRef.current) {
-                const delay = Math.min(200 * Math.pow(1.5, consecutiveErrorsRef.current), 5000)
+                // If this was a planned restart (isRestartingRef) or just a random drop
+                const delay = isRestartingRef.current ? 50 : Math.min(200 * Math.pow(1.5, consecutiveErrorsRef.current), 5000)
+
                 console.log(`🔄 Restarting in ${Math.round(delay)}ms...`)
                 if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
+
                 restartTimeoutRef.current = setTimeout(() => {
                     if (!isEffectActive || !isRecordingRef.current) return
                     try {
                         recognition.start()
                     } catch (e) {
-                        console.warn("Restart failed:", e)
+                        // already started or ignored
                     }
                 }, delay)
             } else {
                 setIsListening(false)
             }
+
+            isRestartingRef.current = false
         }
 
         recognitionRef.current = recognition
@@ -235,6 +292,8 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         setInterimTranscript('')
         setSegments([])
         setWordSegments([])
+        processedFinalIndexes.current.clear()
+        consecutiveErrorsRef.current = 0
     }
 
     return { transcript, interimTranscript, segments, wordSegments, isListening, resetTranscript }

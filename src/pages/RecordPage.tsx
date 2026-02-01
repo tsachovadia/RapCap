@@ -62,8 +62,10 @@ export default function RecordPage() {
 
     // Ensure stream is initialized
     useEffect(() => {
-        initializeStream().catch(err => console.error("Stream init failed", err))
-    }, [initializeStream])
+        if (flowState === 'idle' && !isRecording) {
+            initializeStream().catch(err => console.error("Stream init failed", err))
+        }
+    }, [initializeStream, flowState, isRecording])
 
     // Trigger mic setup on error
     useEffect(() => {
@@ -72,6 +74,12 @@ export default function RecordPage() {
 
     // --- Shared Actions ---
     const handleStartFlow = async () => {
+        // Prevent double-start or re-entry while active
+        if (flowState !== 'idle' || isRecording) {
+            console.warn("⚠️ handleStartFlow called while active. Ignoring.")
+            return
+        }
+
         setIsTranscribing(true)
         transcriptionStartTimeRef.current = Date.now()
 
@@ -133,7 +141,7 @@ export default function RecordPage() {
 
         let finalBlob = pendingSessionBlob
         try {
-            finalBlob = await convertBlobToMp3(pendingSessionBlob)
+            finalBlob = await convertBlobToMp3(pendingSessionBlob, duration * 1000)
         } catch (e) {
             console.error("MP3 conversion failed", e)
         }

@@ -61,6 +61,9 @@ export function useAudioRecorder() {
     const [selectedOutputId, setSelectedOutputId] = useState<string>('');
     const [availableOutputDevices, setAvailableOutputDevices] = useState<MediaDeviceInfo[]>([]);
 
+    // Prevent double-starts
+    const [isInitializing, setIsInitializing] = useState(false);
+
     // Effects for persistence
     useEffect(() => {
         localStorage.setItem('rapcap_audio_constraints', JSON.stringify(audioConstraints));
@@ -235,7 +238,10 @@ export function useAudioRecorder() {
                 console.log("🎤 Stream updated on existing graph");
             }
 
-            processedStreamRef.current = destNode.current?.stream || null;
+
+            // NOTE: We intentionally do NOT cache destNode.stream in processedStreamRef
+            // The cached stream was becoming stale/disconnected, causing silent recordings.
+            // Instead, we grab a fresh stream directly from destNode at recording time.
 
             // Force state update to expose analyser
             setRecorderState(prev => ({ ...prev, analyser: analyserNode.current || undefined }));
@@ -286,10 +292,49 @@ export function useAudioRecorder() {
     };
 
     const startRecording = useCallback(async () => {
+        if (recorderState.isRecording || isInitializing) {
+            console.warn("⚠️ Start recording called while already active or initializing. Ignoring.")
+            return
+        }
+
+        setIsInitializing(true)
+        console.log("🎙️ Requesting Microphone Access...")
+
         try {
             if (!streamRef.current || !streamRef.current.active) await initializeStream();
-            const streamToRecord = processedStreamRef.current || streamRef.current;
-            if (!streamToRecord) throw new Error("No active stream");
+
+            // CRITICAL FIX: Always get fresh stream from destination node
+            // The processedStreamRef was getting stale between init and record
+            let streamToRecord: MediaStream | null = null;
+
+            if (destNode.current && destNode.current.stream && destNode.current.stream.active) {
+                streamToRecord = destNode.current.stream;
+                console.log("✅ Using fresh processed stream from destNode");
+            } else if (streamRef.current && streamRef.current.active) {
+                // Fallback to raw mic stream if processed stream unavailable
+                console.warn("⚠️ destNode stream not available, falling back to raw mic stream");
+                streamToRecord = streamRef.current;
+            } else {
+                throw new Error("No active audio stream available for recording");
+            }
+
+            // 1. Log Track Status with enhanced diagnostics
+            console.log("✅ Microphone Stream Ready:", streamToRecord.id)
+            streamToRecord.getTracks().forEach(track => {
+                console.log(`   - Track: ${track.kind}, Label: "${track.label}", Enabled: ${track.enabled}, ReadyState: ${track.readyState}, Muted: ${track.muted}`)
+            })
+
+            // Log track settings for additional debugging
+            const trackSettings = streamToRecord.getAudioTracks()[0]?.getSettings();
+            if (trackSettings) {
+                console.log("🔧 Track Settings:", JSON.stringify(trackSettings));
+            }
+
+            // 2. Ensure Context is Running
+            if (audioContext.current?.state === 'suspended') {
+                console.log("🔈 Resuming Audio Context before recording...")
+                await audioContext.current.resume()
+            }
 
             const options = getSupportedMimeType() ? { mimeType: getSupportedMimeType() } : undefined;
             const recorder = new MediaRecorder(streamToRecord, options);
@@ -299,14 +344,22 @@ export function useAudioRecorder() {
 
             recorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
-                    if (audioChunks.current.length % 50 === 0) {
-                        console.log(`📦 Audio chunk received: ${event.data.size} bytes (Total chunks: ${audioChunks.current.length + 1})`);
-                    }
                     audioChunks.current.push(event.data);
                 }
             };
 
-            recorder.start(100);
+            recorder.onstart = () => {
+                console.log("🔴 MediaRecorder Started Event")
+                setIsInitializing(false)
+            }
+
+            recorder.onerror = (e) => {
+                console.error("❌ MediaRecorder Error:", e)
+                setPermissionError(new Error("Recording error occurred"))
+                setIsInitializing(false)
+            }
+
+            recorder.start();
             console.log("🔴 Recording started");
 
             startTimeRef.current = Date.now();
@@ -330,6 +383,7 @@ export function useAudioRecorder() {
         } catch (err) {
             console.error("❌ Failed to start recording:", err);
             alert("שגיאה בהתחלת ההקלטה");
+            setIsInitializing(false)
         }
     }, [initializeStream]);
 
@@ -349,6 +403,12 @@ export function useAudioRecorder() {
                 mediaRecorder.current.onstop = () => {
                     const mimeType = mediaRecorder.current?.mimeType || 'audio/webm';
                     const audioBlob = new Blob(audioChunks.current, { type: mimeType });
+
+                    console.log(`⏹️ Recording Stopped. Blob Size: ${audioBlob.size} bytes, Type: ${mimeType}`);
+                    if (audioBlob.size < 1000) {
+                        console.warn("⚠️ Warning: Created Blob is suspiciously small!");
+                    }
+
                     resolve(audioBlob);
                 };
                 mediaRecorder.current.stop();

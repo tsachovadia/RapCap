@@ -1,17 +1,19 @@
 import lamejs from './lame.all.js';
+import { ysFixWebmDuration } from './webmFix';
 
 /**
  * Converts an audio Blob (WebM/WAV) to an MP3 Blob using lamejs.
  * @param blob The source audio blob.
+ * @param durationMs Optional duration in milliseconds to inject if decoding fails (WebM fix).
  * @returns Promise resolving to an MP3 Blob.
  */
-export async function convertBlobToMp3(blob: Blob): Promise<Blob> {
+export async function convertBlobToMp3(blob: Blob, durationMs?: number): Promise<Blob> {
     return new Promise(async (resolve) => {
         try {
             console.log(`🎙️ Starting MP3 conversion. Blob type: ${blob.type}, size: ${blob.size} bytes`);
 
             // 1. Read Blob as ArrayBuffer
-            const arrayBuffer = await blob.arrayBuffer();
+            let arrayBuffer = await blob.arrayBuffer();
 
             // 2. Decode Audio Data (WebM -> PCM)
             // Use .slice(0) to create a copy, which is safer for decodeAudioData in some browsers
@@ -24,14 +26,25 @@ export async function convertBlobToMp3(blob: Blob): Promise<Blob> {
                 }
                 audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
             } catch (decodeError) {
-                console.warn("⚠️ Audio decoding failed for MP3 conversion. Returning original blob.", {
-                    error: decodeError,
-                    blobType: blob.type,
-                    blobSize: blob.size,
-                    bufferSize: arrayBuffer.byteLength
-                });
-                audioContext.close();
-                return resolve(blob); // Fallback to original blob instead of failing completely
+                console.warn("⚠️ Audio decoding failed. Attempting WebM Duration Fix...", { error: decodeError });
+
+                // Attempt to fix WebM duration if provided
+                if (durationMs && durationMs > 0 && blob.type.includes('webm')) {
+                    try {
+                        const fixedBlob = await ysFixWebmDuration(blob, durationMs, true);
+                        const fixedBuffer = await fixedBlob.arrayBuffer();
+                        audioBuffer = await audioContext.decodeAudioData(fixedBuffer);
+                        console.log("✅ WebM Fix Successful! Decoding proceeded.");
+                    } catch (fixError) {
+                        console.error("❌ WebM Fix/Second Decode Failed:", fixError);
+                        audioContext.close();
+                        return resolve(blob);
+                    }
+                } else {
+                    console.warn("⚠️ No duration provided or not WebM. Cannot fix.");
+                    audioContext.close();
+                    return resolve(blob);
+                }
             }
 
             // 3. Prepare Encoder
