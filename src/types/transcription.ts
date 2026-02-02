@@ -5,7 +5,9 @@
 /** A single word with its timestamp */
 export interface WordSegment {
     word: string
-    timestamp: number // seconds from start
+    timestamp: number // seconds from start (required for backward compat)
+    start?: number // seconds from start (Whisper format, optional)
+    end?: number // seconds (Whisper format, optional)
 }
 
 /** A text segment (phrase/sentence) with timestamp */

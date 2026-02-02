@@ -44,6 +44,8 @@ body {
   overflow: hidden;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
+  touch-action: manipulation;
+  /* Prevent 300ms tap delay on iOS */
 }
 
 

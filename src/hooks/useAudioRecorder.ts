@@ -234,8 +234,20 @@ export function useAudioRecorder() {
     }, [selectedDeviceId, initializeStream]);
 
     const getSupportedMimeType = () => {
-        const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/ogg;codecs=opus'];
-        for (const type of types) if (MediaRecorder.isTypeSupported(type)) return type;
+        // iOS Safari prefers MP4/AAC, doesn't support WebM well
+        const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+        const iOSTypes = ['audio/mp4', 'audio/aac', 'audio/webm'];
+        const standardTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+
+        const typesToTry = isIOSDevice ? iOSTypes : standardTypes;
+
+        for (const type of typesToTry) {
+            if (MediaRecorder.isTypeSupported(type)) {
+                console.log(`📦 Selected MIME type: ${type} (iOS: ${isIOSDevice})`);
+                return type;
+            }
+        }
+        console.warn('⚠️ No supported MIME type found');
         return '';
     };
 
