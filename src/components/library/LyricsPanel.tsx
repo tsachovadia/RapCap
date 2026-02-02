@@ -22,23 +22,22 @@ export default function LyricsPanel({
 }: LyricsPanelProps) {
     const [isCopied, setIsCopied] = useState(false)
     const [includeTimestamps, setIncludeTimestamps] = useState(false)
-    const [isEditMode, setIsEditMode] = useState(false)
-    const [editedSegments, setEditedSegments] = useState<Array<{ timestamp: number; text: string }>>([])
-    const [editedLyrics, setEditedLyrics] = useState('')
+    const [editingIndex, setEditingIndex] = useState<number | null>(null)
+    const [editingText, setEditingText] = useState('')
+    const [localSegments, setLocalSegments] = useState<Array<{ timestamp: number; text: string }>>([])
 
-    // Sync edit state when segments/lyrics change
+    // Sync local segments with props
     useEffect(() => {
         if (segments && segments.length > 0) {
-            setEditedSegments([...segments])
+            setLocalSegments([...segments])
         }
-        setEditedLyrics(lyrics || '')
-    }, [segments, lyrics])
+    }, [segments])
 
     const handleCopy = () => {
         let text = ''
 
-        if (includeTimestamps && segments && Array.isArray(segments)) {
-            text = segments.map((s) => {
+        if (includeTimestamps && localSegments && Array.isArray(localSegments)) {
+            text = localSegments.map((s) => {
                 const time = formatTime(s.timestamp)
                 return `[${time}] ${s.text}`
             }).join('\n')
@@ -53,37 +52,41 @@ export default function LyricsPanel({
         }
     }
 
-    const handleEnterEditMode = () => {
-        setEditedSegments(segments ? [...segments] : [])
-        setEditedLyrics(lyrics || '')
-        setIsEditMode(true)
+    const handleStartEdit = (index: number, text: string) => {
+        setEditingIndex(index)
+        setEditingText(text)
     }
 
     const handleCancelEdit = () => {
-        setIsEditMode(false)
-        // Reset to original
-        setEditedSegments(segments ? [...segments] : [])
-        setEditedLyrics(lyrics || '')
+        setEditingIndex(null)
+        setEditingText('')
     }
 
-    const handleSaveEdit = () => {
+    const handleSaveEdit = (index: number) => {
+        if (editingIndex === null) return
+
+        const newSegments = [...localSegments]
+        newSegments[index] = { ...newSegments[index], text: editingText }
+        setLocalSegments(newSegments)
+
+        // Build new lyrics string
+        const newLyrics = newSegments.map(s => s.text).join(' ')
+
         if (onUpdateLyrics) {
-            // Build new lyrics string from segments if we have segments
-            const newLyricsText = editedSegments.length > 0
-                ? editedSegments.map(s => s.text).join(' ')
-                : editedLyrics
-
-            onUpdateLyrics(newLyricsText, editedSegments)
+            onUpdateLyrics(newLyrics, newSegments)
         }
-        setIsEditMode(false)
+
+        setEditingIndex(null)
+        setEditingText('')
     }
 
-    const handleSegmentChange = (index: number, newText: string) => {
-        setEditedSegments(prev => {
-            const updated = [...prev]
-            updated[index] = { ...updated[index], text: newText }
-            return updated
-        })
+    const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            handleSaveEdit(index)
+        } else if (e.key === 'Escape') {
+            handleCancelEdit()
+        }
     }
 
     if (!lyrics && (!segments || segments.length === 0)) {
@@ -102,128 +105,108 @@ export default function LyricsPanel({
                 <div className="flex items-center gap-2">
                     <h4 className="text-xs font-bold uppercase text-subdued">מילים</h4>
 
-                    {!isEditMode && (
-                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${includeTimestamps ? 'bg-[#1DB954] border-[#1DB954]' : 'border-subdued'
-                                }`}>
-                                {includeTimestamps && <div className="w-2 h-2 bg-black rounded-full" />}
-                            </div>
-                            <input
-                                type="checkbox"
-                                className="hidden"
-                                checked={includeTimestamps}
-                                onChange={(e) => setIncludeTimestamps(e.target.checked)}
-                            />
-                            <span className="text-xs text-subdued">עם זמנים</span>
-                        </label>
-                    )}
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${includeTimestamps ? 'bg-[#1DB954] border-[#1DB954]' : 'border-subdued'
+                            }`}>
+                            {includeTimestamps && <div className="w-2 h-2 bg-black rounded-full" />}
+                        </div>
+                        <input
+                            type="checkbox"
+                            className="hidden"
+                            checked={includeTimestamps}
+                            onChange={(e) => setIncludeTimestamps(e.target.checked)}
+                        />
+                        <span className="text-xs text-subdued">עם זמנים</span>
+                    </label>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {isEditMode ? (
-                        <>
-                            <button
-                                onClick={handleCancelEdit}
-                                className="flex items-center gap-1 px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-                            >
-                                <X size={12} />
-                                ביטול
-                            </button>
-                            <button
-                                onClick={handleSaveEdit}
-                                className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[#1DB954] bg-[#1DB954]/10 hover:bg-[#1DB954]/20 transition-colors"
-                            >
-                                <Save size={12} />
-                                שמור
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            {onUpdateLyrics && (
-                                <button
-                                    onClick={handleEnterEditMode}
-                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-subdued hover:text-[#1DB954] hover:bg-white/5 transition-colors"
-                                >
-                                    <Pencil size={12} />
-                                    עריכה
-                                </button>
-                            )}
-                            <button
-                                onClick={handleCopy}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-subdued hover:text-[#1DB954] hover:bg-white/5'
-                                    }`}
-                            >
-                                {isCopied ? <Check size={12} /> : <Copy size={12} />}
-                                {isCopied ? 'הועתק!' : 'העתק'}
-                            </button>
+                    <button
+                        onClick={handleCopy}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-subdued hover:text-[#1DB954] hover:bg-white/5'
+                            }`}
+                    >
+                        {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                        {isCopied ? 'הועתק!' : 'העתק'}
+                    </button>
 
-                            {hasBlob && onDownload && (
-                                <button
-                                    onClick={onDownload}
-                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-subdued hover:text-[#1DB954] hover:bg-white/5 transition-colors"
-                                >
-                                    <Download size={12} />
-                                    MP3
-                                </button>
-                            )}
-                        </>
+                    {hasBlob && onDownload && (
+                        <button
+                            onClick={onDownload}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-subdued hover:text-[#1DB954] hover:bg-white/5 transition-colors"
+                        >
+                            <Download size={12} />
+                            MP3
+                        </button>
                     )}
                 </div>
             </div>
 
             {/* Lyrics Content */}
             <div className="h-[200px] overflow-y-auto p-3 space-y-1 text-right custom-scrollbar">
-                {isEditMode ? (
-                    // Edit Mode
-                    editedSegments && editedSegments.length > 0 ? (
-                        editedSegments.map((segment, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                                <span className="text-xs text-subdued/50 w-10 shrink-0">
-                                    {formatTime(segment.timestamp)}
-                                </span>
-                                <input
-                                    type="text"
-                                    value={segment.text}
-                                    onChange={(e) => handleSegmentChange(i, e.target.value)}
-                                    className="flex-1 bg-[#1a1a1a] border border-[#282828] rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#1DB954] transition-colors"
-                                    dir="rtl"
-                                />
-                            </div>
-                        ))
-                    ) : (
-                        <textarea
-                            value={editedLyrics}
-                            onChange={(e) => setEditedLyrics(e.target.value)}
-                            className="w-full h-full bg-[#1a1a1a] border border-[#282828] rounded p-2 text-sm text-white resize-none focus:outline-none focus:border-[#1DB954] transition-colors"
-                            dir="rtl"
-                            placeholder="הזן מילים..."
-                        />
-                    )
-                ) : (
-                    // View Mode
-                    segments && segments.length > 0 ? (
-                        segments.map((segment, i) => {
-                            const isActive = currentTime >= segment.timestamp &&
-                                (i === segments.length - 1 || currentTime < segments[i + 1].timestamp)
+                {localSegments && localSegments.length > 0 ? (
+                    localSegments.map((segment, i) => {
+                        const isActive = currentTime >= segment.timestamp &&
+                            (i === localSegments.length - 1 || currentTime < localSegments[i + 1].timestamp)
+                        const isEditing = editingIndex === i
 
+                        if (isEditing) {
                             return (
+                                <div key={i} className="flex items-center gap-2 bg-[#1a1a1a] rounded p-1">
+                                    <input
+                                        type="text"
+                                        value={editingText}
+                                        onChange={(e) => setEditingText(e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, i)}
+                                        autoFocus
+                                        className="flex-1 bg-transparent border-none text-sm text-white focus:outline-none"
+                                        dir="rtl"
+                                    />
+                                    <button
+                                        onClick={() => handleSaveEdit(i)}
+                                        className="p-1 text-[#1DB954] hover:bg-[#1DB954]/20 rounded"
+                                    >
+                                        <Save size={14} />
+                                    </button>
+                                    <button
+                                        onClick={handleCancelEdit}
+                                        className="p-1 text-red-400 hover:bg-red-400/20 rounded"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            )
+                        }
+
+                        return (
+                            <div
+                                key={i}
+                                className={`group flex items-center gap-2 w-full text-right px-2 py-1 rounded transition-all ${isActive
+                                    ? 'bg-[#1DB954]/20 text-[#1DB954] font-medium'
+                                    : 'text-white/70 hover:bg-white/5 hover:text-white'
+                                    }`}
+                            >
                                 <button
-                                    key={i}
                                     onClick={() => onSeek(segment.timestamp)}
-                                    className={`block w-full text-right px-2 py-1 rounded transition-all ${isActive
-                                        ? 'bg-[#1DB954]/20 text-[#1DB954] font-medium scale-[1.02]'
-                                        : 'text-white/70 hover:bg-white/5 hover:text-white'
-                                        }`}
+                                    className="flex-1 text-right"
                                 >
                                     <span className="text-sm leading-relaxed">{segment.text}</span>
                                 </button>
-                            )
-                        })
-                    ) : (
-                        <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed">
-                            {lyrics}
-                        </p>
-                    )
+                                {onUpdateLyrics && (
+                                    <button
+                                        onClick={() => handleStartEdit(i, segment.text)}
+                                        className="opacity-0 group-hover:opacity-100 p-1 text-subdued hover:text-[#1DB954] transition-all"
+                                    >
+                                        <Pencil size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        )
+                    })
+                ) : (
+                    <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed">
+                        {lyrics}
+                    </p>
                 )}
             </div>
         </div>

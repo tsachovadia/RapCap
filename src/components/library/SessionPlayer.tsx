@@ -52,6 +52,7 @@ export default function SessionPlayer({
     const lastSourceKeyRef = useRef<string>('')
     const bufferingTimeoutRef = useRef<any>(null)
     const playbackStartTimeRef = useRef<number>(0)
+    const hasStartedPlaybackRef = useRef<boolean>(false)
 
     // State
     const [currentTime, setCurrentTime] = useState(0)
@@ -289,13 +290,21 @@ export default function SessionPlayer({
 
         if (isPlaying) {
             playbackStartTimeRef.current = Date.now()
+            hasStartedPlaybackRef.current = false
+
             if (session.beatId && youtubeRef.current) {
                 youtubeRef.current.playVideo()
             } else if (!session.beatId && audioRef.current) {
+                // Reset to beginning on first play if near start
+                if (audioRef.current.currentTime < 0.5) {
+                    audioRef.current.currentTime = 0
+                }
+                hasStartedPlaybackRef.current = true
                 audioRef.current.play().catch(() => { })
             }
             loop()
         } else {
+            hasStartedPlaybackRef.current = false
             audioRef.current?.pause()
             youtubeRef.current?.pauseVideo()
         }
