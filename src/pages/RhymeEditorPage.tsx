@@ -31,7 +31,7 @@ export default function RhymeEditorPage() {
     const [isLogicOpen, setIsLogicOpen] = useState(false)
     const [isBarsOpen, setIsBarsOpen] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
-    const [createdAt, setCreatedAt] = useState<Date>(new Date())
+    const [createdAt, setCreatedAt] = useState<Date | null>(null)
 
     // Dicta Modal State
     const [isDictaOpen, setIsDictaOpen] = useState(false)
@@ -51,6 +51,7 @@ export default function RhymeEditorPage() {
                     setMnemonicLogic(group.mnemonicLogic || '')
                     setBars(group.bars || '')
                     if (group.createdAt) setCreatedAt(new Date(group.createdAt))
+                    else setCreatedAt(new Date()) // Fallback for legacy data missing createdAt
                 }
             })
         }
@@ -67,7 +68,7 @@ export default function RhymeEditorPage() {
             story,
             mnemonicLogic,
             bars,
-            createdAt: createdAt,
+            createdAt: createdAt || new Date(),
             lastUsedAt: new Date(),
             // Preserve ID if editing
             ...(isNew ? {} : { id: parseInt(id!) })

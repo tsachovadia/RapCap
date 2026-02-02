@@ -44,7 +44,7 @@ export const syncService = {
 
         // Word Groups Listener
         const wgUnsub = onSnapshot(collection(firestore, 'users', uid, 'wordGroups'), async (snapshot) => {
-            if (this.isSyncingWordGroups) return; // Skip if we are currently pushing changes
+            if (this.isSyncingWordGroups) return;
 
             for (const change of snapshot.docChanges()) {
                 const cloudData = change.doc.data();
@@ -54,7 +54,21 @@ export const syncService = {
                     console.log(`🗑️ Cloud deleted WordGroup: ${cloudId}`);
                     await localDb.wordGroups.where('cloudId').equals(cloudId).delete();
                 } else {
-                    const localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
+                    // 1. Try lookup by cloudId
+                    let localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
+
+                    // 2. Fallback: Fingerprint lookup (same name and roughly same createdAt)
+                    if (!localGroup && cloudData.createdAt) {
+                        const cloudCreated = cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt);
+                        const allGroups = await localDb.wordGroups.where('name').equals(cloudData.name).toArray();
+                        localGroup = allGroups.find(g => Math.abs(g.createdAt.getTime() - cloudCreated.getTime()) < 2000); // 2s tolerance
+
+                        if (localGroup) {
+                            console.log(`🔗 Linked local WordGroup ${localGroup.id} to cloudId ${cloudId} via fingerprint`);
+                            await localDb.wordGroups.update(localGroup.id!, { cloudId: cloudId });
+                        }
+                    }
+
                     const groupData = {
                         name: cloudData.name,
                         items: cloudData.items,
@@ -71,7 +85,7 @@ export const syncService = {
 
                     if (!localGroup) {
                         await localDb.wordGroups.add(groupData);
-                    } else if (groupData.lastUsedAt > localGroup.lastUsedAt) {
+                    } else if (groupData.lastUsedAt.getTime() > localGroup.lastUsedAt.getTime()) {
                         await localDb.wordGroups.update(localGroup.id!, groupData);
                     }
                 }
@@ -80,7 +94,7 @@ export const syncService = {
 
         // Sessions Listener
         const sUnsub = onSnapshot(collection(firestore, 'users', uid, 'sessions'), async (snapshot) => {
-            if (this.isSyncingSessions) return; // Skip if we are currently pushing changes
+            if (this.isSyncingSessions) return;
 
             for (const change of snapshot.docChanges()) {
                 const cloudData = change.doc.data();
@@ -90,7 +104,21 @@ export const syncService = {
                     console.log(`🗑️ Cloud deleted Session: ${cloudId}`);
                     await localDb.sessions.where('cloudId').equals(cloudId).delete();
                 } else {
-                    const localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
+                    // 1. Try lookup by cloudId
+                    let localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
+
+                    // 2. Fallback: Fingerprint lookup (same createdAt)
+                    if (!localSession && cloudData.createdAt) {
+                        const cloudCreated = cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt);
+                        const allSessions = await localDb.sessions.toArray();
+                        localSession = allSessions.find(s => Math.abs(s.createdAt.getTime() - cloudCreated.getTime()) < 2000); // 2s tolerance
+
+                        if (localSession) {
+                            console.log(`🔗 Linked local Session ${localSession.id} to cloudId ${cloudId} via fingerprint`);
+                            await localDb.sessions.update(localSession.id!, { cloudId: cloudId });
+                        }
+                    }
+
                     const sessionData = {
                         title: cloudData.title,
                         type: cloudData.type,
@@ -113,7 +141,6 @@ export const syncService = {
                         const localUpdatedTime = (localSession.updatedAt || localSession.createdAt).getTime();
 
                         if (cloudUpdatedTime > localUpdatedTime) {
-                            // Merge metadata - clouds usually wins if newer
                             const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
                             await localDb.sessions.update(localSession.id!, {
                                 ...sessionData,
