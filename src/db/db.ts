@@ -13,6 +13,14 @@ export interface WordGroup {
     isSystem?: boolean; // To protect seed data from accidental deletion if needed
     cloudId?: string;
     syncedAt?: Date;
+    category?: string;
+    language?: string;
+    itemsMetadata?: Record<string, {
+        syllableCount?: number;
+        wordCount?: number;
+        stressPattern?: string; // e.g., "0101" (0=unstressed, 1=stressed)
+        weight?: string; // e.g., "Mishkal X"
+    }>;
 }
 
 export interface DbSession {
@@ -294,6 +302,59 @@ export const seedDatabase = async () => {
             ],
             story: "",
             mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        // --- Multi-Syllabic Phrases (Phase 8) ---
+        {
+            name: "דיברתי (A-ti)",
+            items: ["מָה עָשִׂיתִי", "לֹא טָעִיתִי"],
+            itemsMetadata: {
+                "מָה עָשִׂיתִי": { syllableCount: 4, wordCount: 2, stressPattern: "1010" },
+                "לֹא טָעִיתִי": { syllableCount: 4, wordCount: 2, stressPattern: "0010" }
+            },
+            story: "",
+            mnemonicLogic: "Phrases ending in -ati (past tense verbs)",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "עושה (O-eh)",
+            items: ["לֹא רוֹאֶה", "מָה שֶׁקּוֹרֶה"],
+            itemsMetadata: {
+                "לֹא רוֹאֶה": { syllableCount: 3, wordCount: 2, stressPattern: "001" },
+                "מָה שֶׁקּוֹרֶה": { syllableCount: 4, wordCount: 2, stressPattern: "0001" }
+            },
+            story: "",
+            mnemonicLogic: "Phrases ending in -oeh/-oah (present tense)",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "יכולת (O-let)",
+            items: ["יֵשׁ יְכֹלֶת", "מָה אַתְּ אוֹכֶלֶת"],
+            itemsMetadata: {
+                "יֵשׁ יְכֹלֶת": { syllableCount: 4, wordCount: 2, stressPattern: "1010" },
+                "מָה אַתְּ אוֹכֶלֶת": { syllableCount: 5, wordCount: 3, stressPattern: "10100" }
+            },
+            story: "",
+            mnemonicLogic: "Phrases ending in -olet (nouns/ability)",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "רבים (A-im)",
+            items: ["עִם הַחֲבֵרִים", "חַיִּים בִּסְרָטִים"],
+            itemsMetadata: {
+                "עִם הַחֲבֵרִים": { syllableCount: 5, wordCount: 2, stressPattern: "10001" },
+                "חַיִּים בִּסְרָטִים": { syllableCount: 5, wordCount: 2, stressPattern: "01001" }
+            },
+            story: "",
+            mnemonicLogic: "Phrases ending in -im (plural)",
             createdAt: now,
             lastUsedAt: now,
             isSystem: true

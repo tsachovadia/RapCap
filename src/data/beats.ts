@@ -23,7 +23,7 @@ export const DEFAULT_BEAT_ID = 'mLDfvBexor4'
 export function getBeatName(videoId: string | undefined): string | null {
     if (!videoId) return null
     const beat = PRESET_BEATS.find(b => b.id === videoId)
-    return beat?.name || null
+    return beat?.name || 'Custom Beat'
 }
 
 /**

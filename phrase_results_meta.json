@@ -1,0 +1,58 @@
+{
+  "Talked (A-ti)": [
+    {
+      "text": "מָה עָשִׂיתִי",
+      "syllableCount": 4,
+      "wordCount": 2,
+      "stressPattern": "1010"
+    },
+    {
+      "text": "לֹא טָעִיתִי",
+      "syllableCount": 4,
+      "wordCount": 2,
+      "stressPattern": "0010"
+    }
+  ],
+  "Doing (O-eh)": [
+    {
+      "text": "לֹא רוֹאֶה",
+      "syllableCount": 3,
+      "wordCount": 2,
+      "stressPattern": "001"
+    },
+    {
+      "text": "מָה שֶׁקּוֹרֶה",
+      "syllableCount": 4,
+      "wordCount": 2,
+      "stressPattern": "0001"
+    }
+  ],
+  "Ability (O-let)": [
+    {
+      "text": "יֵשׁ יְכֹלֶת",
+      "syllableCount": 4,
+      "wordCount": 2,
+      "stressPattern": "1010"
+    },
+    {
+      "text": "מָה אַתְּ אוֹכֶלֶת",
+      "syllableCount": 5,
+      "wordCount": 3,
+      "stressPattern": "10100"
+    }
+  ],
+  "Plural (A-im)": [
+    {
+      "text": "עִם הַחֲבֵרִים",
+      "syllableCount": 5,
+      "wordCount": 2,
+      "stressPattern": "10001"
+    },
+    {
+      "text": "חַיִּים בִּסְרָטִים",
+      "syllableCount": 5,
+      "wordCount": 2,
+      "stressPattern": "01001"
+    }
+  ]
+}
