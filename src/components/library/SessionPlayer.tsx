@@ -53,6 +53,7 @@ export default function SessionPlayer({
     const bufferingTimeoutRef = useRef<any>(null)
     const playbackStartTimeRef = useRef<number>(0)
     const hasStartedPlaybackRef = useRef<boolean>(false)
+    const isTransitioningRef = useRef<boolean>(false)
 
     // State
     const [currentTime, setCurrentTime] = useState(0)
@@ -263,20 +264,36 @@ export default function SessionPlayer({
                     const isInGracePeriod = timeSinceStart < 500
 
                     if (targetAudioTime < 0) {
-                        // Only pause if not in grace period - prevents initial loop
                         if (!audio.paused && !isInGracePeriod) {
                             audio.pause()
+                            isTransitioningRef.current = false
                         }
                     } else if (targetAudioTime >= audio.duration) {
-                        if (!audio.paused) audio.pause()
+                        if (!audio.paused) {
+                            audio.pause()
+                            isTransitioningRef.current = false
+                        }
                     } else {
                         if (audio.readyState < 2) return
 
-                        if (audio.paused) {
+                        // Avoid rapid-fire play/seek calls while transitioning
+                        if (isTransitioningRef.current && (audio.seeking || !audio.paused)) {
+                            // If we were transitioning and it finally started or is seeking, we can stop the "waiting" phase
+                            if (!audio.paused || audio.seeking) {
+                                // still transitioning but progress made
+                            }
+                        }
+
+                        if (audio.paused && !audio.seeking && !isTransitioningRef.current) {
                             audio.currentTime = targetAudioTime
-                            audio.play().catch(() => { })
-                        } else if (!isInGracePeriod && Math.abs(audio.currentTime - targetAudioTime) > 0.15) {
-                            // Only do aggressive sync corrections after grace period
+                            isTransitioningRef.current = true
+                            audio.play().then(() => {
+                                isTransitioningRef.current = false
+                            }).catch(() => {
+                                isTransitioningRef.current = false
+                            })
+                        } else if (!isInGracePeriod && !audio.seeking && Math.abs(audio.currentTime - targetAudioTime) > 0.25) {
+                            // Only do aggressive sync corrections after grace period and if not seeking
                             audio.currentTime = targetAudioTime
                         }
                     }

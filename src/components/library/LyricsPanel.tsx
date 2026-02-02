@@ -143,7 +143,7 @@ export default function LyricsPanel({
             </div>
 
             {/* Lyrics Content */}
-            <div className="h-[200px] overflow-y-auto p-3 space-y-1 text-right custom-scrollbar">
+            <div className="h-[200px] overflow-y-auto p-2 space-y-2 text-right custom-scrollbar">
                 {localSegments && localSegments.length > 0 ? (
                     localSegments.map((segment, i) => {
                         const isActive = currentTime >= segment.timestamp &&
@@ -152,28 +152,32 @@ export default function LyricsPanel({
 
                         if (isEditing) {
                             return (
-                                <div key={i} className="flex items-center gap-2 bg-[#1a1a1a] rounded p-1">
+                                <div key={i} className="flex items-center gap-2 bg-[#282828] rounded-md p-2 border border-[#1DB954]/50 shadow-lg animate-in slide-in-from-top-1 duration-200">
                                     <input
                                         type="text"
                                         value={editingText}
                                         onChange={(e) => setEditingText(e.target.value)}
                                         onKeyDown={(e) => handleKeyDown(e, i)}
                                         autoFocus
-                                        className="flex-1 bg-transparent border-none text-sm text-white focus:outline-none"
+                                        className="flex-1 bg-transparent border-none text-base text-white focus:outline-none"
                                         dir="rtl"
                                     />
-                                    <button
-                                        onClick={() => handleSaveEdit(i)}
-                                        className="p-1 text-[#1DB954] hover:bg-[#1DB954]/20 rounded"
-                                    >
-                                        <Save size={14} />
-                                    </button>
-                                    <button
-                                        onClick={handleCancelEdit}
-                                        className="p-1 text-red-400 hover:bg-red-400/20 rounded"
-                                    >
-                                        <X size={14} />
-                                    </button>
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => handleSaveEdit(i)}
+                                            className="p-1.5 bg-[#1DB954] text-black rounded hover:brightness-110 transition-all"
+                                            title="שמור"
+                                        >
+                                            <Save size={16} />
+                                        </button>
+                                        <button
+                                            onClick={handleCancelEdit}
+                                            className="p-1.5 bg-white/10 text-white rounded hover:bg-white/20 transition-all"
+                                            title="ביטול"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
                                 </div>
                             )
                         }
@@ -181,30 +185,43 @@ export default function LyricsPanel({
                         return (
                             <div
                                 key={i}
-                                className={`group flex items-center gap-2 w-full text-right px-2 py-1 rounded transition-all ${isActive
-                                    ? 'bg-[#1DB954]/20 text-[#1DB954] font-medium'
-                                    : 'text-white/70 hover:bg-white/5 hover:text-white'
+                                className={`group relative flex items-center justify-between w-full text-right p-2 rounded-md transition-all ${isActive
+                                    ? 'bg-[#1DB954]/10 border border-[#1DB954]/20'
+                                    : 'hover:bg-white/5 border border-transparent'
                                     }`}
                             >
                                 <button
                                     onClick={() => onSeek(segment.timestamp)}
-                                    className="flex-1 text-right"
+                                    className={`flex-1 text-right transition-colors ${isActive ? 'text-[#1DB954] font-bold' : 'text-white/80 group-hover:text-white'}`}
                                 >
-                                    <span className="text-sm leading-relaxed">{segment.text}</span>
+                                    <span className="text-base leading-relaxed">{segment.text}</span>
                                 </button>
-                                {onUpdateLyrics && (
-                                    <button
-                                        onClick={() => handleStartEdit(i, segment.text)}
-                                        className="opacity-0 group-hover:opacity-100 p-1 text-subdued hover:text-[#1DB954] transition-all"
-                                    >
-                                        <Pencil size={12} />
-                                    </button>
-                                )}
+
+                                <div className="flex items-center gap-2">
+                                    {includeTimestamps && (
+                                        <span className="text-[10px] text-subdued opacity-50 font-mono">
+                                            {formatTime(segment.timestamp)}
+                                        </span>
+                                    )}
+
+                                    {onUpdateLyrics && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleStartEdit(i, segment.text);
+                                            }}
+                                            className="p-2 text-subdued hover:text-[#1DB954] hover:bg-[#1DB954]/10 rounded-full transition-all md:opacity-0 md:group-hover:opacity-100"
+                                            title="ערוך שורה"
+                                        >
+                                            <Pencil size={14} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         )
                     })
                 ) : (
-                    <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed">
+                    <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed p-2">
                         {lyrics}
                     </p>
                 )}
