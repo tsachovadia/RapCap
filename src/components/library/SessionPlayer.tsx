@@ -10,6 +10,9 @@ import PlaybackEffectsPanel from './PlaybackEffectsPanel'
 import { usePlaybackEffects } from '../../hooks/usePlaybackEffects'
 import { ysFixWebmDuration } from '../../services/webmFix'
 import { getBeatName } from '../../data/beats'
+import { db } from '../../db/db'
+import { syncService } from '../../services/dbSync'
+import { useAuth } from '../../contexts/AuthContext'
 import { Music } from 'lucide-react'
 
 interface SessionPlayerProps {
@@ -42,11 +45,13 @@ export default function SessionPlayer({
     onTimeUpdate,
     onLoadingChange
 }: SessionPlayerProps) {
+    const { user } = useAuth()
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const youtubeRef = useRef<any>(null)
     const trackRef = useRef<HTMLDivElement>(null)
     const lastSourceKeyRef = useRef<string>('')
     const bufferingTimeoutRef = useRef<any>(null)
+    const playbackStartTimeRef = useRef<number>(0)
 
     // State
     const [currentTime, setCurrentTime] = useState(0)
@@ -252,10 +257,14 @@ export default function SessionPlayer({
                 const audio = audioRef.current
 
                 if (audio) {
+                    // Grace period: don't aggressively correct in first 500ms of playback
+                    const timeSinceStart = Date.now() - playbackStartTimeRef.current
+                    const isInGracePeriod = timeSinceStart < 500
+
                     if (targetAudioTime < 0) {
-                        if (!audio.paused) {
+                        // Only pause if not in grace period - prevents initial loop
+                        if (!audio.paused && !isInGracePeriod) {
                             audio.pause()
-                            audio.currentTime = 0
                         }
                     } else if (targetAudioTime >= audio.duration) {
                         if (!audio.paused) audio.pause()
@@ -265,7 +274,8 @@ export default function SessionPlayer({
                         if (audio.paused) {
                             audio.currentTime = targetAudioTime
                             audio.play().catch(() => { })
-                        } else if (Math.abs(audio.currentTime - targetAudioTime) > 0.15) {
+                        } else if (!isInGracePeriod && Math.abs(audio.currentTime - targetAudioTime) > 0.15) {
+                            // Only do aggressive sync corrections after grace period
                             audio.currentTime = targetAudioTime
                         }
                     }
@@ -278,6 +288,7 @@ export default function SessionPlayer({
         }
 
         if (isPlaying) {
+            playbackStartTimeRef.current = Date.now()
             if (session.beatId && youtubeRef.current) {
                 youtubeRef.current.playVideo()
             } else if (!session.beatId && audioRef.current) {
@@ -309,6 +320,32 @@ export default function SessionPlayer({
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
     }, [session.blob])
+
+    const handleUpdateLyrics = useCallback(async (
+        newLyrics: string,
+        newSegments: Array<{ timestamp: number; text: string }>
+    ) => {
+        if (!session.id) return
+
+        try {
+            // Update in Dexie
+            await db.sessions.update(session.id, {
+                'metadata.lyrics': newLyrics,
+                'metadata.lyricsSegments': newSegments
+            })
+
+            // Trigger sync if user is logged in
+            if (user?.uid) {
+                try {
+                    await syncService.syncSessions(user.uid)
+                } catch (syncErr) {
+                    console.warn('Sync failed after lyrics update:', syncErr)
+                }
+            }
+        } catch (err) {
+            console.error('Failed to update lyrics:', err)
+        }
+    }, [session.id])
 
     const handleTimelineClick = useCallback((e: React.MouseEvent) => {
         const rect = e.currentTarget.getBoundingClientRect()
@@ -419,6 +456,7 @@ export default function SessionPlayer({
                 onSeek={handleSeek}
                 onDownload={handleDownload}
                 hasBlob={!!session.blob}
+                onUpdateLyrics={handleUpdateLyrics}
             />
 
             {/* Moments (if any) */}

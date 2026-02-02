@@ -1,5 +1,5 @@
-import { Copy, Check, Download } from 'lucide-react'
-import { useState } from 'react'
+import { Copy, Check, Download, Pencil, Save, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 interface LyricsPanelProps {
     lyrics?: string
@@ -8,6 +8,7 @@ interface LyricsPanelProps {
     onSeek: (time: number) => void
     onDownload?: () => void
     hasBlob: boolean
+    onUpdateLyrics?: (newLyrics: string, newSegments: Array<{ timestamp: number; text: string }>) => void
 }
 
 export default function LyricsPanel({
@@ -16,10 +17,22 @@ export default function LyricsPanel({
     currentTime,
     onSeek,
     onDownload,
-    hasBlob
+    hasBlob,
+    onUpdateLyrics
 }: LyricsPanelProps) {
     const [isCopied, setIsCopied] = useState(false)
     const [includeTimestamps, setIncludeTimestamps] = useState(false)
+    const [isEditMode, setIsEditMode] = useState(false)
+    const [editedSegments, setEditedSegments] = useState<Array<{ timestamp: number; text: string }>>([])
+    const [editedLyrics, setEditedLyrics] = useState('')
+
+    // Sync edit state when segments/lyrics change
+    useEffect(() => {
+        if (segments && segments.length > 0) {
+            setEditedSegments([...segments])
+        }
+        setEditedLyrics(lyrics || '')
+    }, [segments, lyrics])
 
     const handleCopy = () => {
         let text = ''
@@ -40,6 +53,39 @@ export default function LyricsPanel({
         }
     }
 
+    const handleEnterEditMode = () => {
+        setEditedSegments(segments ? [...segments] : [])
+        setEditedLyrics(lyrics || '')
+        setIsEditMode(true)
+    }
+
+    const handleCancelEdit = () => {
+        setIsEditMode(false)
+        // Reset to original
+        setEditedSegments(segments ? [...segments] : [])
+        setEditedLyrics(lyrics || '')
+    }
+
+    const handleSaveEdit = () => {
+        if (onUpdateLyrics) {
+            // Build new lyrics string from segments if we have segments
+            const newLyricsText = editedSegments.length > 0
+                ? editedSegments.map(s => s.text).join(' ')
+                : editedLyrics
+
+            onUpdateLyrics(newLyricsText, editedSegments)
+        }
+        setIsEditMode(false)
+    }
+
+    const handleSegmentChange = (index: number, newText: string) => {
+        setEditedSegments(prev => {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], text: newText }
+            return updated
+        })
+    }
+
     if (!lyrics && (!segments || segments.length === 0)) {
         return (
             <div className="bg-[#121212] rounded-lg p-6 text-center">
@@ -56,67 +102,128 @@ export default function LyricsPanel({
                 <div className="flex items-center gap-2">
                     <h4 className="text-xs font-bold uppercase text-subdued">מילים</h4>
 
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${includeTimestamps ? 'bg-[#1DB954] border-[#1DB954]' : 'border-subdued'
-                            }`}>
-                            {includeTimestamps && <div className="w-2 h-2 bg-black rounded-full" />}
-                        </div>
-                        <input
-                            type="checkbox"
-                            className="hidden"
-                            checked={includeTimestamps}
-                            onChange={(e) => setIncludeTimestamps(e.target.checked)}
-                        />
-                        <span className="text-xs text-subdued">עם זמנים</span>
-                    </label>
+                    {!isEditMode && (
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${includeTimestamps ? 'bg-[#1DB954] border-[#1DB954]' : 'border-subdued'
+                                }`}>
+                                {includeTimestamps && <div className="w-2 h-2 bg-black rounded-full" />}
+                            </div>
+                            <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={includeTimestamps}
+                                onChange={(e) => setIncludeTimestamps(e.target.checked)}
+                            />
+                            <span className="text-xs text-subdued">עם זמנים</span>
+                        </label>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={handleCopy}
-                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-subdued hover:text-[#1DB954] hover:bg-white/5'
-                            }`}
-                    >
-                        {isCopied ? <Check size={12} /> : <Copy size={12} />}
-                        {isCopied ? 'הועתק!' : 'העתק'}
-                    </button>
+                    {isEditMode ? (
+                        <>
+                            <button
+                                onClick={handleCancelEdit}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                            >
+                                <X size={12} />
+                                ביטול
+                            </button>
+                            <button
+                                onClick={handleSaveEdit}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[#1DB954] bg-[#1DB954]/10 hover:bg-[#1DB954]/20 transition-colors"
+                            >
+                                <Save size={12} />
+                                שמור
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            {onUpdateLyrics && (
+                                <button
+                                    onClick={handleEnterEditMode}
+                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-subdued hover:text-[#1DB954] hover:bg-white/5 transition-colors"
+                                >
+                                    <Pencil size={12} />
+                                    עריכה
+                                </button>
+                            )}
+                            <button
+                                onClick={handleCopy}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-subdued hover:text-[#1DB954] hover:bg-white/5'
+                                    }`}
+                            >
+                                {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                                {isCopied ? 'הועתק!' : 'העתק'}
+                            </button>
 
-                    {hasBlob && onDownload && (
-                        <button
-                            onClick={onDownload}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-subdued hover:text-[#1DB954] hover:bg-white/5 transition-colors"
-                        >
-                            <Download size={12} />
-                            MP3
-                        </button>
+                            {hasBlob && onDownload && (
+                                <button
+                                    onClick={onDownload}
+                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-subdued hover:text-[#1DB954] hover:bg-white/5 transition-colors"
+                                >
+                                    <Download size={12} />
+                                    MP3
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
 
             {/* Lyrics Content */}
             <div className="h-[200px] overflow-y-auto p-3 space-y-1 text-right custom-scrollbar">
-                {segments && segments.length > 0 ? (
-                    segments.map((segment, i) => {
-                        const isActive = currentTime >= segment.timestamp &&
-                            (i === segments.length - 1 || currentTime < segments[i + 1].timestamp)
+                {isEditMode ? (
+                    // Edit Mode
+                    editedSegments && editedSegments.length > 0 ? (
+                        editedSegments.map((segment, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                                <span className="text-xs text-subdued/50 w-10 shrink-0">
+                                    {formatTime(segment.timestamp)}
+                                </span>
+                                <input
+                                    type="text"
+                                    value={segment.text}
+                                    onChange={(e) => handleSegmentChange(i, e.target.value)}
+                                    className="flex-1 bg-[#1a1a1a] border border-[#282828] rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#1DB954] transition-colors"
+                                    dir="rtl"
+                                />
+                            </div>
+                        ))
+                    ) : (
+                        <textarea
+                            value={editedLyrics}
+                            onChange={(e) => setEditedLyrics(e.target.value)}
+                            className="w-full h-full bg-[#1a1a1a] border border-[#282828] rounded p-2 text-sm text-white resize-none focus:outline-none focus:border-[#1DB954] transition-colors"
+                            dir="rtl"
+                            placeholder="הזן מילים..."
+                        />
+                    )
+                ) : (
+                    // View Mode
+                    segments && segments.length > 0 ? (
+                        segments.map((segment, i) => {
+                            const isActive = currentTime >= segment.timestamp &&
+                                (i === segments.length - 1 || currentTime < segments[i + 1].timestamp)
 
-                        return (
-                            <button
-                                key={i}
-                                onClick={() => onSeek(segment.timestamp)}
-                                className={`block w-full text-right px-2 py-1 rounded transition-all ${isActive
+                            return (
+                                <button
+                                    key={i}
+                                    onClick={() => onSeek(segment.timestamp)}
+                                    className={`block w-full text-right px-2 py-1 rounded transition-all ${isActive
                                         ? 'bg-[#1DB954]/20 text-[#1DB954] font-medium scale-[1.02]'
                                         : 'text-white/70 hover:bg-white/5 hover:text-white'
-                                    }`}
-                            >
-                                <span className="text-sm leading-relaxed">{segment.text}</span>
-                            </button>
-                        )
-                    })
-                ) : (
-                    <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed">
-                        {lyrics}
-                    </p>
+                                        }`}
+                                >
+                                    <span className="text-sm leading-relaxed">{segment.text}</span>
+                                </button>
+                            )
+                        })
+                    ) : (
+                        <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed">
+                            {lyrics}
+                        </p>
+                    )
                 )}
             </div>
         </div>
