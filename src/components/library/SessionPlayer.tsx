@@ -357,7 +357,8 @@ export default function SessionPlayer({
             // Update in Dexie
             await db.sessions.update(session.id, {
                 'metadata.lyrics': newLyrics,
-                'metadata.lyricsSegments': newSegments
+                'metadata.lyricsSegments': newSegments,
+                updatedAt: new Date()
             })
 
             // Trigger sync if user is logged in

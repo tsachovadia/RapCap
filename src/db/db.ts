@@ -19,6 +19,7 @@ export interface DbSession {
     id?: number;
     cloudId?: string;
     syncedAt?: Date;
+    updatedAt?: Date;
     title: string;
     type: 'freestyle' | 'drill' | 'thoughts' | 'training';
     subtype?: string;
@@ -46,9 +47,9 @@ export class RapCapDatabase extends Dexie {
         super('rapCapDB');
 
         // Define tables and indexes
-        this.version(2).stores({
+        this.version(3).stores({
             wordGroups: '++id, name, lastUsedAt, isSystem, cloudId',
-            sessions: '++id, title, type, createdAt, cloudId'
+            sessions: '++id, title, type, createdAt, updatedAt, cloudId'
         });
     }
 }

@@ -74,7 +74,17 @@ export default function RhymeEditorPage() {
         }
 
         try {
-            await db.wordGroups.put(groupData)
+            if (isNew) {
+                await db.wordGroups.add(groupData)
+            } else {
+                // If existing, we MUST preserve cloudId and syncedAt to prevent duplication by sync engine
+                const existing = await db.wordGroups.get(parseInt(id!))
+                if (existing) {
+                    groupData.cloudId = existing.cloudId
+                    groupData.syncedAt = existing.syncedAt
+                }
+                await db.wordGroups.put({ ...groupData, id: parseInt(id!) })
+            }
 
             // Trigger background sync (non-blocking)
             if (user) {

@@ -12,6 +12,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const syncService = {
     unsubscribes: [] as (() => void)[],
+    isSyncingWordGroups: false,
+    isSyncingSessions: false,
 
     async syncAll() {
         const user = auth.currentUser;
@@ -22,9 +24,11 @@ export const syncService = {
         // 1. Setup listeners first to catch changes while syncing
         this.setupRealtimeListeners(user.uid);
 
-        // 2. Push local changes to cloud (incremental sync is now handled by listeners)
-        await this.syncWordGroups(user.uid);
-        await this.syncSessions(user.uid);
+        // 2. Push local changes to cloud
+        await Promise.allSettled([
+            this.syncWordGroups(user.uid),
+            this.syncSessions(user.uid)
+        ]);
 
         console.log("✅ Sync Complete");
     },
@@ -40,6 +44,8 @@ export const syncService = {
 
         // Word Groups Listener
         const wgUnsub = onSnapshot(collection(firestore, 'users', uid, 'wordGroups'), async (snapshot) => {
+            if (this.isSyncingWordGroups) return; // Skip if we are currently pushing changes
+
             for (const change of snapshot.docChanges()) {
                 const cloudData = change.doc.data();
                 const cloudId = change.doc.id;
@@ -74,6 +80,8 @@ export const syncService = {
 
         // Sessions Listener
         const sUnsub = onSnapshot(collection(firestore, 'users', uid, 'sessions'), async (snapshot) => {
+            if (this.isSyncingSessions) return; // Skip if we are currently pushing changes
+
             for (const change of snapshot.docChanges()) {
                 const cloudData = change.doc.data();
                 const cloudId = change.doc.id;
@@ -91,6 +99,7 @@ export const syncService = {
                         duration: cloudData.duration,
                         date: cloudData.date instanceof Timestamp ? cloudData.date.toDate() : new Date(cloudData.date),
                         createdAt: cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt),
+                        updatedAt: cloudData.updatedAt instanceof Timestamp ? cloudData.updatedAt.toDate() : new Date(cloudData.updatedAt || cloudData.date),
                         metadata: cloudData.metadata || {},
                         content: cloudData.content,
                         cloudId: cloudId,
@@ -100,13 +109,18 @@ export const syncService = {
                     if (!localSession) {
                         await localDb.sessions.add(sessionData);
                     } else {
-                        // Merge metadata - clouds usually wins if newer
-                        const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
-                        await localDb.sessions.update(localSession.id!, {
-                            ...sessionData,
-                            metadata: updatedMetadata,
-                            syncedAt: new Date()
-                        });
+                        const cloudUpdatedTime = sessionData.updatedAt.getTime();
+                        const localUpdatedTime = (localSession.updatedAt || localSession.createdAt).getTime();
+
+                        if (cloudUpdatedTime > localUpdatedTime) {
+                            // Merge metadata - clouds usually wins if newer
+                            const updatedMetadata = { ...localSession.metadata, ...sessionData.metadata };
+                            await localDb.sessions.update(localSession.id!, {
+                                ...sessionData,
+                                metadata: updatedMetadata,
+                                syncedAt: new Date()
+                            });
+                        }
                     }
                 }
             }
@@ -132,39 +146,46 @@ export const syncService = {
     },
 
     async syncWordGroups(uid: string) {
-        const groups = await localDb.wordGroups.toArray();
+        if (this.isSyncingWordGroups) return;
+        this.isSyncingWordGroups = true;
 
-        for (const group of groups) {
-            if (group.isSystem) continue;
-            const isDirty = !group.syncedAt || group.lastUsedAt > group.syncedAt;
+        try {
+            const groups = await localDb.wordGroups.toArray();
 
-            if (isDirty) {
-                const dataToSync = {
-                    ...group,
-                    updatedAt: Timestamp.fromDate(group.lastUsedAt),
-                    userId: uid
-                };
-                delete (dataToSync as any).id;
-                delete (dataToSync as any).cloudId;
-                delete (dataToSync as any).syncedAt;
+            for (const group of groups) {
+                if (group.isSystem) continue;
+                const isDirty = !group.syncedAt || group.lastUsedAt > group.syncedAt;
 
-                try {
-                    const cleanPayload = cleanData(dataToSync);
-                    if (group.cloudId) {
-                        const docRef = doc(firestore, 'users', uid, 'wordGroups', group.cloudId);
-                        await setDoc(docRef, cleanPayload, { merge: true });
-                    } else {
-                        const colRef = collection(firestore, 'users', uid, 'wordGroups');
-                        const docRef = doc(colRef);
-                        // Update local with cloudId FIRST to prevent duplication by snapshot listener
-                        await localDb.wordGroups.update(group.id!, { cloudId: docRef.id });
-                        await setDoc(docRef, cleanPayload);
+                if (isDirty) {
+                    const dataToSync = {
+                        ...group,
+                        updatedAt: Timestamp.fromDate(group.lastUsedAt),
+                        userId: uid
+                    };
+                    delete (dataToSync as any).id;
+                    delete (dataToSync as any).cloudId;
+                    delete (dataToSync as any).syncedAt;
+
+                    try {
+                        const cleanPayload = cleanData(dataToSync);
+                        if (group.cloudId) {
+                            const docRef = doc(firestore, 'users', uid, 'wordGroups', group.cloudId);
+                            await setDoc(docRef, cleanPayload, { merge: true });
+                        } else {
+                            const colRef = collection(firestore, 'users', uid, 'wordGroups');
+                            const docRef = doc(colRef);
+                            // Update local with cloudId FIRST to prevent duplication by snapshot listener
+                            await localDb.wordGroups.update(group.id!, { cloudId: docRef.id });
+                            await setDoc(docRef, cleanPayload);
+                        }
+                        await localDb.wordGroups.update(group.id!, { syncedAt: new Date() });
+                    } catch (e) {
+                        console.error(`Failed to sync WordGroup ${group.id}:`, e);
                     }
-                    await localDb.wordGroups.update(group.id!, { syncedAt: new Date() });
-                } catch (e) {
-                    console.error(`Failed to sync WordGroup ${group.id}:`, e);
                 }
             }
+        } finally {
+            this.isSyncingWordGroups = false;
         }
     },
 
@@ -180,68 +201,81 @@ export const syncService = {
     },
 
     async syncSessions(uid: string) {
-        // Since Dexie doesn't support complex null/undefined queries well in some versions, 
-        // let's just filter the whole array for simplicity and safety
-        const allSessions = await localDb.sessions.toArray();
-        const pendingSessions = allSessions.filter(s => !s.syncedAt || !s.cloudId);
+        if (this.isSyncingSessions) return;
+        this.isSyncingSessions = true;
 
-        for (const session of pendingSessions) {
-            let cloudUrl = session.metadata?.cloudUrl;
+        try {
+            const allSessions = await localDb.sessions.toArray();
+            const pendingSessions = allSessions.filter(s => {
+                const isDirty = !s.syncedAt || !s.cloudId || (s.updatedAt && s.updatedAt > s.syncedAt);
+                return isDirty;
+            });
 
-            // 1. Upload Audio if needed
-            if (session.blob && !cloudUrl) {
+            for (const session of pendingSessions) {
+                let cloudUrl = session.metadata?.cloudUrl;
+
+                // 1. Upload Audio if needed
+                if (session.blob && !cloudUrl) {
+                    try {
+                        console.log(`📤 Uploading audio for session: ${session.title}`);
+                        const rawType = session.blob.type || '';
+                        const isMp3 = rawType.includes('mpeg') || rawType.includes('mp3');
+                        const isMp4 = rawType.includes('mp4') || rawType.includes('aac');
+                        const extension = isMp3 ? 'mp3' : (isMp4 ? 'm4a' : 'webm');
+                        const contentType = isMp3 ? 'audio/mpeg' : (isMp4 ? (rawType || 'audio/mp4') : 'audio/webm');
+
+                        const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
+                        const storageRef = ref(storage, `users/${uid}/${filename}`);
+
+                        const result = await uploadBytes(storageRef, session.blob, { contentType });
+                        cloudUrl = await getDownloadURL(result.ref);
+
+                        const newMetadata = { ...session.metadata, cloudUrl };
+                        await localDb.sessions.update(session.id!, {
+                            metadata: newMetadata,
+                            updatedAt: new Date() // Mark as updated so we sync the new URL
+                        });
+                        session.metadata = newMetadata;
+                        session.updatedAt = new Date();
+                    } catch (e) {
+                        console.error(`❌ Failed to upload audio for session ${session.id}:`, e);
+                        continue; // Stay local until next sync attempt
+                    }
+                }
+
+                const dataToSync = {
+                    title: session.title,
+                    type: session.type,
+                    subtype: session.subtype,
+                    beatId: session.beatId,
+                    duration: session.duration,
+                    date: Timestamp.fromDate(session.date || session.createdAt),
+                    createdAt: Timestamp.fromDate(session.createdAt),
+                    updatedAt: Timestamp.fromDate(session.updatedAt || session.date || session.createdAt),
+                    metadata: session.metadata || {},
+                    content: session.content,
+                    userId: uid
+                };
+
                 try {
-                    console.log(`📤 Uploading audio for session: ${session.title}`);
-                    const rawType = session.blob.type || '';
-                    const isMp3 = rawType.includes('mpeg') || rawType.includes('mp3');
-                    const isMp4 = rawType.includes('mp4') || rawType.includes('aac');
-                    const extension = isMp3 ? 'mp3' : (isMp4 ? 'm4a' : 'webm');
-                    const contentType = isMp3 ? 'audio/mpeg' : (isMp4 ? (rawType || 'audio/mp4') : 'audio/webm');
-
-                    const filename = `sessions/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
-                    const storageRef = ref(storage, `users/${uid}/${filename}`);
-
-                    const result = await uploadBytes(storageRef, session.blob, { contentType });
-                    cloudUrl = await getDownloadURL(result.ref);
-
-                    const newMetadata = { ...session.metadata, cloudUrl };
-                    await localDb.sessions.update(session.id!, { metadata: newMetadata });
-                    session.metadata = newMetadata;
+                    const cleanPayload = cleanData(dataToSync);
+                    if (session.cloudId) {
+                        const docRef = doc(firestore, 'users', uid, 'sessions', session.cloudId);
+                        await setDoc(docRef, cleanPayload, { merge: true });
+                    } else {
+                        const colRef = collection(firestore, 'users', uid, 'sessions');
+                        const docRef = doc(colRef);
+                        // Update local with cloudId FIRST to prevent duplication by snapshot listener
+                        await localDb.sessions.update(session.id!, { cloudId: docRef.id });
+                        await setDoc(docRef, cleanPayload);
+                    }
+                    await localDb.sessions.update(session.id!, { syncedAt: new Date() });
                 } catch (e) {
-                    console.error(`❌ Failed to upload audio for session ${session.id}:`, e);
-                    continue; // Stay local until next sync attempt
+                    console.error(`Failed to sync Session ${session.id}:`, e);
                 }
             }
-
-            const dataToSync = {
-                title: session.title,
-                type: session.type,
-                subtype: session.subtype,
-                beatId: session.beatId,
-                duration: session.duration,
-                date: Timestamp.fromDate(session.date || session.createdAt),
-                createdAt: Timestamp.fromDate(session.createdAt),
-                metadata: session.metadata || {},
-                content: session.content,
-                userId: uid
-            };
-
-            try {
-                const cleanPayload = cleanData(dataToSync);
-                if (session.cloudId) {
-                    const docRef = doc(firestore, 'users', uid, 'sessions', session.cloudId);
-                    await setDoc(docRef, cleanPayload, { merge: true });
-                } else {
-                    const colRef = collection(firestore, 'users', uid, 'sessions');
-                    const docRef = doc(colRef);
-                    // Update local with cloudId FIRST to prevent duplication by snapshot listener
-                    await localDb.sessions.update(session.id!, { cloudId: docRef.id });
-                    await setDoc(docRef, cleanPayload);
-                }
-                await localDb.sessions.update(session.id!, { syncedAt: new Date() });
-            } catch (e) {
-                console.error(`Failed to sync Session ${session.id}:`, e);
-            }
+        } finally {
+            this.isSyncingSessions = false;
         }
     },
 

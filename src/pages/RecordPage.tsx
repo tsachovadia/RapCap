@@ -176,6 +176,7 @@ export default function RecordPage() {
                 duration: duration,
                 createdAt: new Date(),
                 date: new Date(),
+                updatedAt: new Date(),
                 type: mode,
                 beatId: currentBeatId,
                 metadata: {
