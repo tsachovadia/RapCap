@@ -28,10 +28,15 @@ export function TranscriptPanel({
     const transcriptEndRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-    // Auto-scroll logic (keep active only if not user scrolling? simplified for now)
+    // Auto-scroll to bottom when new content arrives (manual scrollTo is more reliable than scrollIntoView on iOS)
     useEffect(() => {
-        if (segments.length > 0 || interimTranscript) {
-            transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+        if ((segments.length > 0 || interimTranscript) && scrollContainerRef.current) {
+            const container = scrollContainerRef.current;
+            // Scroll to bottom with smooth behavior
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
         }
     }, [segments, interimTranscript])
 

@@ -144,7 +144,7 @@ export default function SettingsPage() {
     }
 
     return (
-        <div className="pb-24 p-4 min-h-screen">
+        <div className="p-4">
             {/* Header */}
             <header className="flex items-center gap-4 mb-8">
                 <button

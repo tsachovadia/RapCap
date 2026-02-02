@@ -1,5 +1,5 @@
 import { Copy, Check, Download, Pencil, Save, X } from 'lucide-react'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 
 interface LyricsPanelProps {
     lyrics?: string
@@ -28,15 +28,39 @@ export default function LyricsPanel({
     const activeSegmentRef = useRef<HTMLDivElement>(null)
     const contentRef = useRef<HTMLDivElement>(null)
 
-    // Auto-scroll logic
-    useEffect(() => {
-        if (activeSegmentRef.current && contentRef.current) {
-            activeSegmentRef.current.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center'
-            })
+    // Calculate active index from currentTime (only changes when segment changes)
+    const activeIndex = useMemo(() => {
+        if (!localSegments || localSegments.length === 0) return null;
+        for (let i = localSegments.length - 1; i >= 0; i--) {
+            if (currentTime >= localSegments[i].timestamp) return i;
         }
-    }, [currentTime])
+        return null;
+    }, [currentTime, localSegments]);
+
+    // Manual scroll when active index changes (robust replacement for scrollIntoView)
+    useEffect(() => {
+        if (activeIndex === null || !contentRef.current) return;
+
+        const container = contentRef.current;
+        const activeElement = container.querySelector(`[data-index="${activeIndex}"]`) as HTMLElement;
+        if (!activeElement) return;
+
+        // Calculate positions using offsetTop (more reliable than getBoundingClientRect on iOS)
+        const containerHeight = container.clientHeight;
+        const elementTop = activeElement.offsetTop;
+        const elementHeight = activeElement.offsetHeight;
+
+        // Calculate target scroll to center element
+        const targetScrollTop = elementTop - (containerHeight / 2) + (elementHeight / 2);
+        const maxScroll = container.scrollHeight - containerHeight;
+        const clampedScrollTop = Math.max(0, Math.min(targetScrollTop, maxScroll));
+
+        // Only scroll if difference is significant (avoid jittering)
+        if (Math.abs(container.scrollTop - clampedScrollTop) < 50) return;
+
+        // Use scrollTo with smooth behavior (more reliable than scrollIntoView on iOS Safari)
+        container.scrollTo({ top: clampedScrollTop, behavior: 'smooth' });
+    }, [activeIndex]);
 
     // Sync local segments with props
     useEffect(() => {
@@ -200,6 +224,7 @@ export default function LyricsPanel({
                         return (
                             <div
                                 key={i}
+                                data-index={i}
                                 ref={isActive ? activeSegmentRef : null}
                                 className={`group relative flex items-center justify-between w-full text-right p-4 rounded-xl transition-all duration-300 ${isActive
                                     ? 'bg-[#1DB954]/20 border border-[#1DB954]/40 scale-105 shadow-[0_0_20px_rgba(29,185,84,0.1)]'
