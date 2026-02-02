@@ -140,13 +140,13 @@ export default function PlaybackEffectsPanel({
                             <input
                                 type="range"
                                 min="0.5"
-                                max="2"
-                                step="0.1"
+                                max="5"
+                                step="0.25"
                                 value={effects.gain}
                                 onChange={(e) => onUpdateEffect('gain', Number(e.target.value))}
                                 className="flex-1 h-1 accent-green-500"
                             />
-                            <span className="text-[10px] w-10 text-left text-subdued">
+                            <span className="text-[10px] w-12 text-left text-subdued">
                                 {Math.round(effects.gain * 100)}%
                             </span>
                         </div>

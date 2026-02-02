@@ -6,7 +6,7 @@ export interface PlaybackEffects {
     eqMid: number;    // dB (-12 to +12) 
     eqHigh: number;   // dB (-12 to +12)
     compressor: number; // 0-100 (controls threshold)
-    gain: number;     // 0.5 to 2.0
+    gain: number;     // 0.5 to 5.0 (up to 500% boost)
 }
 
 const DEFAULT_EFFECTS: PlaybackEffects = {

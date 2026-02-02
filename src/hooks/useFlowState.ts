@@ -67,12 +67,20 @@ export function useFlowState({
 
     const handleFinishFlow = useCallback(async () => {
         console.log('🛑 Finishing Flow...')
-        setFlowState('idle')
-        setIsTranscribing(false)
+
+        // Stop playback immediately
         if (preRollCheckRef.current) cancelAnimationFrame(preRollCheckRef.current)
         if (youtubePlayer) youtubePlayer.pauseVideo()
 
+        // Stop transcription first
+        setIsTranscribing(false)
+
+        // Stop recording (this clears the timer)
         const blob = await onStopRecording()
+
+        // Only after recording is stopped, update flow state
+        setFlowState('idle')
+
         return blob
     }, [youtubePlayer, onStopRecording, setIsTranscribing])
 
