@@ -45,20 +45,24 @@ export default function LyricsPanel({
         const activeElement = container.querySelector(`[data-index="${activeIndex}"]`) as HTMLElement;
         if (!activeElement) return;
 
-        // Calculate positions using offsetTop (more reliable than getBoundingClientRect on iOS)
+        // Use getBoundingClientRect for accurate position relative to container
+        const containerRect = container.getBoundingClientRect();
+        const elementRect = activeElement.getBoundingClientRect();
+
+        // Calculate element's position relative to the container's scroll position
+        const elementTopInContainer = elementRect.top - containerRect.top + container.scrollTop;
         const containerHeight = container.clientHeight;
-        const elementTop = activeElement.offsetTop;
         const elementHeight = activeElement.offsetHeight;
 
-        // Calculate target scroll to center element
-        const targetScrollTop = elementTop - (containerHeight / 2) + (elementHeight / 2);
+        // Calculate target scroll to center element within container
+        const targetScrollTop = elementTopInContainer - (containerHeight / 2) + (elementHeight / 2);
         const maxScroll = container.scrollHeight - containerHeight;
         const clampedScrollTop = Math.max(0, Math.min(targetScrollTop, maxScroll));
 
         // Only scroll if difference is significant (avoid jittering)
         if (Math.abs(container.scrollTop - clampedScrollTop) < 50) return;
 
-        // Use scrollTo with smooth behavior (more reliable than scrollIntoView on iOS Safari)
+        // Use scrollTo with smooth behavior
         container.scrollTo({ top: clampedScrollTop, behavior: 'smooth' });
     }, [activeIndex]);
 
@@ -181,7 +185,7 @@ export default function LyricsPanel({
             {/* Lyrics Content */}
             <div
                 ref={contentRef}
-                className="h-[300px] overflow-y-auto p-4 space-y-4 text-right custom-scrollbar scroll-smooth"
+                className="h-[300px] overflow-y-auto overscroll-contain p-4 space-y-4 text-right custom-scrollbar scroll-smooth"
             >
                 {localSegments && localSegments.length > 0 ? (
                     localSegments.map((segment, i) => {

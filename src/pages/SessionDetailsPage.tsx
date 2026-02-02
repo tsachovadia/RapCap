@@ -23,7 +23,7 @@ export default function SessionDetailsPage() {
     if (!session) return <div className="p-8 text-center text-subdued">Loading session...</div>
 
     return (
-        <div className="flex flex-col h-[calc(100vh-80px)] bg-[#121212] text-white overflow-hidden">
+        <div className="flex flex-col h-[calc(100dvh-80px)] bg-[#121212] text-white">
             {/* Header / Nav */}
             <div className="p-4 bg-[#121212] border-b border-[#282828] shrink-0 z-10">
                 <button
@@ -36,8 +36,8 @@ export default function SessionDetailsPage() {
             </div>
 
             {/* Main Content - Player */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <div className="max-w-screen-md mx-auto h-full flex flex-col p-4">
+            <div className="flex-1 overflow-y-auto overscroll-contain custom-scrollbar">
+                <div className="max-w-screen-md mx-auto p-4 pb-8">
                     <SessionPlayer
                         session={session}
                         isPlaying={isPlaying}

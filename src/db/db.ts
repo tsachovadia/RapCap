@@ -64,17 +64,24 @@ export const seedDatabase = async () => {
     const hasOldName = await db.wordGroups.where('name').equals("תרגיל ה-Story המלא").count();
     const hasOldVerbs = await db.wordGroups.where('name').startsWith("להשמיד").count();
 
-    // Also check if we DO NOT have the new 'Lignoaḥ' entry yet.
+    // Also check if we DO NOT have the new 'Lignoaḥ' or 'Migdal' entry yet.
     const hasNewLignoah = await db.wordGroups.where('name').equals("לִגְנוֹחַ").count();
+    const hasMigdal = await db.wordGroups.where('name').equals("מִגְדָּל").count();
+    const hasZman = await db.wordGroups.where('name').equals("זְמַן").count();
 
-    const shouldMigrate = hasOldName > 0 || hasOldVerbs > 0 || hasNewLignoah === 0;
+    // Check for "Av" update in Achshav group
+    const achshavGroup = await db.wordGroups.where('name').equals("עַכְשָׁיו").first();
+    const needsAvUpdate = achshavGroup && !achshavGroup.items.includes("אָב");
+
+    const shouldMigrate = hasOldName > 0 || hasOldVerbs > 0 || hasNewLignoah === 0 || hasMigdal === 0 || hasZman === 0 || !!needsAvUpdate;
 
     if (!shouldMigrate && await db.wordGroups.count() > 0) return;
 
     // Reset if migration needed
     if (shouldMigrate) {
-        console.log("Migrating database to clean 'Yarid' + 'Lignoah' structure...");
-        await db.wordGroups.clear();
+        console.log("Updating system word groups...");
+        // Safely delete only system groups to preserve user data
+        await db.wordGroups.filter(g => !!g.isSystem).delete();
     }
 
     const now = new Date();
@@ -112,9 +119,9 @@ export const seedDatabase = async () => {
             story: `זה התחיל כשהרגשתי שהמחשבות חונקות לי את **המוֹחַ**, חיפשתי בתוכי ולא מצאתי אפילו טיפת **כּוֹחַ**. הכאב היה חד, התחיל ברקות **לִקְדּוֹחַ**, שכבתי במיטה, לא הפסקתי **לִגְנוֹחַ**.
 בחוץ העולם המשיך, כלב רחוק לא הפסיק **לִנְבּוֹחַ**, הרגשתי שהדיכאון הזה מנסה אותי **לִרְצוֹחַ**, המציאות באה מולי חזיתית, ניסתה בי **לִנְגּוֹחַ**.`,
             mnemonicLogic: `(שיטת ה-4 שלבים) - חלק 1:
-המשבר (הבית הכואב):
-1. **החוויה הפנימית**: מוח, כוח, לקדוח, לגנוח.
-2. **האיום החיצוני**: לנבוח, לרצוח, לנגוח.`,
+1. המשבר (הבית הכואב):
+2. **החוויה הפנימית**: מוח, כוח, לקדוח, לגנוח.
+3. **האיום החיצוני**: לנבוח, לרצוח, לנגוח.`,
             createdAt: now,
             lastUsedAt: now,
             isSystem: true
@@ -140,6 +147,153 @@ export const seedDatabase = async () => {
 2. **ההחלטה (השינוי)**: לזנוח, לקוח, משלוח, לטרוח.
 3. **הקפיצה (האומץ)**: לצנוח, אפרוח, לפסוח, לזבוח, לבטוח, לתפוח, לפקוח, לפתוח.
 4. **הצמיחה (הסוף הטוב)**: לטפוח, ניחוח, לצמוח, לפרוח, לשכוח, לסלוח, לשמוח.`,
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "לְהִתְגַּבֵּר",
+            items: [
+                "חָבֵר", "לְהִתְחַבֵר", "מִתְחַבֵר", "הִתְחַבֵר", "לְהִתְעוֹרֵר", "מִתְעוֹרֵר",
+                "הִתְעוֹרֵר", "עִוֵּר", "לְעוֹרֵר", "מְשׁוֹרֵר", "לְהִתְחַוֵּר", "הִתְחַוֵּר",
+                "לְהִשָּׁבֵר", "נִשָּׁבֵר", "יִשָּׁבֵר", "לְהִקָּבֵר", "לְהִצָּבֵר", "לְהִגָּבֵר",
+                "הַעֲבֵר", "לְהִדָּבֵר"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "מִגְדָּל",
+            items: [
+                "מִגְדַּל", "גָּדַל", "מֻגְדָּל", "סַנְדָּל", "חַרְדָּל", "אֲגוּדָל",
+                "סְקַנְדָּל", "גּוֹזָל", "מֶחְדָּל", "וַנְדָּל", "נִבְדָּל", "דַּל",
+                "חָדַל", "פֵּדָל", "נָדָל", "בְּדָל", "מְגֻדָּל", "מְסֻנְדָּל",
+                "מְבֻדָּל", "גָּאַל"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "עֶרֶב",
+            items: [
+                "עֵרֶב", "חֶרֶב", "קֶרֶב", "גֶּרֶב", "שֶׁרֶב", "סֶרֶב",
+                "יֶקֶב", "עֵקֶב", "קֶצֶב", "רֶכֶב", "רֹטֶב", "נֶגֶב",
+                "עֶצֶב", "קֶשֶׁב", "קֹטֶב", "עֵשֶׂב", "כֶּלֶב", "סֶבֶב",
+                "צֶלֶב", "שֶׁלֶב"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        // --- New Beginner Groups (Added Feb 2026) ---
+        {
+            name: "זְמַן",
+            items: [
+                "מֻזְמָן", "מִזְּמַן", "הֻזְמַן", "מְתֻזְמָן", "מֻטְמָן", "נִטְמַן", "אַרְגְּמַן", "מְתֻרְגְּמָן",
+                "רַחְמָן", "אַלְמָן", "דֻּגְמָן", "נַקְמָן", "נַמְנְמָן", "גַּמְגְּמָן", "תַּחְמָן", "חַרְמָן",
+                "חַכְמָן", "סַמְמַן", "שְׁמַן", "רַשְׁמָן"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "גָּדוֹל",
+            items: [
+                "יָכוֹל", "לֶאֱכֹל", "חוֹל", "מוֹל", "כָּפוֹל", "מָחוֹל", "לִגְדֹּל", "לִכְלֹל",
+                "לִמְחֹל", "לִטְבֹּל", "לִגְלֹל", "לַחֲדֹל", "לִגְזֹל", "לִגְמֹל", "לִכְשֹׁל", "לַחְמֹל",
+                "נִמּוֹל", "לִכְפֹּל", "לִדְגֹּל", "גְּבֹל"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "מָקוֹם",
+            items: [
+                "שׁוּמָקוֹם", "מְקוֹם", "בִּמְקוֹם", "קוֹם", "אָדוֹם", "דָּרוֹם", "חָלוֹם", "חֹם",
+                "סָכוֹם", "לִגְרֹם", "עָקוֹם", "תְּהוֹם", "לִרְקֹם", "לִנְקֹם", "לִרְתֹּם", "דֹּם",
+                "יַחֲלֹם", "רָקוֹם", "לִסְכֹּם", "חֲסֹם"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "מָתַי",
+            items: [
+                "מִמָּתַי", "בְּנוֹתַי", "חֲלוֹמוֹתַי", "תַּחְתַּי", "פְּרָטַי", "סְרָטַי", "שְׁלָטַי", "רַבּוֹתַי",
+                "שְׁנוֹתַי", "מַבָּטַי", "שְׂפָתַי", "פֵּרוֹתַי", "מִפְרָטַי", "מִשְׁפָּטַי", "קְמָטַי", "לְבָטַי",
+                "אַמְבָּטַי", "בָּתַּי", "מַכּוֹתַי", "שְׂרָטַי"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "אֱמֶת",
+            items: [
+                "בֶּאֱמֶת", "מֵת", "צוֹמֶת", "מְשַׁעֲמֶמֶת", "נֶעֱלֶמֶת", "מִשְׁתַּמֵּט", "לְאַמֵּת", "לְקַמֵּט",
+                "צָמֵאת", "אֲדַמְדֶּמֶת", "מְרֻדֶּמֶת", "לְכַמֵּת", "הִשְׁתַּמֵּט", "לְהִשְׁתַּמֵּט", "שְׁחַמְחֶמֶת", "כְּתַמְתֶּמֶת",
+                "דּוֹמֶמֶת", "שׁוֹמֶמֶת", "מְאַמֵּת", "מְקַמֵּט"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "לֵב",
+            items: [
+                "לְהֵעָלֵב", "לְהִשְׁתַּלֵּב", "לְשַׁלֵּב", "לְהִצְטַלֵּב", "שָׁלֵו", "כִּסְלֵו", "חוֹלֵב", "לִבְלֵב",
+                "לְלַבְלֵב", "מְשַׁלֵּב", "מִשְׁתַּלֵּב", "מִצְטַלֵּב", "מְלַבְלֵב", "שִׁלֵּב", "הִשְׁתַּלֵּב", "הִצְטַלֵּב",
+                "יִשְׁתַּלֵּב", "יֵעָלֵב", "תֵּעָלֵב", "שַׁלֵּב"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "שִׁיר",
+            items: [
+                "הַעִיר", "קִיר", "יָשִׁיר", "עָשִׁיר", "מַכִּיר", "צָעִיר", "שָׁבִיר",
+                "בָּהִיר", "מְהִיר", "זָהִיר", "הִסְבִּיר", "הִזְהִיר", "הִשְׂכִּיר", "הִבְהִיר",
+                "מַזְכִּיר", "מַסְבִּיר", "מַזְהִיר", "מַבְהִיר", "מַשְׂכִּיר", "תָּמִיר"
+            ],
+            story: "",
+            mnemonicLogic: "",
+            createdAt: now,
+            lastUsedAt: now,
+            isSystem: true
+        },
+        {
+            name: "עַכְשָׁיו",
+            items: [
+                "כּוֹכָב", "מַצָּב", "זָהָב", "אָהַב", "גַּב", "חָלָב", "כְּתָב", "שָׁב",
+                "רַב", "קְרָב", "נִגְנַב", "אַרְנָב", "עֵנָב", "מוּטָב", "הִתְאַהֵב", "יָהָב",
+                "כָּזָב", "אֶצְבַּע", "צָב", "מְאַכְזֵב", "אָב", "יוֹאָב"
+            ],
+            story: "",
+            mnemonicLogic: "",
             createdAt: now,
             lastUsedAt: now,
             isSystem: true

@@ -13,7 +13,7 @@ import { getBeatName } from '../../data/beats'
 import { db, type DbSession } from '../../db/db'
 import { syncService } from '../../services/dbSync'
 import { useAuth } from '../../contexts/AuthContext'
-import { Music } from 'lucide-react'
+import { Music, Download } from 'lucide-react'
 
 interface SessionPlayerProps {
     session: DbSession
@@ -372,17 +372,38 @@ export default function SessionPlayer({
         setCurrentTime(time)
     }, [syncOffset])
 
-    const handleDownload = useCallback(() => {
-        if (!session.blob) return
-        const url = URL.createObjectURL(session.blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `recording-${new Date().toISOString()}.mp3`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-    }, [session.blob])
+    const handleDownload = useCallback(async () => {
+        const cloudUrl = session.metadata?.cloudUrl
+        const blob = session.blob
+
+        if (!blob && !cloudUrl) return
+
+        try {
+            let downloadBlob: Blob
+
+            if (blob) {
+                // Use local blob directly
+                downloadBlob = blob
+            } else if (cloudUrl) {
+                // Fetch from Firebase Storage
+                const response = await fetch(cloudUrl)
+                downloadBlob = await response.blob()
+            } else {
+                return
+            }
+
+            const url = URL.createObjectURL(downloadBlob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `recording-${new Date().toISOString()}.mp3`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } catch (err) {
+            console.error('Download failed:', err)
+        }
+    }, [session.blob, session.metadata?.cloudUrl])
 
     const handleUpdateLyrics = useCallback(async (
         newLyrics: string,
@@ -448,6 +469,17 @@ export default function SessionPlayer({
                         🎵 {getBeatName(session.beatId)}
                     </span>
                 </div>
+            )}
+
+            {/* Download Audio Button */}
+            {(session.blob || session.metadata?.cloudUrl) && (
+                <button
+                    onClick={handleDownload}
+                    className="flex items-center justify-center gap-2 w-full py-3 bg-[#1DB954]/20 hover:bg-[#1DB954]/30 text-[#1DB954] rounded-lg transition-colors border border-[#1DB954]/30"
+                >
+                    <Download size={18} />
+                    <span className="font-medium">הורד הקלטה (MP3)</span>
+                </button>
             )}
 
             {/* Volume Controls */}

@@ -39,6 +39,33 @@ export default async function handler(req, res) {
         const genAI = new GoogleGenerativeAI(API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
+        if (req.body.type === 'filter') {
+            const prompt = `
+        You are a Hebrew Language Expert.
+        I will provide a list of Hebrew words that rhyme with a specific target.
+        Your task is to select the **20 most common, useful, and simple words** from this list.
+        Ignores archaic, very biblical, or obscure words unless they are commonly known.
+        
+        The List: ${words.join(", ")}
+        
+        Output Format:
+        Return ONLY a JSON array of strings: ["word1", "word2", ...]
+        `;
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            try {
+                const data = JSON.parse(jsonString);
+                return res.status(200).json(data);
+            } catch (e) {
+                console.error("Failed to parse filter response:", text);
+                return res.status(500).json({ error: 'Failed to parse AI response' });
+            }
+        }
+
         const prompt = `
     You are a Hebrew Mnemonic Expert.
     I will provide a list of Hebrew words.

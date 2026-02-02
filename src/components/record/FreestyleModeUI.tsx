@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Link as LinkIcon, Layers } from 'lucide-react'
+import { Link as LinkIcon, Layers, Grid3X3, Maximize2, Minimize2, ChevronDown, ChevronUp } from 'lucide-react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import BeatPlayer from '../freestyle/BeatPlayer'
-import WordDropControls, { type WordDropSettings } from '../freestyle/WordDropControls'
-import { commonWordsHe, commonWordsEn } from '../../data/wordBank'
 import { PRESET_BEATS, DEFAULT_BEAT_ID } from '../../data/beats'
-import { db } from '../../db/db'
+import { db, type WordGroup } from '../../db/db'
 import type { FlowState } from '../../pages/RecordPage'
 
 
@@ -25,74 +24,40 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     const [urlInput, setUrlInput] = useState('')
     const preRollCheckRef = useRef<number | null>(null)
 
-    // Word Drop State
-    const [wordDropSettings, setWordDropSettings] = useState<WordDropSettings>({
-        enabled: false,
-        interval: 4,
-        quantity: 1,
-        mode: 'random'
-    })
-    const [currentRandomWords, setCurrentRandomWords] = useState<string[]>([])
-    const randomIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const sequenceIndexRef = useRef(0)
-    const [selectedDeckId, setSelectedDeckId] = useState<number | null>(null)
-    const [deckWords, setDeckWords] = useState<string[]>([])
+
+    // NEW: Multi-deck selection for column display
+    const [selectedDeckIds, setSelectedDeckIds] = useState<number[]>([])
+    const [columnCount, setColumnCount] = useState(4)
+    const [showDeckSelector, setShowDeckSelector] = useState(false)
+    const [viewMode, setViewMode] = useState<'normal' | 'expanded' | 'collapsed'>('normal')
+
+    // State for single-deck replacement
+    const [replacingDeckIndex, setReplacingDeckIndex] = useState<number | null>(null)
+
+    // Fetch all word groups for selection
+    const allWordGroups = useLiveQuery(() => db.wordGroups.toArray(), [])
+
+    // Get selected deck data
+    const selectedDecks = useMemo(() => {
+        if (!allWordGroups) return []
+        return selectedDeckIds
+            .map(id => allWordGroups.find(g => g.id === id))
+            .filter((g): g is WordGroup => g !== undefined)
+            .slice(0, columnCount)
+    }, [allWordGroups, selectedDeckIds, columnCount])
+
+
 
     // Auto-scroll refs
     const transcriptEndRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
-
-    // Fetch deck words
-    useEffect(() => {
-        if (selectedDeckId !== null) {
-            db.wordGroups.get(selectedDeckId).then(group => {
-                if (group) setDeckWords(group.items)
-            })
-        } else {
-            setDeckWords([])
-        }
-    }, [selectedDeckId])
 
     // Notify parent when beat changes
     useEffect(() => {
         onBeatChange?.(videoId)
     }, [videoId, onBeatChange])
 
-    const activeWordPool = useMemo(() => {
-        if (selectedDeckId !== null && deckWords.length > 0) return deckWords
-        const source = language === 'he' ? commonWordsHe : commonWordsEn
-        return source.map(w => w.word)
-    }, [language, selectedDeckId, deckWords])
 
-    // Word Drop Clock
-    useEffect(() => {
-        if (wordDropSettings.enabled && flowState === 'recording') {
-            const tick = () => {
-                const words = []
-                if (wordDropSettings.mode === 'sequential') {
-                    for (let i = 0; i < wordDropSettings.quantity; i++) {
-                        const word = activeWordPool[sequenceIndexRef.current % activeWordPool.length]
-                        words.push(word)
-                        sequenceIndexRef.current = (sequenceIndexRef.current + 1) % activeWordPool.length
-                    }
-                } else {
-                    for (let i = 0; i < wordDropSettings.quantity; i++) {
-                        words.push(activeWordPool[Math.floor(Math.random() * activeWordPool.length)])
-                    }
-                }
-                setCurrentRandomWords(words)
-                const variance = (wordDropSettings.interval * 1000) * 0.5
-                const base = wordDropSettings.interval * 1000
-                const nextInterval = base - (variance / 2) + Math.random() * variance
-                randomIntervalRef.current = setTimeout(tick, nextInterval)
-            }
-            tick()
-        } else {
-            setCurrentRandomWords([])
-            if (randomIntervalRef.current) clearTimeout(randomIntervalRef.current)
-        }
-        return () => { if (randomIntervalRef.current) clearTimeout(randomIntervalRef.current) }
-    }, [wordDropSettings.enabled, wordDropSettings.interval, wordDropSettings.quantity, wordDropSettings.mode, flowState, activeWordPool])
 
     // Pre-roll Monitoring
     useEffect(() => {
@@ -149,10 +114,10 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     return (
         <div className="flex-1 flex flex-col gap-2 min-h-0">
             {/* Upper Section: Beat & Words */}
-            <div className="flex-1 flex gap-2 min-h-0 relative">
+            <div className={`flex gap-2 min-h-0 relative transition-all duration-300 ease-in-out ${viewMode === 'expanded' ? 'flex-[4]' : viewMode === 'collapsed' ? 'flex-none h-10' : 'flex-[2]'}`}>
                 <div className="flex-1 flex flex-col gap-2 min-h-0">
                     {/* Beat Player */}
-                    <div className="h-20 flex-none bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group">
+                    <div className={`h-20 flex-none bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group ${viewMode === 'collapsed' ? 'hidden' : ''}`}>
                         <BeatPlayer
                             videoId={videoId}
                             isPlaying={flowState !== 'idle' && flowState !== 'paused'}
@@ -205,40 +170,103 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                         )}
                     </div>
 
-                    {/* Word Stage */}
-                    <div className="flex-1 bg-[#181818] rounded-xl border border-[#282828] relative min-h-0 z-0">
-                        <div className="absolute top-2 right-2 z-50">
-                            <WordDropControls
-                                settings={wordDropSettings}
-                                onUpdate={setWordDropSettings}
-                                language={language}
-                                onSelectDeck={setSelectedDeckId}
-                                selectedGroupId={selectedDeckId}
-                            />
+                    {/* Rhyme Deck Columns */}
+                    <div className="flex-1 bg-[#181818] rounded-xl border border-[#282828] relative min-h-0 z-0 overflow-hidden flex flex-col">
+                        {/* Controls Row */}
+                        <div className="flex-none flex items-center justify-between px-3 py-2 bg-[#181818]/90 backdrop-blur-sm z-50 border-b border-[#282828]">
+                            <button
+                                onClick={() => setShowDeckSelector(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-[#1DB954]/20 hover:bg-[#1DB954]/30 text-[#1DB954] rounded-lg text-xs font-medium transition-colors"
+                            >
+                                <Grid3X3 size={14} />
+                                <span>{language === 'he' ? 'בחר קבוצות' : 'Select Decks'}</span>
+                            </button>
+
+                            <select
+                                value={columnCount}
+                                onChange={(e) => setColumnCount(Number(e.target.value))}
+                                className="bg-[#282828] border border-[#3E3E3E] rounded px-2 py-1 text-xs text-white"
+                            >
+                                {[1, 2, 3, 4].map(n => (
+                                    <option key={n} value={n}>{n} {language === 'he' ? 'עמודות' : 'columns'}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 border-l border-[#3E3E3E] pl-2 ml-2">
+                                <button
+                                    onClick={() => setViewMode(v => v === 'expanded' ? 'normal' : 'expanded')}
+                                    className="p-1 hover:bg-white/10 rounded text-subdued hover:text-white transition-colors"
+                                    title={viewMode === 'expanded' ? 'Restore' : 'Maximize'}
+                                >
+                                    {viewMode === 'expanded' ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                                </button>
+                                <button
+                                    onClick={() => setViewMode(v => v === 'collapsed' ? 'normal' : 'collapsed')}
+                                    className="p-1 hover:bg-white/10 rounded text-subdued hover:text-white transition-colors"
+                                    title={viewMode === 'collapsed' ? 'Expand' : 'Collapse'}
+                                >
+                                    {viewMode === 'collapsed' ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                                </button>
+                            </div>
                         </div>
-                        <div className="absolute inset-0 overflow-y-auto flex flex-col items-center justify-start pt-14 p-4 min-h-[120px]">
-                            {wordDropSettings.enabled && flowState === 'recording' ? (
-                                <div className="flex flex-wrap justify-center gap-6 animate-in fade-in zoom-in duration-300">
-                                    {currentRandomWords.map((word: string, i: number) => (
-                                        <span key={i} className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#1DB954] to-[#1ED760]">
-                                            {word}
+
+                        {/* Columns Grid */}
+                        <div className="flex-1 relative overflow-hidden">
+                            <div className="absolute inset-0 overflow-y-auto p-2">
+                                {selectedDecks.length > 0 ? (
+                                    <div
+                                        className="grid gap-2 h-full"
+                                        style={{ gridTemplateColumns: `repeat(${Math.min(selectedDecks.length, columnCount)}, 1fr)` }}
+                                    >
+                                        {selectedDecks.map((deck, idx) => (
+                                            <div
+                                                key={deck.id}
+                                                className="bg-[#121212] rounded-lg p-1.5 flex flex-col border border-[#282828] h-full overflow-hidden relative group/deck"
+                                            >
+                                                {/* Column Header */}
+                                                <div className="text-center pb-1 border-b border-[#282828] mb-1 flex-none flex items-center justify-between px-1">
+                                                    <span className="text-[10px] font-bold text-[#1DB954] uppercase tracking-wider truncate block flex-1 text-right">
+                                                        {deck.name}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => setReplacingDeckIndex(idx)}
+                                                        className="text-subdued hover:text-white p-1 rounded-full hover:bg-white/10 opacity-0 group-hover/deck:opacity-100 transition-opacity"
+                                                        title="Replace Deck"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" /></svg>
+                                                    </button>
+                                                </div>
+                                                {/* Words List - Dense Block */}
+                                                <div className="flex-1 overflow-y-auto flex flex-wrap content-start items-start gap-1 p-0.5">
+                                                    {deck.items.map((word, wordIndex) => (
+                                                        <span
+                                                            key={wordIndex}
+                                                            className="text-lg font-bold text-white/90 leading-none tracking-tight hover:text-[#1DB954] transition-colors cursor-default select-none bg-white/5 rounded-sm px-1 py-0.5"
+                                                        >
+                                                            {word}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-full gap-4 text-subdued/30">
+                                        <Layers size={32} />
+                                        <span className="text-xs uppercase tracking-widest text-center">
+                                            {language === 'he' ? 'לחץ "בחר קבוצות" להציג חרוזים' : 'Click "Select Decks" to show rhymes'}
                                         </span>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center gap-4 text-subdued/30 mt-4">
-                                    <Layers size={24} />
-                                    <span className="text-xs uppercase tracking-widest">{language === 'he' ? 'זריקת מילה כבויה' : 'Word Drop Off'}</span>
-                                </div>
-                            )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Volume Column */}
-                <div className="w-12 bg-[#181818] rounded-xl flex flex-col items-center py-4 gap-4 border border-[#282828]">
-                    <div className="text-[10px] text-subdued font-bold uppercase tracking-wider -rotate-90 mt-2">VOL</div>
-                    <div className="flex-1 w-full flex justify-center py-2 min-h-0">
+                <div className={`w-12 bg-[#181818] rounded-xl flex flex-col items-center py-4 gap-4 border border-[#282828] relative ${viewMode === 'collapsed' ? 'hidden' : ''} h-full`}>
+                    <div className="text-[10px] text-subdued font-bold uppercase tracking-wider -rotate-90 mt-2 flex-none">VOL</div>
+                    <div className="flex-1 w-full flex justify-center py-2 min-h-0 relative">
                         <input
                             type="range"
                             min="0"
@@ -249,33 +277,136 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 setBeatVolume(val)
                                 if (youtubePlayer) youtubePlayer.setVolume(val)
                             }}
-                            className="h-full w-1 accent-[#1DB954] bg-[#3E3E3E] rounded appearance-none cursor-pointer"
-                            style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+                            className="absolute top-0 bottom-0 w-1 accent-[#1DB954] bg-[#3E3E3E] rounded appearance-none cursor-pointer"
+                            style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '100%' }}
                         />
                     </div>
                 </div>
             </div>
 
             {/* Transcript Area */}
-            <div className="flex-1 min-h-[160px] bg-[#121212]/50 rounded-xl border border-[#282828] p-4 overflow-y-auto no-scrollbar relative flex flex-col gap-4">
+            <div className={`flex-1 ${viewMode === 'expanded' ? 'min-h-[40px]' : 'min-h-[100px]'} bg-[#121212]/50 rounded-xl border border-[#282828] p-3 overflow-y-auto no-scrollbar relative flex flex-col gap-2`}>
                 <div className="max-w-2xl mx-auto pt-4 pb-16 w-full" ref={scrollContainerRef}>
                     <div className="space-y-4">
                         {segments.map((seg, i) => (
-                            <div key={i} className="flex items-start gap-4 text-white/40 hover:text-white/90 transition-colors">
-                                <span className="text-xs font-mono text-[#1DB954]/40 mt-1 shrink-0">{Math.floor(seg.timestamp / 60)}:{Math.floor(seg.timestamp % 60).toString().padStart(2, '0')}</span>
-                                <p className="text-xl md:text-2xl font-bold leading-tight">{seg.text}</p>
+                            <div key={i} className="flex items-start gap-3 text-white/40 hover:text-white/90 transition-colors">
+                                <span className="text-[10px] font-mono text-[#1DB954]/40 mt-1 shrink-0">{Math.floor(seg.timestamp / 60)}:{Math.floor(seg.timestamp % 60).toString().padStart(2, '0')}</span>
+                                <p className="text-sm font-medium leading-relaxed">{seg.text}</p>
                             </div>
                         ))}
                         {interimTranscript && (
-                            <div className="flex items-start gap-4 text-white animate-in fade-in duration-300">
-                                <div className="w-2 h-2 rounded-full bg-[#1DB954] mt-2.5 animate-pulse shrink-0" />
-                                <p className="text-xl md:text-2xl font-bold leading-tight">{interimTranscript}</p>
+                            <div className="flex items-start gap-3 text-white animate-in fade-in duration-300">
+                                <div className="w-1.5 h-1.5 rounded-full bg-[#1DB954] mt-1.5 animate-pulse shrink-0" />
+                                <p className="text-sm font-medium leading-relaxed">{interimTranscript}</p>
                             </div>
                         )}
                         <div ref={transcriptEndRef} className="h-4" />
                     </div>
                 </div>
             </div>
-        </div>
+
+            {/* Deck Selector Modal - Moved outside to prevent overflow clipping */}
+            {
+                showDeckSelector && (
+                    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="w-full max-w-md bg-[#181818] p-4 rounded-xl border border-[#333] shadow-2xl">
+                            <h3 className="text-lg font-bold text-white text-center mb-4">
+                                {language === 'he' ? 'בחר קבוצות חרוזים' : 'Select Rhyme Groups'}
+                            </h3>
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {allWordGroups?.map(group => (
+                                    <button
+                                        key={group.id}
+                                        onClick={() => {
+                                            const id = group.id!
+                                            if (selectedDeckIds.includes(id)) {
+                                                setSelectedDeckIds(selectedDeckIds.filter(i => i !== id))
+                                            } else if (selectedDeckIds.length < 4) {
+                                                setSelectedDeckIds([...selectedDeckIds, id])
+                                            }
+                                        }}
+                                        className={`w-full p-3 rounded-lg text-right flex items-center justify-between transition-colors ${selectedDeckIds.includes(group.id!)
+                                            ? 'bg-[#1DB954]/20 border border-[#1DB954]'
+                                            : 'bg-[#282828] hover:bg-[#3E3E3E] border border-transparent'
+                                            }`}
+                                    >
+                                        <span className="text-subdued text-xs">{group.items.length} מילים</span>
+                                        <span className="font-medium">{group.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setShowDeckSelector(false)}
+                                className="w-full mt-4 py-2 bg-[#1DB954] text-black font-bold rounded-lg"
+                            >
+                                {language === 'he' ? 'סיום' : 'Done'}
+                            </button>
+                        </div>
+                    </div>
+                )
+            }
+            {/* Single Deck Replacement Modal */}
+            {
+                replacingDeckIndex !== null && (
+                    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="w-full max-w-md bg-[#181818] p-4 rounded-xl border border-[#333] shadow-2xl">
+                            <div className="flex items-center justify-between mb-4">
+                                <button onClick={() => setReplacingDeckIndex(null)} className="p-2 text-subdued hover:text-white">✕</button>
+                                <h3 className="text-lg font-bold text-white text-center">
+                                    {language === 'he' ? 'החלף קבוצה' : 'Replace Deck'}
+                                </h3>
+                                <div className="w-8"></div>
+                            </div>
+
+                            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                                {allWordGroups?.map(group => {
+                                    const id = group.id!
+                                    // Status Logic:
+                                    // 1. Is this group CURRENTLY in the slot we are replacing?
+                                    const isCurrentSlot = selectedDeckIds[replacingDeckIndex] === id
+                                    // 2. Is this group ACTIVE in ANOTHER slot?
+                                    const isActiveElsewhere = selectedDeckIds.includes(id) && !isCurrentSlot
+
+                                    return (
+                                        <button
+                                            key={group.id}
+                                            onClick={() => {
+                                                if (isActiveElsewhere) return; // Optional: prevent selecting already active elsewhere? Or just allow swap? 
+                                                // User logic: "smart... understand what is active". Better to allow swap if clicked, or just select.
+                                                // Let's allow selecting any, but visually distinguish.
+                                                // Actually, standard behavior: replace the slot with new ID.
+                                                const newIds = [...selectedDeckIds]
+                                                newIds[replacingDeckIndex] = id
+                                                // If we selected something that was elsewhere, we might want to swap? 
+                                                // Simple version: just replace. The "elsewhere" one stays there (duplicate). 
+                                                // User asked "understand what is active". 
+                                                // Let's disable "active elsewhere" to avoid dupes, unless user explicitly wants dupes (unlikely).
+                                                if (!isActiveElsewhere) {
+                                                    setSelectedDeckIds(newIds)
+                                                    setReplacingDeckIndex(null)
+                                                }
+                                            }}
+                                            disabled={isActiveElsewhere}
+                                            className={`w-full p-3 rounded-lg text-right flex items-center justify-between transition-colors ${isCurrentSlot
+                                                    ? 'bg-[#1DB954] text-black border border-[#1DB954]' // Current selection
+                                                    : isActiveElsewhere
+                                                        ? 'bg-[#282828]/50 text-subdued cursor-not-allowed border border-transparent' // In use elsewhere
+                                                        : 'bg-[#282828] hover:bg-[#3E3E3E] text-white border border-transparent' // Available
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                {isActiveElsewhere && <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-subdued">{language === 'he' ? 'בשימוש' : 'In Use'}</span>}
+                                                <span className={`text-xs ${isCurrentSlot ? 'text-black/70' : 'text-subdued'}`}>{group.items.length} מילים</span>
+                                            </div>
+                                            <span className="font-medium">{group.name}</span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     )
 }
