@@ -12,6 +12,7 @@ import LibraryPage from './pages/LibraryPage'
 import DrillsPage from './pages/DrillsPage'
 import ObjectWritingPage from './pages/ObjectWritingPage'
 import RhymeChainsPage from './pages/RhymeChainsPage'
+import SessionDetailsPage from './pages/SessionDetailsPage'
 import WordAssociationPage from './pages/WordAssociationPage'
 import SettingsPage from './pages/SettingsPage'
 import FlowPatternsPage from './pages/FlowPatternsPage'
@@ -60,6 +61,9 @@ export default function App() {
               <Route path="/rhyme-library" element={<RhymeLibraryPage />} />
               <Route path="/rhyme-library/new" element={<RhymeEditorPage />} />
               <Route path="/rhyme-library/:id" element={<RhymeEditorPage />} />
+
+              {/* New Library Detail Route */}
+              <Route path="/library/:id" element={<SessionDetailsPage />} />
 
               <Route path="/settings" element={<SettingsPage />} />
 

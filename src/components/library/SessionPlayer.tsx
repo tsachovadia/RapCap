@@ -10,20 +10,13 @@ import PlaybackEffectsPanel from './PlaybackEffectsPanel'
 import { usePlaybackEffects } from '../../hooks/usePlaybackEffects'
 import { ysFixWebmDuration } from '../../services/webmFix'
 import { getBeatName } from '../../data/beats'
-import { db } from '../../db/db'
+import { db, type DbSession } from '../../db/db'
 import { syncService } from '../../services/dbSync'
 import { useAuth } from '../../contexts/AuthContext'
 import { Music } from 'lucide-react'
 
 interface SessionPlayerProps {
-    session: {
-        id?: number
-        blob?: Blob
-        beatId?: string
-        duration: number
-        syncOffset?: number
-        metadata?: any
-    }
+    session: DbSession
     isPlaying: boolean
     onPlayPause: () => void
     onClose: () => void
@@ -58,7 +51,7 @@ export default function SessionPlayer({
     // State
     const [currentTime, setCurrentTime] = useState(0)
     const [vocalVolume, setVocalVolume] = useState(1.0)
-    const [beatVolume, setBeatVolume] = useState(100)
+    const [beatVolume, setBeatVolume] = useState(0) // Default to muted per user request
     const [syncOffset, setSyncOffset] = useState(session.syncOffset || 0)
     const [audioPeaks, setAudioPeaks] = useState<number[]>([])
     const [isProcessingAudio, setIsProcessingAudio] = useState(false)
@@ -251,11 +244,48 @@ export default function SessionPlayer({
 
             if (isPlaying && youtubeRef.current?.getCurrentTime) {
                 const ytTime = youtubeRef.current.getCurrentTime()
+
+                // Final Fix: Jump over the "jitter zone".
+                // User suggested 2.5s as a stable start point.
+                if (ytTime < 1.0 && !hasJumpedRef.current) {
+                    hasJumpedRef.current = true
+                    const segments = session.metadata?.lyricsSegments
+                    // Jump to first segment or 2.5s, whichever is later to ensure stability
+                    const firstSegmentTime = (segments && segments.length > 0) ? segments[0].timestamp : 0
+
+                    // NEW: Use specific beat start time if available, otherwise fallback to heuristic
+                    const beatStartTime = session.beatStartTime || 0
+                    const jumpTarget = Math.max(2.5, firstSegmentTime, beatStartTime)
+
+
+                    try {
+                        youtubeRef.current.seekTo(jumpTarget, true)
+
+                        // Calculate audio start time based on beat start time logic
+                        let audioStart = 0
+                        if (beatStartTime > 0) {
+                            // If we have exact start time, we just play from 0 (start of recording)
+                            // because jumpTarget is where the beat SHOULD be.
+                            // The sync formula is: AudioTime = BeatTime - BeatStartTime - Offset
+                            audioStart = Math.max(0, jumpTarget - beatStartTime - (syncOffset / 1000))
+                        } else {
+                            // Legacy fallback
+                            audioStart = Math.max(0, jumpTarget - (syncOffset / 1000))
+                        }
+
+                        if (audioRef.current) audioRef.current.currentTime = audioStart
+                    } catch (err) {
+                        console.warn("⚠️ YouTube jump failed:", err)
+                    }
+                    return
+                }
+
                 setCurrentTime(ytTime)
                 onTimeUpdate?.(ytTime)
 
                 const offsetSeconds = syncOffset / 1000
-                const targetAudioTime = ytTime - offsetSeconds
+                const beatStartTime = session.beatStartTime || 0
+                const targetAudioTime = ytTime - beatStartTime - offsetSeconds
                 const audio = audioRef.current
 
                 if (audio) {
@@ -292,8 +322,8 @@ export default function SessionPlayer({
                             }).catch(() => {
                                 isTransitioningRef.current = false
                             })
-                        } else if (!isInGracePeriod && !audio.seeking && Math.abs(audio.currentTime - targetAudioTime) > 0.25) {
-                            // Only do aggressive sync corrections after grace period and if not seeking
+                        } else if (!isInGracePeriod && !audio.seeking && Math.abs(audio.currentTime - targetAudioTime) > 0.1) {
+                            // Tighter sync threshold (100ms) vs previous 250ms
                             audio.currentTime = targetAudioTime
                         }
                     }
@@ -310,6 +340,7 @@ export default function SessionPlayer({
             hasStartedPlaybackRef.current = false
 
             if (session.beatId && youtubeRef.current) {
+                youtubeRef.current.setVolume(beatVolume) // Re-ensure volume on play
                 youtubeRef.current.playVideo()
             } else if (!session.beatId && audioRef.current) {
                 // Reset to beginning on first play if near start
@@ -328,6 +359,12 @@ export default function SessionPlayer({
 
         return () => cancelAnimationFrame(animationFrame)
     }, [isPlaying, syncOffset, session.beatId, onTimeUpdate])
+
+    // Simplified initial jump to facilitate the loop fix
+    const hasJumpedRef = useRef(false)
+    useEffect(() => {
+        if (!isPlaying) hasJumpedRef.current = false
+    }, [isPlaying])
 
     const handleSeek = useCallback((time: number) => {
         if (youtubeRef.current) youtubeRef.current.seekTo(time)
@@ -496,7 +533,10 @@ export default function SessionPlayer({
                 <div className="hidden">
                     <YouTube
                         videoId={session.beatId}
-                        onReady={(e) => youtubeRef.current = e.target}
+                        onReady={(e) => {
+                            youtubeRef.current = e.target;
+                            e.target.setVolume(beatVolume);
+                        }}
                         opts={{ height: '0', width: '0', playerVars: { playsinline: 1, controls: 0 } }}
                     />
                 </div>

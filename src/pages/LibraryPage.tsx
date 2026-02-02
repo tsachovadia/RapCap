@@ -2,10 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import type { DbSession } from '../db/db'
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Search, Filter, CheckSquare, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react'
 import SessionCard from '../components/library/SessionCard'
-import SessionPlayer from '../components/library/SessionPlayer'
-import MiniPlayer from '../components/library/MiniPlayer'
 
 // -- Helper: Group by Date --
 const groupSessionsByDate = (sessions: DbSession[]) => {
@@ -34,16 +33,10 @@ const groupSessionsByDate = (sessions: DbSession[]) => {
 export default function LibraryPage() {
     // Data
     const sessions = useLiveQuery(() => db.sessions.toArray())
+    const navigate = useNavigate()
 
     // UI State
     const [searchQuery, setSearchQuery] = useState('')
-    const [activeSession, setActiveSession] = useState<DbSession | null>(null)
-    const [isPlayerExpanded, setIsPlayerExpanded] = useState(false)
-
-    // Player State
-    const [isPlaying, setIsPlaying] = useState(false)
-    const [isBuffering, setIsBuffering] = useState(false)
-    const [currentTime, setCurrentTime] = useState(0)
 
     // Multi-select State
     const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
@@ -117,10 +110,9 @@ export default function LibraryPage() {
     };
 
     const handlePlaySession = (session: DbSession) => {
-        setActiveSession(session)
-        setIsPlayerExpanded(true)
-        setIsPlaying(true)
-        setCurrentTime(0)
+        if (session.id) {
+            navigate(`/library/${session.id}`)
+        }
     };
 
     const toggleGroups = (dateKey: string) => {
@@ -242,43 +234,7 @@ export default function LibraryPage() {
                 )}
             </div>
 
-            {/* Players */}
-            {activeSession && (
-                <>
-                    {/* SessionPlayer is always rendered to maintain audio state, but hidden if minimized */}
-
-                    <div style={{ display: isPlayerExpanded ? 'block' : 'none' }} className="fixed inset-0 z-50 bg-[#121212] p-4 overflow-y-auto">
-                        <div className="max-w-screen-md mx-auto h-full flex flex-col">
-                            <button
-                                onClick={() => setIsPlayerExpanded(false)}
-                                className="self-start mb-4 p-2 text-subdued hover:text-white"
-                            >
-                                <ChevronDown size={24} />
-                            </button>
-                            <SessionPlayer
-                                session={activeSession}
-                                isPlaying={isPlaying}
-                                onPlayPause={() => setIsPlaying(!isPlaying)}
-                                onEnded={() => setIsPlaying(false)}
-                                onTimeUpdate={setCurrentTime}
-                                onLoadingChange={setIsBuffering}
-                                onClose={() => setIsPlayerExpanded(false)}
-                            />
-                        </div>
-                    </div>
-
-                    {!isPlayerExpanded && (
-                        <MiniPlayer
-                            session={activeSession}
-                            isPlaying={isPlaying}
-                            isBuffering={isBuffering}
-                            currentTime={currentTime}
-                            onPlayPause={() => setIsPlaying(!isPlaying)}
-                            onExpand={() => setIsPlayerExpanded(true)}
-                        />
-                    )}
-                </>
-            )}
+            {/* Removed internal player rendering - now handled by route */}
         </div>
     )
 }

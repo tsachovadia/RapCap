@@ -5,6 +5,7 @@ import { useTranscription } from '../hooks/useTranscription'
 import { db } from '../db/db'
 import { convertBlobToMp3 } from '../services/audioEncoder'
 import { syncService } from '../services/dbSync'
+import { getCalibratedLatency } from '../services/latencyCalibration'
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
 import FreestyleModeUI from '../components/record/FreestyleModeUI'
@@ -57,6 +58,7 @@ export default function RecordPage() {
     const [showMicSetup, setShowMicSetup] = useState(false)
     const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{ text: string, segments: any[], wordSegments: any[] } | null>(null)
     const [currentBeatId, setCurrentBeatId] = useState(DEFAULT_BEAT_ID)
+    const [capturedBeatStartTime, setCapturedBeatStartTime] = useState<number>(0)
 
     // Precise timing refs
     const recordingStartTimeRef = useRef<number>(0)
@@ -179,6 +181,8 @@ export default function RecordPage() {
                 updatedAt: new Date(),
                 type: mode,
                 beatId: currentBeatId,
+                // Apply calibrated latency offset to compensate for roundtrip audio delay
+                beatStartTime: capturedBeatStartTime + (getCalibratedLatency() / 1000),
                 metadata: {
                     moments,
                     lyrics: finalText,
@@ -210,9 +214,10 @@ export default function RecordPage() {
     }
 
     // Modal Callback for Pre-roll complete (Used by FreestyleModeUI)
-    const onPreRollComplete = async () => {
+    const onPreRollComplete = async (beatTime: number) => {
         if (flowState !== 'preroll') return
         await startRecording()
+        setCapturedBeatStartTime(beatTime) // Capture the exact time
         recordingStartTimeRef.current = Date.now()
         setFlowState('recording')
     }

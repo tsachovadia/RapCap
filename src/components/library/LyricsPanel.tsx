@@ -1,5 +1,5 @@
 import { Copy, Check, Download, Pencil, Save, X } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface LyricsPanelProps {
     lyrics?: string
@@ -25,6 +25,18 @@ export default function LyricsPanel({
     const [editingIndex, setEditingIndex] = useState<number | null>(null)
     const [editingText, setEditingText] = useState('')
     const [localSegments, setLocalSegments] = useState<Array<{ timestamp: number; text: string }>>([])
+    const activeSegmentRef = useRef<HTMLDivElement>(null)
+    const contentRef = useRef<HTMLDivElement>(null)
+
+    // Auto-scroll logic
+    useEffect(() => {
+        if (activeSegmentRef.current && contentRef.current) {
+            activeSegmentRef.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            })
+        }
+    }, [currentTime])
 
     // Sync local segments with props
     useEffect(() => {
@@ -143,7 +155,10 @@ export default function LyricsPanel({
             </div>
 
             {/* Lyrics Content */}
-            <div className="h-[200px] overflow-y-auto p-2 space-y-2 text-right custom-scrollbar">
+            <div
+                ref={contentRef}
+                className="h-[300px] overflow-y-auto p-4 space-y-4 text-right custom-scrollbar scroll-smooth"
+            >
                 {localSegments && localSegments.length > 0 ? (
                     localSegments.map((segment, i) => {
                         const isActive = currentTime >= segment.timestamp &&
@@ -185,16 +200,17 @@ export default function LyricsPanel({
                         return (
                             <div
                                 key={i}
-                                className={`group relative flex items-center justify-between w-full text-right p-2 rounded-md transition-all ${isActive
-                                    ? 'bg-[#1DB954]/10 border border-[#1DB954]/20'
-                                    : 'hover:bg-white/5 border border-transparent'
+                                ref={isActive ? activeSegmentRef : null}
+                                className={`group relative flex items-center justify-between w-full text-right p-4 rounded-xl transition-all duration-300 ${isActive
+                                    ? 'bg-[#1DB954]/20 border border-[#1DB954]/40 scale-105 shadow-[0_0_20px_rgba(29,185,84,0.1)]'
+                                    : 'hover:bg-white/5 border border-transparent scale-100'
                                     }`}
                             >
                                 <button
                                     onClick={() => onSeek(segment.timestamp)}
-                                    className={`flex-1 text-right transition-colors ${isActive ? 'text-[#1DB954] font-bold' : 'text-white/80 group-hover:text-white'}`}
+                                    className={`flex-1 text-right transition-colors ${isActive ? 'text-[#1DB954] font-black' : 'text-white/80 group-hover:text-white'}`}
                                 >
-                                    <span className="text-base leading-relaxed">{segment.text}</span>
+                                    <span className="text-2xl md:text-3xl leading-tight font-bold tracking-tight">{segment.text}</span>
                                 </button>
 
                                 <div className="flex items-center gap-2">

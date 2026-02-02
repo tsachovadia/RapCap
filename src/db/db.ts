@@ -24,6 +24,7 @@ export interface DbSession {
     type: 'freestyle' | 'drill' | 'thoughts' | 'training';
     subtype?: string;
     beatId?: string;
+    beatStartTime?: number; // The timestamp in the beat where recording started
     duration: number;
     date: Date;
     createdAt: Date;

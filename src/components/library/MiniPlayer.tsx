@@ -1,13 +1,8 @@
 import { Play, Pause, Loader2 } from 'lucide-react'
+import type { DbSession } from '../../db/db'
 
 interface MiniPlayerProps {
-    session: {
-        id?: number
-        title: string
-        duration: number
-        beatId?: string
-        type?: string
-    } | null
+    session: DbSession | null
     isPlaying: boolean
     isBuffering: boolean
     currentTime: number

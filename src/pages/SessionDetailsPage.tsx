@@ -1,0 +1,54 @@
+import { useParams, useNavigate } from 'react-router-dom'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '../db/db'
+import SessionPlayer from '../components/library/SessionPlayer'
+import { ChevronLeft } from 'lucide-react'
+import { useState } from 'react'
+
+export default function SessionDetailsPage() {
+    const { id } = useParams<{ id: string }>()
+    const navigate = useNavigate()
+
+    // UI State for player (kept local to page now)
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [_isBuffering, setIsBuffering] = useState(false)
+
+    // Fetch session
+    const session = useLiveQuery(
+        () => id ? db.sessions.get(parseInt(id, 10)) : undefined,
+        [id]
+    )
+
+    if (!id) return <div className="p-8 text-center text-subdued">Invalid Session ID</div>
+    if (!session) return <div className="p-8 text-center text-subdued">Loading session...</div>
+
+    return (
+        <div className="flex flex-col h-[calc(100vh-80px)] bg-[#121212] text-white overflow-hidden">
+            {/* Header / Nav */}
+            <div className="p-4 bg-[#121212] border-b border-[#282828] shrink-0 z-10">
+                <button
+                    onClick={() => navigate('/library')}
+                    className="flex items-center gap-2 text-subdued hover:text-white transition-colors"
+                >
+                    <ChevronLeft size={20} />
+                    <span className="font-bold text-sm">Back to Library</span>
+                </button>
+            </div>
+
+            {/* Main Content - Player */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="max-w-screen-md mx-auto h-full flex flex-col p-4">
+                    <SessionPlayer
+                        session={session}
+                        isPlaying={isPlaying}
+                        onPlayPause={() => setIsPlaying(!isPlaying)}
+                        onEnded={() => setIsPlaying(false)}
+                        onLoadingChange={setIsBuffering}
+                        // Close implies navigating back in this context, or we can hide the close button inside Player
+                        onClose={() => navigate('/library')}
+                    />
+                </div>
+            </div>
+        </div>
+    )
+}
