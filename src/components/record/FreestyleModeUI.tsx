@@ -4,6 +4,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import { PRESET_BEATS, DEFAULT_BEAT_ID } from '../../data/beats'
 import { db } from '../../db/db'
+import { syncService } from '../../services/dbSync'
+import { useAuth } from '../../contexts/AuthContext'
 import type { FlowState } from '../../pages/RecordPage'
 
 
@@ -17,6 +19,7 @@ interface Props {
 }
 
 export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onBeatChange, segments, interimTranscript }: Props) {
+    const { user } = useAuth()
     const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)
     const [beatVolume, setBeatVolume] = useState(50)
     const [youtubePlayer, setYoutubePlayer] = useState<any>(null)
@@ -34,7 +37,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
     // Draft / Edit Mode State
     const [editingDeckIndices, setEditingDeckIndices] = useState<number[]>([])
-    const [drafts, setDrafts] = useState<{ [key: number]: { name: string, words: string[], inputValue: string } }>({})
+    const [drafts, setDrafts] = useState<{ [key: number]: { name: string, words: string[], inputValue: string, originalId?: number } }>({})
 
     // Fetch all word groups for selection
     const allWordGroups = useLiveQuery(() => db.wordGroups.toArray(), [])
@@ -122,10 +125,18 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
             setEditingDeckIndices(prev => prev.filter(i => i !== index))
         } else {
             // Start edit
+            const deckId = selectedDeckIds[index]
+            const existingDeck = allWordGroups?.find(g => g.id === deckId)
+
             if (!drafts[index]) {
                 setDrafts(prev => ({
                     ...prev,
-                    [index]: { name: "New Group", words: [], inputValue: "" }
+                    [index]: {
+                        name: existingDeck ? existingDeck.name : "New Group",
+                        words: existingDeck ? [...existingDeck.items] : [],
+                        inputValue: "",
+                        originalId: existingDeck?.id
+                    }
                 }))
             }
             setEditingDeckIndices(prev => [...prev, index])
@@ -174,19 +185,45 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
         }
 
         try {
-            const newId = await db.wordGroups.add({
-                name: draft.name,
-                items: draft.words,
-                category: 'custom',
-                language: 'he', // Default to Hebrew for now, or detect
-                createdAt: new Date(),
-                lastUsedAt: new Date()
-            })
+            let finalId: number;
 
-            // Update selection to show new group
+            // Check if we can update existing
+            const existing = draft.originalId ? await db.wordGroups.get(draft.originalId) : null
+
+            // Only update if it exists AND it's a custom group (to avoid overwriting system seeds if that's a concern, though user might want to fork system seeds)
+            // For now, let's assume we can update if it's 'custom' OR if the user intends to edit their own stuff.
+            // Safest: Update if existing.category === 'custom'. Else create new.
+            const shouldUpdate = existing && existing.category === 'custom'
+
+            if (shouldUpdate && draft.originalId) {
+                await db.wordGroups.update(draft.originalId, {
+                    name: draft.name,
+                    items: draft.words,
+                    lastUsedAt: new Date()
+                })
+                finalId = draft.originalId
+            } else {
+                // Create New
+                const newId = await db.wordGroups.add({
+                    name: draft.name,
+                    items: draft.words,
+                    category: 'custom',
+                    language: 'he', // Default to Hebrew for now, or detect
+                    createdAt: new Date(),
+                    lastUsedAt: new Date()
+                })
+                finalId = newId as number
+            }
+
+            // Update selection to show group (if ID changed, or forced refresh)
             const newIds = [...selectedDeckIds]
-            newIds[index] = newId as number
+            newIds[index] = finalId
             setSelectedDeckIds(newIds)
+
+            // Trigger background sync
+            if (user) {
+                syncService.syncWordGroups(user.uid).catch(console.error)
+            }
 
             // Exit edit mode
             setEditingDeckIndices(prev => prev.filter(i => i !== index))

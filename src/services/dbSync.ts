@@ -50,6 +50,11 @@ export const syncService = {
                 const cloudData = change.doc.data();
                 const cloudId = change.doc.id;
 
+                // Skip local writes to prevent immediate echoing/duplication
+                if (snapshot.metadata.hasPendingWrites) {
+                    continue;
+                }
+
                 if (change.type === 'removed') {
                     console.log(`🗑️ Cloud deleted WordGroup: ${cloudId}`);
                     await localDb.wordGroups.where('cloudId').equals(cloudId).delete();
@@ -57,11 +62,25 @@ export const syncService = {
                     // 1. Try lookup by cloudId
                     let localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
 
-                    // 2. Fallback: Fingerprint lookup (same name and roughly same createdAt)
+                    // 2. Fallback: Lookup by Name (if name is unique enough for this user)
+                    // This prevents creating a duplicate if the cloudId wasn't saved locally yet
+                    if (!localGroup) {
+                        const existingByName = await localDb.wordGroups.where('name').equals(cloudData.name).first();
+
+                        // If we find a group with same name and NO cloudId, assume it's the one we just created/synced
+                        if (existingByName && !existingByName.cloudId) {
+                            console.log(`🔗 Linked local WordGroup ${existingByName.id} to cloudId ${cloudId} by Name match`);
+                            localGroup = existingByName;
+                            await localDb.wordGroups.update(localGroup.id!, { cloudId: cloudId });
+                        }
+                    }
+
+                    // 3. Fallback: Fingerprint lookup (createdAt + name) - Legacy check
                     if (!localGroup && cloudData.createdAt) {
                         const cloudCreated = cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt);
                         const allGroups = await localDb.wordGroups.where('name').equals(cloudData.name).toArray();
-                        localGroup = allGroups.find(g => Math.abs(g.createdAt.getTime() - cloudCreated.getTime()) < 2000); // 2s tolerance
+                        // Find one that doesn't have a cloudId yet?
+                        localGroup = allGroups.find(g => !g.cloudId && Math.abs(g.createdAt.getTime() - cloudCreated.getTime()) < 5000); // 5s tolerance
 
                         if (localGroup) {
                             console.log(`🔗 Linked local WordGroup ${localGroup.id} to cloudId ${cloudId} via fingerprint`);
@@ -80,7 +99,9 @@ export const syncService = {
                         lastUsedAt: cloudData.updatedAt instanceof Timestamp ? cloudData.updatedAt.toDate() : new Date(cloudData.updatedAt || cloudData.lastUsedAt),
                         isSystem: cloudData.isSystem || false,
                         cloudId: cloudId,
-                        syncedAt: new Date()
+                        syncedAt: new Date(),
+                        category: cloudData.category,
+                        language: cloudData.language
                     };
 
                     if (!localGroup) {
