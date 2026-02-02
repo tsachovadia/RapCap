@@ -2,7 +2,7 @@
  * BeatSection - Beat player with selector modal and volume control
  */
 import { useState } from 'react'
-import { Link as LinkIcon } from 'lucide-react'
+import { Link as LinkIcon, ExternalLink } from 'lucide-react'
 import BeatPlayer from './BeatPlayer'
 import type { FlowState } from '../../hooks/useFlowState'
 import { PRESET_BEATS } from '../../data/beats'
@@ -32,6 +32,10 @@ export function BeatSection({
 }: BeatSectionProps) {
     const [showUrlInput, setShowUrlInput] = useState(false)
     const [urlInput, setUrlInput] = useState('')
+
+    // Get current beat info
+    const currentBeat = PRESET_BEATS.find(b => b.id === videoId);
+    const beatTitle = currentBeat ? currentBeat.name : (language === 'he' ? 'ביט מותאם אישית' : 'Custom Beat');
 
     const extractYoutubeId = (url: string) => {
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
@@ -76,14 +80,27 @@ export function BeatSection({
                     )}
                 </div>
 
+                {/* Beat Title Overlay (Clickable) */}
+                <div className="absolute bottom-2 left-2 right-16 z-20">
+                    <a
+                        href={`https://www.youtube.com/watch?v=${videoId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs font-bold text-white hover:underline truncate max-w-full drop-shadow-md bg-black/50 px-2 py-1 rounded-lg w-fit transition-colors hover:bg-black/70 hover:text-[#1DB954]"
+                    >
+                        {beatTitle}
+                        <ExternalLink size={10} />
+                    </a>
+                </div>
+
                 {/* Change Beat Button */}
                 {!showUrlInput && (
                     <button
                         onClick={() => setShowUrlInput(true)}
-                        className="absolute top-2 right-2 bg-black/80 hover:bg-[#1DB954] hover:text-black text-white px-3 py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all flex items-center gap-2 z-20 border border-white/10 backdrop-blur-sm"
+                        className="absolute top-2 right-2 bg-black/80 hover:bg-[#1DB954] hover:text-black text-white px-3 py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all flex items-center gap-2 z-20 border border-white/10 backdrop-blur-sm shadow-lg"
                     >
                         <LinkIcon size={12} />
-                        <span>{language === 'he' ? 'שנה ביט' : 'Change'}</span>
+                        <span>{language === 'he' ? 'שנה' : 'Change'}</span>
                     </button>
                 )}
             </div>

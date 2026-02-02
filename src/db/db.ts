@@ -15,7 +15,7 @@ export interface WordGroup {
     syncedAt?: Date;
 }
 
-export interface Session {
+export interface DbSession {
     id?: number;
     cloudId?: string;
     syncedAt?: Date;
@@ -40,7 +40,7 @@ export interface Session {
 
 export class RapCapDatabase extends Dexie {
     wordGroups!: Table<WordGroup>;
-    sessions!: Table<Session>; // Typed sessions table
+    sessions!: Table<DbSession>; // Typed sessions table
 
     constructor() {
         super('rapCapDB');

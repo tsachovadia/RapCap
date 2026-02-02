@@ -1,142 +1,142 @@
-import { Play, Pause, Loader2, FileText, Cloud, Music } from 'lucide-react'
-import SessionActionsMenu from './SessionActionsMenu'
-import type { Session } from '../../db/db'
-import { getBeatName } from '../../data/beats'
+import { Clock, Play, Trash2, CheckSquare, Square } from 'lucide-react';
+import type { DbSession } from '../../db/db';
+
+// Force HMR update
+
+// Helper to generate a display title
+const generateSessionTitle = (session: DbSession): string => {
+    if (session.title && session.title !== 'Untitled Session') return session.title;
+    const date = new Date(session.createdAt);
+    return `Flow ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+};
 
 interface SessionCardProps {
-    session: Session
-    isActive: boolean
-    isPlaying: boolean
-    isBuffering: boolean
-    isTranscribing: boolean
-    onPlayPause: () => void
-    onExpand: () => void
-    onTranscribe: () => void
-    onDownload: () => void
-    onCopyLyrics: () => void
-    onDelete: () => void
+    session: DbSession;
+    onPlay: (session: DbSession) => void;
+    onDelete: (id: string) => void;
+
+    // New Props for Multi-select
+    isMultiSelectMode: boolean;
+    isSelected: boolean;
+    onToggleSelect: (id: string) => void;
 }
 
 export default function SessionCard({
     session,
-    isActive,
-    isPlaying,
-    isBuffering,
-    isTranscribing,
-    onPlayPause,
-    onExpand,
-    onTranscribe,
-    onDownload,
-    onCopyLyrics,
-    onDelete
+    onPlay,
+    onDelete,
+    isMultiSelectMode,
+    isSelected,
+    onToggleSelect
 }: SessionCardProps) {
-    const hasLyrics = !!session.metadata?.lyrics
-    const isCloudSynced = !!session.metadata?.cloudUrl
-    const hasBlob = !!session.blob
-    const beatName = getBeatName(session.beatId)
+
+    const handleClick = (e: React.MouseEvent) => {
+        // If in multi-select mode, clicking anywhere toggles selection
+        if (isMultiSelectMode) {
+            e.stopPropagation();
+            if (session.id !== undefined) {
+                onToggleSelect(String(session.id));
+            }
+            return;
+        }
+
+        // Otherwise open the player
+        onPlay(session);
+    };
+
+    const handleDeleteClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (session.id !== undefined) {
+            onDelete(String(session.id));
+        }
+    };
+
+    // Format helpers
+    const fmt = (s: number) => {
+        const min = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        return `${min}:${sec.toString().padStart(2, '0')}`;
+    };
+
+    // Extract a preview snippet from the transcript
+    const transcript = session.metadata?.lyrics || '';
+    const previewText = transcript
+        ? transcript.slice(0, 60) + (transcript.length > 60 ? '...' : '')
+        : 'Thinking...';
 
     return (
         <div
-            className={`rounded-xl p-3 transition-all duration-200 ${isActive
-                ? 'bg-gradient-to-r from-[#1DB954]/20 to-[#282828] ring-1 ring-[#1DB954]/30'
-                : 'bg-[#181818] hover:bg-[#282828]'
-                }`}
+            onClick={handleClick}
+            className={`
+                relative bg-[#181818] rounded-xl p-4 border transition-all cursor-pointer group hover:bg-[#222]
+                ${isSelected
+                    ? 'border-[#1DB954] bg-[#1DB954]/10'
+                    : 'border-[#282828] hover:border-[#383838]'
+                }
+            `}
         >
-            <div className="flex items-center gap-3">
-                {/* Play Button / Thumbnail */}
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        onPlayPause()
-                    }}
-                    className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 ${isActive && isPlaying
-                        ? 'bg-[#1DB954] hover:bg-[#1ed760] scale-105'
-                        : 'bg-[#3E3E3E] hover:bg-[#4E4E4E]'
-                        }`}
-                >
-                    {isActive && isBuffering ? (
-                        <Loader2 className="text-[#1DB954] animate-spin" size={20} />
-                    ) : isActive && isPlaying ? (
-                        <Pause className="text-black" size={20} fill="currentColor" />
-                    ) : (
-                        <Play className={`${isActive ? 'text-[#1DB954]' : 'text-white'} ml-0.5`} size={20} fill="currentColor" />
-                    )}
-                </button>
+            <div className="flex items-center gap-4">
 
-                {/* Session Info - Clickable to expand */}
-                <div
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={onExpand}
-                >
-                    <div className="flex items-center gap-2">
-                        <p className={`text-sm font-semibold truncate ${isActive ? 'text-[#1DB954]' : 'text-white'
-                            }`}>
-                            {session.title}
-                        </p>
-
-                        {/* Status Icons */}
-                        <div className="flex items-center gap-1 shrink-0">
-                            {hasLyrics && (
-                                <span title="יש מילים">
-                                    <FileText size={12} className="text-purple-400" />
-                                </span>
-                            )}
-                            {isCloudSynced && (
-                                <span title="מסונכרן לענן">
-                                    <Cloud size={12} className="text-blue-400" />
-                                </span>
-                            )}
+                {/* 1. Multi-select Checkbox OR Leading Play Icon (Visual only) */}
+                <div className="shrink-0">
+                    {isMultiSelectMode ? (
+                        <div className={`
+                            w-10 h-10 rounded-full flex items-center justify-center transition-colors
+                            ${isSelected ? 'text-[#1DB954]' : 'text-subdued'}
+                        `}>
+                            {isSelected ? <CheckSquare size={24} /> : <Square size={24} />}
                         </div>
+                    ) : (
+                        <div className="w-10 h-10 rounded-full bg-[#282828] flex items-center justify-center text-[#1DB954] group-hover:scale-110 transition-transform">
+                            <Play size={16} fill="currentColor" />
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. Content Info */}
+                <div className="flex-1 min-w-0 flex flex-col gap-1">
+                    {/* Title & Beat */}
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-white truncate text-base">
+                            {generateSessionTitle(session)}
+                        </h3>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-subdued mt-0.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${session.beatId
-                            ? 'bg-[#1DB954]/20 text-[#1DB954]'
-                            : 'bg-purple-500/20 text-purple-400'
-                            }`}>
-                            {session.beatId ? 'Freestyle' : 'Drill'}
+                    {/* Transcript Preview */}
+                    <p className="text-sm text-subdued truncate opacity-80">
+                        {previewText}
+                    </p>
+
+                    {/* Metadata Row */}
+                    <div className="flex items-center gap-3 text-xs text-subdued mt-1">
+                        <span className="flex items-center gap-1">
+                            <Clock size={10} />
+                            {fmt(session.duration)}
                         </span>
-                        {beatName && (
+                        <span>•</span>
+                        <span>{new Date(session.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        {session.beatId && (
                             <>
                                 <span>•</span>
-                                <span className="flex items-center gap-1 text-[#1DB954]/80">
-                                    <Music size={10} />
-                                    {beatName}
+                                <span className="max-w-[100px] truncate" title={session.beatId}>
+                                    {session.beatId}
                                 </span>
                             </>
                         )}
-                        <span>•</span>
-                        <span>{formatDuration(session.duration)}</span>
-                        <span>•</span>
-                        <span>{formatDate(session.createdAt)}</span>
                     </div>
                 </div>
 
-                {/* Actions Menu */}
-                <SessionActionsMenu
-                    onTranscribe={onTranscribe}
-                    onDownload={onDownload}
-                    onCopyLyrics={onCopyLyrics}
-                    onDelete={onDelete}
-                    isTranscribing={isTranscribing}
-                    hasLyrics={hasLyrics}
-                    hasBlob={hasBlob || isCloudSynced}
-                />
+                {/* 3. Actions (Delete) - Only show if NOT in multiselect to avoid clutter/accidents */}
+                {!isMultiSelectMode && (
+                    <button
+                        onClick={handleDeleteClick}
+                        className="p-2 text-subdued hover:text-red-500 hover:bg-white/5 rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        title="Delete Session"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                )}
             </div>
         </div>
-    )
-}
-
-function formatDuration(seconds: number) {
-    if (!seconds || isNaN(seconds)) return '0:00'
-    const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-}
-
-function formatDate(date: Date) {
-    return new Date(date).toLocaleDateString('he-IL', {
-        day: 'numeric',
-        month: 'short'
-    })
+    );
 }

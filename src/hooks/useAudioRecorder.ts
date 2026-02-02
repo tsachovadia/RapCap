@@ -34,27 +34,8 @@ export function useAudioRecorder() {
         }
     });
 
-    // Vocal Effects State
-    const [vocalEffects, setVocalEffects] = useState(() => {
-        try {
-            const saved = localStorage.getItem('rapcap_vocal_effects');
-            return saved ? JSON.parse(saved) : {
-                enabled: false,
-                eqLow: 0,   // dB
-                eqHigh: 0,  // dB
-                compressor: 0, // 0-100% (Threshold logic)
-                gain: 1.0   // output gain
-            };
-        } catch (e) {
-            return {
-                enabled: false,
-                eqLow: 0,
-                eqHigh: 0,
-                compressor: 0,
-                gain: 1.0
-            };
-        }
-    });
+    // NOTE: EQ and Compression removed from recording pipeline
+    // These effects are now applied during playback in SessionPlayer
 
     const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
     const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
@@ -69,10 +50,6 @@ export function useAudioRecorder() {
         localStorage.setItem('rapcap_audio_constraints', JSON.stringify(audioConstraints));
     }, [audioConstraints]);
 
-    useEffect(() => {
-        localStorage.setItem('rapcap_vocal_effects', JSON.stringify(vocalEffects));
-    }, [vocalEffects]);
-
     const mediaRecorder = useRef<MediaRecorder | null>(null);
     const audioChunks = useRef<Blob[]>([]);
     const timerRef = useRef<number | null>(null);
@@ -85,9 +62,7 @@ export function useAudioRecorder() {
     const sourceNode = useRef<MediaStreamAudioSourceNode | null>(null);
     const analyserNode = useRef<AnalyserNode | null>(null);
 
-    const eqLowNode = useRef<BiquadFilterNode | null>(null);
-    const eqHighNode = useRef<BiquadFilterNode | null>(null);
-    const compressorNode = useRef<DynamicsCompressorNode | null>(null);
+    // Simplified audio graph - no EQ/compression during recording
     const gainNode = useRef<GainNode | null>(null);
     const destNode = useRef<MediaStreamAudioDestinationNode | null>(null);
 
@@ -104,21 +79,7 @@ export function useAudioRecorder() {
         }
     }, []);
 
-    // Apply Effect Settings to Nodes
-    useEffect(() => {
-        if (!audioContext.current) return;
-        const ctx = audioContext.current;
-        const now = ctx.currentTime;
-
-        if (eqLowNode.current) eqLowNode.current.gain.setTargetAtTime(vocalEffects.enabled ? vocalEffects.eqLow : 0, now, 0.1);
-        if (eqHighNode.current) eqHighNode.current.gain.setTargetAtTime(vocalEffects.enabled ? vocalEffects.eqHigh : 0, now, 0.1);
-        if (compressorNode.current) {
-            const threshold = vocalEffects.enabled ? -10 - (vocalEffects.compressor * 0.4) : 0;
-            compressorNode.current.threshold.setTargetAtTime(vocalEffects.enabled ? threshold : 0, now, 0.1);
-            compressorNode.current.ratio.setTargetAtTime(vocalEffects.enabled ? 12 : 1, now, 0.1);
-        }
-        if (gainNode.current) gainNode.current.gain.setTargetAtTime(vocalEffects.enabled ? vocalEffects.gain : 1.0, now, 0.1);
-    }, [vocalEffects]);
+    // NOTE: Effect settings now applied in playback, not during recording
 
     const initializeStream = useCallback(async (overrideConstraints?: MediaTrackConstraints) => {
         setPermissionError(null);
@@ -184,10 +145,10 @@ export function useAudioRecorder() {
             const needsRebuild = !sourceNode.current || sourceNode.current.context !== ctx;
 
             if (needsRebuild) {
-                console.log("🏗️ Building/Rebuilding Audio Graph...");
+                console.log("🏗️ Building/Rebuilding Simplified Audio Graph...");
 
                 // Cleanup old nodes if they exist (though context mismatch usually means they're dead)
-                [sourceNode, eqLowNode, eqHighNode, compressorNode, gainNode, analyserNode, destNode].forEach(ref => {
+                [sourceNode, gainNode, analyserNode, destNode].forEach(ref => {
                     if (ref.current) {
                         try { ref.current.disconnect(); } catch (e) { }
                         ref.current = null;
@@ -195,31 +156,18 @@ export function useAudioRecorder() {
                 });
 
                 sourceNode.current = ctx.createMediaStreamSource(stream);
-                eqLowNode.current = ctx.createBiquadFilter();
-                eqLowNode.current.type = 'lowshelf';
-                eqLowNode.current.frequency.value = 200;
 
-                eqHighNode.current = ctx.createBiquadFilter();
-                eqHighNode.current.type = 'highshelf';
-                eqHighNode.current.frequency.value = 3000;
-
-                compressorNode.current = ctx.createDynamicsCompressor();
-                compressorNode.current.knee.value = 40;
-                compressorNode.current.attack.value = 0.003;
-                compressorNode.current.release.value = 0.25;
-
+                // Simple gain node for monitoring level (no EQ/compression - that's now in playback)
                 gainNode.current = ctx.createGain();
+                gainNode.current.gain.value = 1.0;
 
                 analyserNode.current = ctx.createAnalyser();
                 analyserNode.current.fftSize = 256;
 
                 destNode.current = ctx.createMediaStreamDestination();
 
-                // Build Chain
-                sourceNode.current.connect(eqLowNode.current);
-                eqLowNode.current.connect(eqHighNode.current);
-                eqHighNode.current.connect(compressorNode.current);
-                compressorNode.current.connect(gainNode.current);
+                // Simplified Chain: Source → Gain → Analyser + Destination
+                sourceNode.current.connect(gainNode.current);
                 gainNode.current.connect(analyserNode.current);
                 gainNode.current.connect(destNode.current);
 
@@ -229,12 +177,12 @@ export function useAudioRecorder() {
                 gainNode.current.connect(silentGain);
                 silentGain.connect(ctx.destination);
 
-                console.log("✅ Audio Graph Built, Routed, and Connected to Destination (Silent)");
+                console.log("✅ Simplified Audio Graph Built (Source → Gain → Analyser/Dest)");
             } else {
                 // Just update source if we are reusing nodes but have a new stream
                 sourceNode.current?.disconnect();
                 sourceNode.current = ctx.createMediaStreamSource(stream);
-                sourceNode.current.connect(eqLowNode.current!);
+                sourceNode.current.connect(gainNode.current!);
                 console.log("🎤 Stream updated on existing graph");
             }
 
@@ -501,8 +449,7 @@ export function useAudioRecorder() {
         getAudioInputDevices: getDevices,
         audioConstraints,
         setAudioConstraints: updateAudioConstraints,
-        vocalEffects,
-        setVocalEffects,
+        // NOTE: vocalEffects removed - effects now applied in playback
         audioAnalyser: analyserNode.current, // Expose
         resetAudioState, // New Function
         ...recorderState

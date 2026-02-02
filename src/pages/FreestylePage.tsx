@@ -21,6 +21,7 @@ import { TranscriptPanel } from '../components/freestyle/TranscriptPanel'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
+// NOTE: AudioEffectsControls moved to playback in SessionPlayer
 
 // Services & Data
 import { db } from '../db/db'
@@ -49,6 +50,7 @@ export default function FreestylePage() {
         selectedOutputId,
         setOutputId,
         resetAudioState
+        // NOTE: vocalEffects removed - effects now applied in playback
     } = useAudioRecorder()
 
     // Language State
@@ -197,6 +199,13 @@ export default function FreestylePage() {
         }
     }
 
+    // [NEW] Seek Handler
+    const handleSeek = (time: number) => {
+        if (youtubePlayer && youtubePlayer.seekTo) {
+            youtubePlayer.seekTo(time, true);
+        }
+    };
+
     return (
         <div
             className="h-[100dvh] flex flex-col relative overflow-hidden bg-black text-white px-4"
@@ -248,6 +257,8 @@ export default function FreestylePage() {
                     language={language}
                 />
 
+                {/* NOTE: Audio Effects Controls moved to SessionPlayer in library for post-processing */}
+
                 {/* Recording Controls */}
                 <div className="relative flex-none py-2 flex flex-col items-center gap-2 z-30">
                     {moments.length > 0 && (
@@ -282,6 +293,7 @@ export default function FreestylePage() {
                     segments={segments}
                     interimTranscript={interimTranscript}
                     language={language}
+                    onSeek={handleSeek} // [NEW]
                 />
             </div>
 

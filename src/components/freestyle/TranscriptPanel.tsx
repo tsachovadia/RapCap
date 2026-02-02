@@ -1,5 +1,5 @@
 /**
- * TranscriptPanel - Live transcript display with auto-scroll
+ * TranscriptPanel - Live transcript display with auto-scroll and clickable timestamps
  */
 import { useRef, useEffect } from 'react'
 import { Mic } from 'lucide-react'
@@ -15,18 +15,20 @@ interface TranscriptPanelProps {
     segments: Segment[]
     interimTranscript: string
     language: 'he' | 'en'
+    onSeek?: (time: number) => void // New Prop
 }
 
 export function TranscriptPanel({
     flowState,
     segments,
     interimTranscript,
-    language
+    language,
+    onSeek
 }: TranscriptPanelProps) {
     const transcriptEndRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-    // Auto-scroll logic
+    // Auto-scroll logic (keep active only if not user scrolling? simplified for now)
     useEffect(() => {
         if (segments.length > 0 || interimTranscript) {
             transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -35,6 +37,10 @@ export function TranscriptPanel({
 
     const isRecording = flowState === 'recording'
     const hasContent = segments.length > 0 || interimTranscript
+
+    const handleTimestampClick = (time: number) => {
+        if (onSeek) onSeek(time);
+    }
 
     return (
         <div
@@ -77,9 +83,13 @@ export function TranscriptPanel({
                                 className="group text-xl md:text-2xl font-bold transition-all duration-700 text-white/60 hover:text-white"
                             >
                                 <div className="flex items-start gap-3">
-                                    <span className="text-[10px] font-mono text-[#1DB954]/50 mt-1.5 shrink-0 tabular-nums">
-                                        {Math.floor(seg.timestamp / 60)}:{Math.floor(seg.timestamp % 60).toString().padStart(2, '0')}
-                                    </span>
+                                    <button
+                                        onClick={() => handleTimestampClick(seg.timestamp)}
+                                        className="text-[10px] font-mono text-[#1DB954]/50 hover:text-[#1DB954] mt-1.5 shrink-0 tabular-nums cursor-pointer select-none transition-colors border border-transparent hover:border-[#1DB954]/20 rounded px-1"
+                                        title="Seek to time"
+                                    >
+                                        [{Math.floor(seg.timestamp / 60)}:{Math.floor(seg.timestamp % 60).toString().padStart(2, '0')}]
+                                    </button>
                                     <p className="leading-tight tracking-tight">{seg.text}</p>
                                 </div>
                             </div>

@@ -6,6 +6,8 @@ import SyncControls from './SyncControls'
 import WaveformTrack from './WaveformTrack'
 import LyricsPanel from './LyricsPanel'
 import MomentsList from './MomentsList'
+import PlaybackEffectsPanel from './PlaybackEffectsPanel'
+import { usePlaybackEffects } from '../../hooks/usePlaybackEffects'
 import { ysFixWebmDuration } from '../../services/webmFix'
 import { getBeatName } from '../../data/beats'
 import { Music } from 'lucide-react'
@@ -54,6 +56,15 @@ export default function SessionPlayer({
     const [audioPeaks, setAudioPeaks] = useState<number[]>([])
     const [isProcessingAudio, setIsProcessingAudio] = useState(false)
     const [isBuffering, setIsBuffering] = useState(false)
+
+    // Playback Effects Hook
+    const {
+        effects,
+        updateEffect,
+        toggleEnabled,
+        resetEffects,
+        connect: connectEffects
+    } = usePlaybackEffects(audioRef.current)
 
     // Setup Audio & Decode Peaks
     useEffect(() => {
@@ -217,6 +228,13 @@ export default function SessionPlayer({
         if (youtubeRef.current?.setVolume) youtubeRef.current.setVolume(beatVolume)
     }, [beatVolume])
 
+    // Connect playback effects when isPlaying becomes true
+    useEffect(() => {
+        if (isPlaying && audioRef.current) {
+            connectEffects()
+        }
+    }, [isPlaying, connectEffects])
+
     // Master Clock & Sync
     useEffect(() => {
         let animationFrame: number
@@ -338,6 +356,14 @@ export default function SessionPlayer({
                 onVocalVolumeChange={setVocalVolume}
                 onBeatVolumeChange={setBeatVolume}
                 hasBeat={!!session.beatId}
+            />
+
+            {/* Playback Effects Panel */}
+            <PlaybackEffectsPanel
+                effects={effects}
+                onUpdateEffect={updateEffect}
+                onToggleEnabled={toggleEnabled}
+                onReset={resetEffects}
             />
 
             {/* Waveform */}
