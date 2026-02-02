@@ -35,6 +35,7 @@ export function usePlaybackEffects(audioElement: HTMLAudioElement | null) {
     // Audio nodes
     const audioContextRef = useRef<AudioContext | null>(null);
     const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+    const connectedElementRef = useRef<HTMLAudioElement | null>(null);
     const eqLowRef = useRef<BiquadFilterNode | null>(null);
     const eqMidRef = useRef<BiquadFilterNode | null>(null);
     const eqHighRef = useRef<BiquadFilterNode | null>(null);
@@ -52,18 +53,40 @@ export function usePlaybackEffects(audioElement: HTMLAudioElement | null) {
         if (!audioElement || isConnectedRef.current) return;
 
         try {
-            // Create or resume audio context
-            if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+            // Check if we need a new context (first time or different audio element)
+            const needsNewContext = !audioContextRef.current ||
+                audioContextRef.current.state === 'closed' ||
+                connectedElementRef.current !== audioElement;
+
+            if (needsNewContext) {
+                // Clean up old source if it exists
+                if (sourceNodeRef.current) {
+                    try {
+                        sourceNodeRef.current.disconnect();
+                    } catch { /* ignore */ }
+                    sourceNodeRef.current = null;
+                }
+
+                // Close old context
+                if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+                    try {
+                        audioContextRef.current.close();
+                    } catch { /* ignore */ }
+                }
+
+                // Create new context
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+                connectedElementRef.current = audioElement;
             }
 
             const ctx = audioContextRef.current;
+            if (!ctx) return;
 
             if (ctx.state === 'suspended') {
                 ctx.resume();
             }
 
-            // Create source from audio element (can only be created once per element)
+            // Create source from audio element (only create once per element per context)
             if (!sourceNodeRef.current) {
                 sourceNodeRef.current = ctx.createMediaElementSource(audioElement);
             }
