@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link as LinkIcon, Layers, Grid3X3, Maximize2, Minimize2, ChevronDown, ChevronUp, Save, X, Plus } from 'lucide-react'
+import { Layers, Grid3X3, Maximize2, Minimize2, ChevronDown, ChevronUp, Save, X, Plus, Sparkles, Video, VideoOff, StickyNote, Flag, Music } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import { PRESET_BEATS, DEFAULT_BEAT_ID } from '../../data/beats'
@@ -7,6 +7,7 @@ import { db } from '../../db/db'
 import { syncService } from '../../services/dbSync'
 import { useAuth } from '../../contexts/AuthContext'
 import type { FlowState } from '../../pages/RecordPage'
+import DictaModal from '../shared/DictaModal'
 
 
 interface Props {
@@ -16,9 +17,12 @@ interface Props {
     onBeatChange?: (beatId: string) => void
     segments: any[]
     interimTranscript: string
+    notes?: string
+    setNotes?: (notes: string) => void
+    onSaveMoment?: () => void
 }
 
-export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onBeatChange, segments, interimTranscript }: Props) {
+export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onBeatChange, segments, interimTranscript, notes, setNotes, onSaveMoment }: Props) {
     const { user } = useAuth()
     const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)
     const [beatVolume, setBeatVolume] = useState(50)
@@ -40,13 +44,100 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     const [showNewGroupModal, setShowNewGroupModal] = useState(false)
     const [newGroupDraft, setNewGroupDraft] = useState({ name: '', keywords: '', words: [] as string[] })
 
+    // Dicta State
+    const [isDictaOpen, setIsDictaOpen] = useState(false)
+    const [activeDictaDeckIdx, setActiveDictaDeckIdx] = useState<number | null>(null)
+
+    // Zen Mode Features
+    const [showVideoInZen, setShowVideoInZen] = useState(true)
+    const [showNotesInZen, setShowNotesInZen] = useState(false)
+
+
+    // Fetch all word groups for selection
+    const allWordGroups = useLiveQuery(() => db.wordGroups.toArray(), [])
+
+    // NEW: Fetch custom beats
+    const customBeats = useLiveQuery(() => db.beats?.toArray() || [], []) || []
+    const allBeats = [...PRESET_BEATS, ...customBeats.map(b => ({ id: b.videoId, name: b.name }))]
 
     // Draft / Edit Mode State
     const [editingDeckIndices, setEditingDeckIndices] = useState<number[]>([])
     const [drafts, setDrafts] = useState<{ [key: number]: { name: string, words: string[], inputValue: string, originalId?: number } }>({})
 
-    // Fetch all word groups for selection
-    const allWordGroups = useLiveQuery(() => db.wordGroups.toArray(), [])
+    // NEW: Real-time Highlighting State
+    const [highlightedWords, setHighlightedWords] = useState<Set<string>>(new Set())
+
+    useEffect(() => {
+        // Reset highlights when starting a new flow
+        if (flowState === 'idle') {
+            setHighlightedWords(new Set())
+        }
+    }, [flowState])
+
+    useEffect(() => {
+        if ((!segments.length && !interimTranscript) || !allWordGroups) return
+
+        // Normalization Helper: Lowercase, No Niqqud, No Punctuation
+        const normalize = (str: string) => str.toLowerCase()
+            .replace(/[\u0591-\u05C7]/g, "") // Remove Hebrew Niqqud
+            .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "") // Remove Punctuation
+            .trim()
+
+        // Prepare Transcript Words "Soup"
+        const fullText = segments.map(s => s.text).join(' ') + ' ' + interimTranscript
+        const transcriptWords = fullText.split(/\s+/).map(normalize).filter(Boolean)
+        const transcriptSet = new Set(transcriptWords)
+
+        // Hebrew Prefixes
+        const HEBREW_PREFIXES = ['ה', 'ו', 'ב', 'ל', 'מ', 'ש', 'כ', 'וה', 'מה', 'שה', 'וכ', 'וב', 'ול']
+
+        let hasChanges = false
+        const newHighlights = new Set(highlightedWords)
+
+        // Check visible decks
+        selectedDeckIds.forEach(deckId => {
+            const deck = allWordGroups.find(g => g.id === deckId)
+            if (!deck) return
+
+            deck.items.forEach(item => {
+                if (newHighlights.has(item)) return
+
+                const normItem = normalize(item)
+                if (!normItem) return
+
+                let isMatch = false
+
+                // 1. Direct Match
+                if (transcriptSet.has(normItem)) {
+                    isMatch = true
+                }
+
+                // 2. Hebrew Prefix Match
+                if (!isMatch && language === 'he') {
+                    // Check if any word in the transcript ends with our target word
+                    isMatch = transcriptWords.some(tw => {
+                        if (tw === normItem) return true
+                        if (tw.endsWith(normItem)) {
+                            const prefix = tw.slice(0, -normItem.length)
+                            return HEBREW_PREFIXES.includes(prefix)
+                        }
+                        return false
+                    })
+                }
+
+                if (isMatch) {
+                    newHighlights.add(item)
+                    hasChanges = true
+                }
+            })
+        })
+
+        if (hasChanges) {
+            setHighlightedWords(newHighlights)
+        }
+    }, [segments, interimTranscript, selectedDeckIds, allWordGroups, language])
+
+
 
     // Initialize random decks on mount or when data loads
     useEffect(() => {
@@ -111,12 +202,38 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
         return (match && match[2].length === 11) ? match[2] : null
     }
 
-    const handleUrlSubmit = () => {
+    const handleUrlSubmit = async () => {
         const id = extractYoutubeId(urlInput)
         if (id) {
             setVideoId(id)
             setShowUrlInput(false)
             setUrlInput('')
+
+            // Auto-save beat if new
+            try {
+                const existing = await db.beats.where('videoId').equals(id).first()
+                if (!existing) {
+                    let beatTitle = 'Imported Beat'
+
+                    // Fetch title from oEmbed
+                    try {
+                        const response = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`)
+                        const data = await response.json()
+                        if (data.title) beatTitle = data.title
+                    } catch (err) {
+                        console.warn('Failed to fetch YouTube title', err)
+                    }
+
+                    await db.beats.add({
+                        name: beatTitle,
+                        videoId: id,
+                        category: 'custom',
+                        createdAt: new Date()
+                    })
+                }
+            } catch (e) {
+                console.error("Failed to auto-save beat", e)
+            }
         } else {
             alert(language === 'he' ? 'קישור לא תקין' : 'Invalid YouTube URL')
         }
@@ -291,18 +408,108 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
         }
     }
 
+    const handleOpenDicta = (idx: number) => {
+        setActiveDictaDeckIdx(idx)
+        setIsDictaOpen(true)
+    }
+
+    const handleDictaAddWords = (words: string[]) => {
+        if (activeDictaDeckIdx === null) return
+
+        // Ensure we are in edit mode for this deck
+        if (!editingDeckIndices.includes(activeDictaDeckIdx)) {
+            toggleEditMode(activeDictaDeckIdx)
+        }
+
+        // Add words to draft
+        setDrafts(prev => {
+            const currentDraft = prev[activeDictaDeckIdx] || {
+                name: "New Group",
+                words: allWordGroups?.find(g => g.id === selectedDeckIds[activeDictaDeckIdx])?.items || [],
+                inputValue: "",
+                originalId: selectedDeckIds[activeDictaDeckIdx]
+            }
+
+            return {
+                ...prev,
+                [activeDictaDeckIdx]: {
+                    ...currentDraft,
+                    words: [...currentDraft.words, ...words]
+                }
+            }
+        })
+    }
+
     return (
         <div className={`h-full flex flex-col ${viewMode === 'expanded' ? 'absolute inset-0 z-50 bg-[#121212]' : ''}`}>
 
             {/* Header / Controls */}
             <div className={`flex items-center justify-between p-2 border-b border-[#282828] ${viewMode === 'collapsed' ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-2">
+                    {/* Capture Moment Button (Visible in normal mode) */}
+                    {onSaveMoment && flowState === 'recording' && (
+                        <button
+                            onClick={onSaveMoment}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/50 rounded-lg text-sm transition-colors animate-pulse"
+                        >
+                            <Flag size={14} />
+                            <span>Moment</span>
+                        </button>
+                    )}
+
+                    {/* BEAT SELECTOR (Moved from overlay) */}
+                    <div className="flex items-center gap-1 bg-[#282828] rounded-lg p-0.5 border border-[#333]">
+                        {showUrlInput ? (
+                            <div className="flex items-center gap-1 px-1">
+                                <input
+                                    type="text"
+                                    value={urlInput}
+                                    onChange={(e) => setUrlInput(e.target.value)}
+                                    placeholder="Paste URL..."
+                                    className="bg-transparent border-none outline-none text-white text-xs w-32 font-mono"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
+                                    autoFocus
+                                />
+                                <button
+                                    onClick={handleUrlSubmit}
+                                    className="text-[#1DB954] hover:text-white font-bold px-1"
+                                >
+                                    OK
+                                </button>
+                                <button onClick={() => setShowUrlInput(false)}>
+                                    <X size={14} className="text-subdued" />
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="relative">
+                                    <select
+                                        className="bg-transparent text-white text-xs font-bold px-2 py-1 outline-none cursor-pointer appearance-none pr-6 max-w-[150px] truncate"
+                                        onChange={(e) => {
+                                            if (e.target.value === 'paste_new') {
+                                                setShowUrlInput(true)
+                                            } else {
+                                                setVideoId(e.target.value)
+                                            }
+                                        }}
+                                        value={videoId}
+                                    >
+                                        <option value="" disabled>Select Beat...</option>
+                                        {allBeats.map(beat => <option key={beat.id} value={beat.id}>{beat.name}</option>)}
+                                        <option value="paste_new" className="text-[#1DB954] font-bold">+ Import from YouTube</option>
+                                    </select>
+                                    <Music size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-subdued pointer-events-none" />
+                                </div>
+                            </>
+                        )}
+                    </div>
+
                     <button
                         onClick={() => setShowDeckSelector(true)}
                         className="flex items-center gap-2 px-3 py-1.5 bg-[#282828] hover:bg-[#3E3E3E] rounded-lg text-sm text-subdued hover:text-white transition-colors"
                     >
                         <Layers size={14} />
-                        <span>{language === 'he' ? 'בחר חרוזים' : 'Select Rhymes'}</span>
+                        <span>{language === 'he' ? 'בחר חרוזים' : 'Rhymes'}</span>
                     </button>
 
                     {/* NEW GROUP BUTTON */}
@@ -322,7 +529,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                         className={`p-1.5 rounded-lg transition-colors flex items-center gap-2 ${isZenMode ? 'bg-purple-500/20 text-purple-400' : 'text-subdued hover:bg-[#282828]'}`}
                         title="Zen Mode"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+                        {isZenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         <span className="text-xs font-bold">ZEN</span>
                     </button>
 
@@ -360,7 +567,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                 <div className={`flex gap-2 min-h-0 relative transition-all duration-300 ${viewMode === 'expanded' ? 'flex-[3]' : 'flex-1'}`}>
                     <div className="flex-1 flex flex-col gap-2 min-h-0">
 
-                        {/* Beat Player - Restored! */}
+                        {/* Beat Player - Cleaned Up */}
                         <div className={`h-20 flex-none bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group ${viewMode === 'collapsed' ? 'hidden' : ''}`}>
                             <BeatPlayer
                                 videoId={videoId}
@@ -368,60 +575,6 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 volume={beatVolume}
                                 onReady={(player) => setYoutubePlayer(player)}
                             />
-
-                            {/* Beat Selector Overlay */}
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                                {showUrlInput ? (
-                                    <div className="flex items-center gap-2 bg-[#181818] p-2 rounded-lg border border-[#333]">
-                                        <input
-                                            type="text"
-                                            value={urlInput}
-                                            onChange={(e) => setUrlInput(e.target.value)}
-                                            placeholder="Paste YouTube URL..."
-                                            className="bg-transparent border-none outline-none text-white text-sm w-48 font-mono"
-                                            onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
-                                        />
-                                        <button
-                                            onClick={handleUrlSubmit}
-                                            className="text-[#1DB954] hover:text-white font-bold"
-                                        >
-                                            OK
-                                        </button>
-                                        <button onClick={() => setShowUrlInput(false)}>
-                                            <X size={16} className="text-subdued" />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <select
-                                            className="bg-[#181818] text-white text-sm border border-[#333] rounded-lg px-3 py-1.5 outline-none focus:border-[#1DB954] cursor-pointer appearance-none text-center font-bold min-w-[120px]"
-                                            onChange={(e) => {
-                                                if (e.target.value) {
-                                                    setVideoId(e.target.value);
-                                                    setShowUrlInput(false);
-                                                }
-                                            }}
-                                            value={videoId}
-                                        >
-                                            <option value="" disabled>{language === 'he' ? 'בחר מהרשימה...' : 'Choose from list...'}</option>
-                                            {PRESET_BEATS.map(beat => <option key={beat.id} value={beat.id}>{beat.name}</option>)}
-
-                                            {/* Fix: Show active custom beat if it's not in presets */}
-                                            {!PRESET_BEATS.some(b => b.id === videoId) && videoId !== '' && (
-                                                <option value={videoId}>{language === 'he' ? 'ביט מותאם אישית' : 'Custom Beat'}</option>
-                                            )}
-                                        </select>
-
-                                        <button
-                                            onClick={() => setShowUrlInput(true)}
-                                            className="p-2 bg-[#282828] hover:bg-[#3E3E3E] rounded-full text-subdued hover:text-white transition-colors"
-                                            title="Paste YouTube Link"
-                                        >
-                                            <LinkIcon size={16} />
-                                        </button>
-                                    </>
-                                )}
-                            </div>
                         </div>
 
                         {/* Rhyme Deck Columns Grid */}
@@ -430,6 +583,42 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                             ${columnCount === 3 ? 'grid-cols-3' : 'grid-cols-4'}
                             ${isZenMode ? 'fixed inset-x-0 top-0 bottom-[30%] z-50 bg-black/95 p-8 backdrop-blur-sm' : ''}
                         `}>
+                            {/* Zen Mode Type Controls */}
+                            {isZenMode && (
+                                <div className="absolute top-4 left-4 z-[60] flex gap-2">
+                                    <button
+                                        onClick={() => setShowVideoInZen(!showVideoInZen)}
+                                        className={`p-2 rounded-full transition-colors ${showVideoInZen ? 'text-[#1DB954] bg-[#1DB954]/10' : 'text-subdued bg-[#282828]'}`}
+                                        title="Toggle Video"
+                                    >
+                                        {showVideoInZen ? <Video size={20} /> : <VideoOff size={20} />}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowNotesInZen(!showNotesInZen)}
+                                        className={`p-2 rounded-full transition-colors ${showNotesInZen ? 'text-[#1DB954] bg-[#1DB954]/10' : 'text-subdued bg-[#282828]'}`}
+                                        title="Toggle Notes"
+                                    >
+                                        <StickyNote size={20} />
+                                    </button>
+                                    {onSaveMoment && flowState === 'recording' && (
+                                        <button
+                                            onClick={onSaveMoment}
+                                            className="p-2 rounded-full bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30 transition-colors animate-pulse"
+                                            title="Capture Moment"
+                                        >
+                                            <Flag size={20} />
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setShowNewGroupModal(true)}
+                                        className="p-2 rounded-full bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 transition-colors"
+                                        title="Create New Group"
+                                    >
+                                        <Plus size={20} />
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Close Zen Mode Button */}
                             {isZenMode && (
                                 <button
@@ -438,6 +627,19 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 >
                                     <Minimize2 size={24} className="text-white" />
                                 </button>
+                            )}
+
+                            {/* Zen Mode Notes Overlay */}
+                            {isZenMode && showNotesInZen && (
+                                <div className="absolute top-16 right-4 bottom-4 w-80 bg-[#181818] border border-[#333] rounded-xl p-4 shadow-2xl z-[55] flex flex-col">
+                                    <h3 className="text-sm font-bold text-subdued mb-2">Session Notes</h3>
+                                    <textarea
+                                        className="flex-1 bg-[#121212] rounded p-2 text-white text-sm outline-none resize-none focus:ring-1 ring-[#1DB954]"
+                                        placeholder="Write your thoughts..."
+                                        value={notes || ''}
+                                        onChange={e => setNotes?.(e.target.value)}
+                                    />
+                                </div>
                             )}
 
                             {Array.from({ length: columnCount }).map((_, idx) => {
@@ -515,6 +717,13 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                             </span>
                                             <div className="flex items-center gap-0.5 opacity-0 group-hover/deck:opacity-100 transition-opacity">
                                                 <button
+                                                    onClick={() => handleOpenDicta(idx)}
+                                                    className="text-purple-400 hover:text-purple-300 p-1 rounded-full hover:bg-purple-500/20"
+                                                    title="Find Rhymes (Dicta)"
+                                                >
+                                                    <Sparkles size={12} />
+                                                </button>
+                                                <button
                                                     onClick={() => toggleEditMode(idx)}
                                                     className="text-subdued hover:text-white p-1 rounded-full hover:bg-white/10"
                                                     title="Create/Edit"
@@ -532,14 +741,23 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                         </div>
                                         {/* Words List */}
                                         <div className="flex-1 overflow-y-auto flex flex-wrap content-start items-start gap-1 p-0.5 custom-scrollbar">
-                                            {deck.items.map((word, wordIndex) => (
-                                                <span
-                                                    key={wordIndex}
-                                                    className={`leading-none tracking-tight hover:text-[#1DB954] transition-colors cursor-default select-none bg-white/5 rounded-sm px-1 py-0.5 ${isZenMode ? 'text-2xl font-bold p-2 m-1' : 'text-lg font-bold text-white/90'}`}
-                                                >
-                                                    {word}
-                                                </span>
-                                            ))}
+                                            {deck.items.map((word, wordIndex) => {
+                                                const isUsed = highlightedWords.has(word)
+                                                return (
+                                                    <span
+                                                        key={wordIndex}
+                                                        className={`leading-none tracking-tight transition-all duration-300 cursor-default select-none rounded-sm px-1 py-0.5
+                                                            ${isZenMode ? 'text-2xl font-bold p-2 m-1' : 'text-lg font-bold'}
+                                                            ${isUsed
+                                                                ? 'text-[#1DB954] bg-[#1DB954]/10 scale-105 shadow-[0_0_10px_rgba(29,185,84,0.3)]'
+                                                                : 'text-white/90 hover:text-[#1DB954] bg-white/5'
+                                                            }
+                                                        `}
+                                                    >
+                                                        {word}
+                                                    </span>
+                                                )
+                                            })}
                                         </div>
                                     </div>
                                 )
@@ -684,6 +902,14 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                     </div>
                 </div>
             )}
+            {/* Dicta Modal */}
+            <DictaModal
+                isOpen={isDictaOpen}
+                onClose={() => setIsDictaOpen(false)}
+                onAddWords={(words) => {
+                    handleDictaAddWords(words)
+                }}
+            />
         </div>
     )
 }

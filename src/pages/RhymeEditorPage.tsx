@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db, type WordGroup } from '../db/db'
-import { Plus, Trash2, Save, ArrowLeft, Sparkles, Loader2, Search, X, Check, ChevronDown, ChevronUp, Mic } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Sparkles, Loader2, ChevronDown, ChevronUp, Mic, ExternalLink } from 'lucide-react'
 import { generateMnemonicStory } from '../services/gemini'
-import { getVocalization, getRhymes } from '../services/dicta'
 import { syncService } from '../services/dbSync'
 import { useAuth } from '../contexts/AuthContext'
+import DictaModal from '../components/shared/DictaModal'
+import { useLiveQuery } from 'dexie-react-hooks'
 
 export default function RhymeEditorPage() {
     const { id } = useParams()
@@ -30,15 +31,24 @@ export default function RhymeEditorPage() {
     const [isStoryOpen, setIsStoryOpen] = useState(false)
     const [isLogicOpen, setIsLogicOpen] = useState(false)
     const [isBarsOpen, setIsBarsOpen] = useState(false)
+    const [isContextOpen, setIsContextOpen] = useState(true) // Default to open if there are links
     const [isSaving, setIsSaving] = useState(false)
     const [createdAt, setCreatedAt] = useState<Date | null>(null)
 
     // Dicta Modal State
     const [isDictaOpen, setIsDictaOpen] = useState(false)
-    const [dictaQuery, setDictaQuery] = useState('')
-    const [dictaResults, setDictaResults] = useState<string[]>([])
-    const [selectedDictaWords, setSelectedDictaWords] = useState<string[]>([])
-    const [isSearchingDicta, setIsSearchingDicta] = useState(false)
+
+    // Load Linked Sessions
+    const linkedSessions = useLiveQuery(async () => {
+        if (!id || isNew) return []
+        const numId = parseInt(id)
+        return db.sessions
+            .filter(session => {
+                const links = session.metadata?.linkedRhymes || []
+                return links.some((l: any) => Number(l.rhymeId) === numId)
+            })
+            .toArray()
+    }, [id, isNew])
 
     // Load Data
     useEffect(() => {
@@ -148,47 +158,7 @@ export default function RhymeEditorPage() {
         }
     }
 
-    // --- Dicta Logic ---
-    const handleDictaSearch = async () => {
-        if (!dictaQuery.trim()) return;
-        setIsSearchingDicta(true);
-        setDictaResults([]);
-        setSelectedDictaWords([]);
 
-        try {
-            // 1. Vocalize
-            const vocalizedOptions = await getVocalization(dictaQuery);
-            const bestOption = vocalizedOptions[0] || dictaQuery; // Naive: take first
-
-            // 2. Search Rhymes
-            const rhymes = await getRhymes(bestOption);
-            setDictaResults(rhymes);
-        } catch (err) {
-            console.error(err);
-            alert("Failed to fetch rhymes.");
-        } finally {
-            setIsSearchingDicta(false);
-        }
-    }
-
-    const toggleDictaSelection = (word: string) => {
-        if (selectedDictaWords.includes(word)) {
-            setSelectedDictaWords(selectedDictaWords.filter(w => w !== word));
-        } else {
-            setSelectedDictaWords([...selectedDictaWords, word]);
-        }
-    }
-
-    const addSelectedDictaWords = () => {
-        setItems([...items, ...selectedDictaWords]);
-        setIsDictaOpen(false);
-        setDictaQuery('');
-        setDictaResults([]);
-        setSelectedDictaWords([]);
-
-        // Ensure word bank is open to see new items
-        setIsWordBankOpen(true);
-    }
 
 
     // Simplified UI Layout for Reading Mode
@@ -212,6 +182,9 @@ export default function RhymeEditorPage() {
                         className="w-full bg-transparent text-center font-bold text-2xl placeholder-white/30 focus:outline-none"
                     />
                 </div>
+
+
+
                 {!isNew && (
                     <button onClick={handleDelete} className="text-red-400/50 p-2 hover:text-red-400">
                         <Trash2 size={20} />
@@ -416,95 +389,83 @@ export default function RhymeEditorPage() {
                     </div>
                 </div>
 
+                {/* 5. LINKED CONTEXT (Usage in Sessions) */}
+                {linkedSessions && linkedSessions.length > 0 && (
+                    <div className="space-y-4">
+                        <div className="h-px bg-white/5 w-full my-4" />
+                        <div className="flex items-center justify-between">
+                            <button
+                                onClick={() => setIsContextOpen(!isContextOpen)}
+                                className="flex items-center gap-2 group"
+                            >
+                                {isContextOpen ?
+                                    <ChevronDown size={16} className="text-purple-400 group-hover:text-purple-300 transition-colors" /> :
+                                    <ChevronUp size={16} className="text-purple-400 group-hover:text-purple-300 transition-colors" />
+                                }
+                                <h3 className="text-xs font-bold text-purple-400 uppercase tracking-widest group-hover:text-purple-300 transition-colors">
+                                    Linked Context ({linkedSessions.length})
+                                </h3>
+                            </button>
+                        </div>
+
+                        <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isContextOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            <div className="space-y-2 pl-1">
+                                {linkedSessions.map(session => {
+                                    // Find lines that use this rhyme group
+                                    // We filtered for sessions that match, but we want to show WHICH lines match
+                                    const relevantLines: { text: string, index: number }[] = [];
+                                    const links = session.metadata?.linkedRhymes || [];
+                                    const lines = session.metadata?.lines || session.metadata?.lyrics?.split('\n') || [];
+
+                                    links.forEach((l: any) => {
+                                        if (Number(l.rhymeId) === parseInt(id!)) {
+                                            if (lines[l.lineIndex]) {
+                                                relevantLines.push({ text: lines[l.lineIndex], index: l.lineIndex });
+                                            }
+                                        }
+                                    });
+
+                                    // Deduplicate by index to avoid showing same line twice if multiple words match (rare but possible)
+                                    const uniqueLines = Array.from(new Set(relevantLines.map(r => r.index))).map(idx => relevantLines.find(r => r.index === idx)!);
+
+                                    return (
+                                        <div key={session.id} className="bg-[#1a1a1a] rounded-lg border border-white/5 p-3 hover:border-purple-500/30 transition-colors">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="font-bold text-sm text-white/80">{session.title || "Untitled Session"}</h4>
+                                                <button
+                                                    onClick={() => navigate(`/library/${session.id}`)}
+                                                    className="text-[10px] bg-white/5 hover:bg-white/10 text-white/50 hover:text-white px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                                                >
+                                                    Open <ExternalLink size={10} />
+                                                </button>
+                                            </div>
+                                            <div className="space-y-1">
+                                                {uniqueLines.map((line, i) => (
+                                                    <div key={i} className="text-sm font-hebrew text-white/60 bg-[#111] p-2 rounded border-l-2 border-purple-500/50" style={{ direction: 'rtl' }}>
+                                                        "{line.text}"
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
             </div>
 
             {/* Dicta Modal */}
-            {isDictaOpen && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 pb-24 sm:pb-4">
-                    <div className="bg-[#1e1e1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[70vh] sm:max-h-[80vh]">
-                        {/* Modal Header */}
-                        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#252525] rounded-t-2xl">
-                            <h2 className="font-bold flex items-center gap-2">
-                                <Search size={16} className="text-purple-400" />
-                                Dicta Rhyme Finder
-                            </h2>
-                            <button onClick={() => setIsDictaOpen(false)} className="text-white/50 hover:text-white">
-                                <X size={20} />
-                            </button>
-                        </div>
+            <DictaModal
+                isOpen={isDictaOpen}
+                onClose={() => setIsDictaOpen(false)}
+                onAddWords={(words) => {
+                    setItems([...items, ...words])
+                    setIsWordBankOpen(true)
+                }}
+            />
 
-                        {/* Search Bar */}
-                        <div className="p-4 border-b border-white/5 flex gap-2">
-                            <input
-                                value={dictaQuery}
-                                onChange={(e) => setDictaQuery(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleDictaSearch()}
-                                placeholder="Enter a word (e.g. חבר)..."
-                                className="flex-1 bg-transparent rounded-lg px-4 py-2 border border-white/10 focus:border-purple-500 focus:outline-none text-right font-hebrew text-white"
-                                autoFocus
-                            />
-                            <button
-                                onClick={handleDictaSearch}
-                                disabled={isSearchingDicta}
-                                className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold disabled:opacity-50"
-                            >
-                                {isSearchingDicta ? <Loader2 className="animate-spin" /> : 'Search'}
-                            </button>
-                        </div>
-
-                        {/* Results Area */}
-                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                            {isSearchingDicta ? (
-                                <div className="flex flex-col items-center justify-center py-10 opacity-50 space-y-2">
-                                    <Loader2 className="animate-spin" size={32} />
-                                    <p className="text-xs">Consulting Dicta...</p>
-                                </div>
-                            ) : dictaResults.length > 0 ? (
-                                <div className="grid grid-cols-3 gap-2">
-                                    {dictaResults.map((word, i) => {
-                                        const isSelected = selectedDictaWords.includes(word);
-                                        return (
-                                            <button
-                                                key={i}
-                                                onClick={() => toggleDictaSelection(word)}
-                                                className={`
-                                                px-2 py-3 rounded-lg text-sm border transition-all flex items-center justify-center gap-2 relative
-                                                ${isSelected
-                                                        ? 'bg-purple-600 border-purple-400 text-white shadow-lg scale-[1.02]'
-                                                        : 'bg-[#252525] border-white/5 text-white/70 hover:bg-[#333]'
-                                                    }
-                                            `}
-                                            >
-                                                {word}
-                                                {isSelected && <Check size={12} className="absolute top-1 right-1" />}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="text-center py-10 opacity-30">
-                                    <p>Enter a word to find rhymes.</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Footer / Actions */}
-                        <div className="p-4 border-t border-white/5 bg-[#252525] rounded-b-2xl flex justify-between items-center">
-                            <span className="text-xs text-white/40">
-                                {selectedDictaWords.length} selected
-                            </span>
-                            <button
-                                onClick={addSelectedDictaWords}
-                                disabled={selectedDictaWords.length === 0}
-                                className="bg-green-500 text-black font-bold px-6 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
-                            >
-                                Add Selection
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-        </div>
+        </div >
     )
 }

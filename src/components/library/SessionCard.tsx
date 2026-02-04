@@ -103,9 +103,27 @@ export default function SessionCard({
                     </div>
 
                     {/* Transcript Preview */}
+                    {/* Transcript Preview */}
                     <p className="text-sm text-subdued truncate opacity-80">
                         {previewText}
                     </p>
+
+                    {/* Keywords & Notes Preview */}
+                    {(session.metadata?.aiKeywords?.length || session.metadata?.notes) ? (
+                        <div className="flex flex-wrap gap-2 mt-1.5 mb-1">
+                            {session.metadata?.aiKeywords?.slice(0, 3).map((kw, i) => (
+                                <span key={i} className="text-[10px] bg-[#1DB954]/10 text-[#1DB954] px-1.5 py-0.5 rounded-full border border-[#1DB954]/20">
+                                    #{kw}
+                                </span>
+                            ))}
+                            {session.metadata?.notes && (
+                                <span className="text-[10px] bg-white/10 text-subdued px-1.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                                    <span className="w-1 h-1 rounded-full bg-yellow-500"></span>
+                                    Has Notes
+                                </span>
+                            )}
+                        </div>
+                    ) : null}
 
                     {/* Metadata Row */}
                     <div className="flex items-center gap-3 text-xs text-subdued mt-1">
@@ -137,6 +155,6 @@ export default function SessionCard({
                     </button>
                 )}
             </div>
-        </div>
+        </div >
     );
 }

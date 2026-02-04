@@ -30,6 +30,9 @@ export const syncService = {
             this.syncSessions(user.uid)
         ]);
 
+        // 3. Cleanup any existing duplicates (One-off safety check)
+        await this.cleanupDuplicates();
+
         console.log("✅ Sync Complete");
     },
 
@@ -62,20 +65,26 @@ export const syncService = {
                     // 1. Try lookup by cloudId
                     let localGroup = await localDb.wordGroups.where('cloudId').equals(cloudId).first();
 
-                    // 2. Fallback: Lookup by Name (if name is unique enough for this user)
-                    // This prevents creating a duplicate if the cloudId wasn't saved locally yet
+
+                    // 2. Fallback: Lookup by Name (CRITICAL for preventing duplicates)
+                    // If we find a group with same name, we assume it's the SAME group.
                     if (!localGroup) {
                         const existingByName = await localDb.wordGroups.where('name').equals(cloudData.name).first();
 
-                        // If we find a group with same name and NO cloudId, assume it's the one we just created/synced
-                        if (existingByName && !existingByName.cloudId) {
-                            console.log(`🔗 Linked local WordGroup ${existingByName.id} to cloudId ${cloudId} by Name match`);
+                        if (existingByName) {
+                            // If it matches by name, we link it, even if it has a different cloudId (duplicate in cloud?)
+                            // or no cloudId (created locally while offline).
+                            console.log(`🔗 Linked local WordGroup "${existingByName.name}" (${existingByName.id}) to cloudId ${cloudId}`);
                             localGroup = existingByName;
+
+                            // If it had a DIFFERENT cloudId, we might be merging two cloud entities. 
+                            //Ideally we'd delete the other one, but for now let's just update local to point to this one 
+                            // so we don't see duplicates in UI.
                             await localDb.wordGroups.update(localGroup.id!, { cloudId: cloudId });
                         }
                     }
 
-                    // 3. Fallback: Fingerprint lookup (createdAt + name) - Legacy check
+                    // 3. Fallback: Fingerprint lookup (createdAt) - mostly legacy now that we trust specific names
                     if (!localGroup && cloudData.createdAt) {
                         const cloudCreated = cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt);
                         const allGroups = await localDb.wordGroups.where('name').equals(cloudData.name).toArray();
@@ -335,6 +344,53 @@ export const syncService = {
                 await deleteDoc(docRef);
             }
             await localDb.sessions.delete(id);
+        }
+    },
+
+    async cleanupDuplicates() {
+        console.log("🧹 Running duplicate cleanup...");
+        const allGroups = await localDb.wordGroups.toArray();
+        const groupedByName: Record<string, typeof allGroups> = {};
+
+        // Group by name
+        for (const group of allGroups) {
+            if (!groupedByName[group.name]) {
+                groupedByName[group.name] = [];
+            }
+            groupedByName[group.name].push(group);
+        }
+
+        // Find duplicates
+        let deletedCount = 0;
+        for (const name in groupedByName) {
+            const groups = groupedByName[name];
+            if (groups.length > 1) {
+                console.log(`⚠️ Found ${groups.length} duplicates for "${name}"`);
+
+                // Sort: Prefer the one with cloudId, then the one with most recent lastUsedAt
+                groups.sort((a, b) => {
+                    // 1. Prefer cloudId
+                    if (a.cloudId && !b.cloudId) return -1;
+                    if (!a.cloudId && b.cloudId) return 1;
+
+                    // 2. Prefer recent usage
+                    return b.lastUsedAt.getTime() - a.lastUsedAt.getTime();
+                });
+
+                // Keep the first one (index 0), delete the rest
+                // const toKeep = groups[0]; // (Implicitly kept)
+                const toDelete = groups.slice(1);
+
+                for (const dupe of toDelete) {
+                    console.log(`❌ Deleting duplicate duplicate "${name}" (id: ${dupe.id})`);
+                    await localDb.wordGroups.delete(dupe.id!);
+                    deletedCount++;
+                }
+            }
+        }
+
+        if (deletedCount > 0) {
+            console.log(`🧹 Cleanup finished: Removed ${deletedCount} duplicate groups.`);
         }
     }
 };

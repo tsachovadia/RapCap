@@ -308,12 +308,17 @@ export default function FreestylePage() {
                     setEnhancedTranscriptData({ text, segments: newSegments, wordSegments: newWords })
                 }}
                 data={{
-                    transcript: enhancedTranscriptData?.text || transcript,
+                    title: `Freestyle ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
+                    type: 'freestyle',
                     duration,
                     beatId: videoId,
                     date: new Date(),
-                    segments: enhancedTranscriptData?.segments || segments,
-                    wordSegments: enhancedTranscriptData?.wordSegments || wordSegments
+                    createdAt: new Date(),
+                    metadata: {
+                        lyrics: enhancedTranscriptData?.text || transcript,
+                        lyricsSegments: enhancedTranscriptData?.segments || segments,
+                        lyricsWords: enhancedTranscriptData?.wordSegments || wordSegments
+                    }
                 }}
             />
 

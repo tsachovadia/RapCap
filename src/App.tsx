@@ -18,6 +18,7 @@ import SettingsPage from './pages/SettingsPage'
 import FlowPatternsPage from './pages/FlowPatternsPage'
 import RhymeLibraryPage from './pages/RhymeLibraryPage'
 import RhymeEditorPage from './pages/RhymeEditorPage'
+import WritingSessionPage from './pages/WritingSessionPage'
 import AuthPage from './pages/AuthPage'
 import { AuthProvider } from './contexts/AuthContext'
 import { useEffect } from 'react'
@@ -46,6 +47,7 @@ export default function App() {
         <AuthProvider>
           <OnboardingWizard />
           <Routes>
+            <Route path="/rhyme-library/session" element={<WritingSessionPage />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<AuthPage />} />

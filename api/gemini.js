@@ -39,6 +39,87 @@ export default async function handler(req, res) {
         const genAI = new GoogleGenerativeAI(API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
+        if (req.body.type === 'deep_analyze_flow') {
+            const { transcript, moments } = req.body;
+            if (!transcript) return res.status(400).json({ error: 'Transcript required' });
+
+            const prompt = `
+            You are a professional Hebrew Hip Hop Editor and Flow Coach.
+            Your task is to analyze a raw rap transcript, correct transcription errors based on context/rhymes, and extract deep insights.
+
+            Raw Transcript:
+            "${transcript}"
+
+            Moments flagged by user (seconds): ${JSON.stringify(moments || [])}
+
+            Instructions:
+            1. **Corrected Lyrics**: Fix phonetic errors (e.g. "רוקי בא לבוא" -> "רוקי בלבואה") and punctuation. Match the likely intended meaning and rhythm.
+            2. **Rhyme Schemes**: Identify 3-5 distinct rhyme groups/sounds.
+               - Assign a color HEX code to each group.
+               - List words belonging to each group.
+               - Note: Include "Slant Rhymes" (Assonance), e.g., "Lishmoa" and "Lizroa" (O-a sound).
+            3. **Punchlines**: Identify the strongest "Bars" or metaphors.
+               - Give a "score" (1-10) and reason.
+               - Pay special attention to the flagged "Moments" if they align with punchlines.
+            4. **Flow Metrics**: Estimate Words Per Minute (WPM) and Density.
+
+            Output Format (Strict JSON):
+            {
+                "correctedLyrics": "Full corrected text string...",
+                "rhymeSchemes": [
+                    { "id": "scheme_1", "name": "O-ach Sound", "color": "#FF5733", "words": [{"text": "לברוח", "index": 0}, ...] }
+                ],
+                "punchlines": [
+                    { "text": "רוקי בלבואה... סע לדואר", "score": 9, "reason": "Complex multi-syllabic rhyme scheme and cultural reference." }
+                ],
+                "flowMetrics": { "wpm": 140, "density": "High" }
+            }
+            Return ONLY the valid JSON object.
+            `;
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            try {
+                const data = JSON.parse(jsonString);
+                return res.status(200).json(data);
+            } catch (e) {
+                console.error("Failed to parse deep analysis:", text);
+                return res.status(500).json({ error: 'Failed to parse AI deep analysis' });
+            }
+        }
+
+        if (req.body.type === 'analyze_lyrics') {
+            const { lyrics } = req.body;
+            if (!lyrics) return res.status(400).json({ error: 'Lyrics required' });
+
+            const prompt = `
+            Analyze the following freestyle rap lyrics/transcript:
+            "${lyrics}"
+
+            Identify 5-7 main topics, themes, or keywords that represent the content.
+            Examples: "Struggle", "Money", "Family", "Cars", "Victory", "Tel Aviv".
+            
+            Output Format:
+            Return ONLY a JSON array of strings: ["Theme1", "Theme2", ...]
+            `;
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            try {
+                const data = JSON.parse(jsonString);
+                return res.status(200).json({ keywords: data });
+            } catch (e) {
+                console.error("Failed to parse analysis response:", text);
+                return res.status(500).json({ error: 'Failed to parse AI response' });
+            }
+        }
+
         if (req.body.type === 'filter') {
             const prompt = `
         You are a Hebrew Language Expert.

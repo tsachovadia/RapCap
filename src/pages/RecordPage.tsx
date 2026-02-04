@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { useTranscription } from '../hooks/useTranscription'
 import { db } from '../db/db'
@@ -8,14 +9,16 @@ import { syncService } from '../services/dbSync'
 import { getCalibratedLatency } from '../services/latencyCalibration'
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
+import type { SessionAnalysis } from '../db/db';
 import FreestyleModeUI from '../components/record/FreestyleModeUI'
 import ThoughtsModeUI from '../components/record/ThoughtsModeUI'
 import RhymeTrainingModeUI from '../components/record/RhymeTrainingModeUI'
 import RecordingHeader from '../components/record/RecordingHeader'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import { useAuth } from '../contexts/AuthContext'
-import { Music, Mic, GraduationCap } from 'lucide-react'
+import { Music, Mic, GraduationCap, Upload, Clock } from 'lucide-react'
 import { DEFAULT_BEAT_ID } from '../data/beats'
+import { analyzeFreestyleLyrics } from '../services/gemini'
 
 export type RecordingMode = 'freestyle' | 'thoughts' | 'training'
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
@@ -25,6 +28,8 @@ export default function RecordPage() {
     const mode = (searchParams.get('mode') as RecordingMode) || 'freestyle'
     const navigate = useNavigate()
     const { user } = useAuth()
+
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // --- Core Hooks ---
     const {
@@ -60,9 +65,66 @@ export default function RecordPage() {
     const [currentBeatId, setCurrentBeatId] = useState(DEFAULT_BEAT_ID)
     const [capturedBeatStartTime, setCapturedBeatStartTime] = useState<number>(0)
 
+    // NEW: Notes & AI State
+    const [notes, setNotes] = useState('')
+    const [aiKeywords, setAiKeywords] = useState<string[]>([])
+    const [sessionAnalysis, setSessionAnalysis] = useState<SessionAnalysis | null>(null)
+
     // Precise timing refs
     const recordingStartTimeRef = useRef<number>(0)
     const transcriptionStartTimeRef = useRef<number>(0)
+
+
+    const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        // Set blob
+        setPendingSessionBlob(file)
+
+        // Reset analysis
+        setSessionAnalysis(null)
+        setAiKeywords([])
+
+        // Mock transcript (since we can't transcribe existing file easily client-side yet)
+        resetTranscript()
+        setEnhancedTranscriptData({
+            text: "",
+            segments: [],
+            wordSegments: []
+        })
+
+        // Open Modal
+        setShowReviewModal(true)
+
+        // Reset input
+        e.target.value = ''
+    }
+
+    // --- Recent Sessions Logic ---
+    const recentSessions = useLiveQuery(() => db.sessions.orderBy('createdAt').reverse().limit(5).toArray(), [])
+    const [showHistory, setShowHistory] = useState(false)
+    const [loadedSessionId, setLoadedSessionId] = useState<number | null>(null)
+    const [loadedSessionDuration, setLoadedSessionDuration] = useState(0)
+
+    const handleLoadSession = (session: any) => {
+        setPendingSessionBlob(session.blob)
+        setSessionAnalysis(session.analysis || null)
+        setAiKeywords(session.metadata?.aiKeywords || [])
+        setLoadedSessionId(session.id)
+        setLoadedSessionDuration(session.duration || 0)
+        setCurrentBeatId(session.beatId || DEFAULT_BEAT_ID)
+
+        // Load transcript data
+        setEnhancedTranscriptData({
+            text: session.metadata?.lyrics || "",
+            segments: session.metadata?.lyricsSegments || [],
+            wordSegments: session.metadata?.lyricsWords || []
+        })
+
+        setShowReviewModal(true)
+        setShowHistory(false)
+    }
 
     // Ensure stream is initialized
     useEffect(() => {
@@ -99,6 +161,9 @@ export default function RecordPage() {
             }
             resetTranscript()
             setMoments([])
+            setAiKeywords([]) // Reset keywords
+            setLoadedSessionId(null) // Clear any loaded session
+            setLoadedSessionDuration(0)
         } catch (e) {
             console.error('Failed to start flow:', e)
             setFlowState('idle')
@@ -123,7 +188,16 @@ export default function RecordPage() {
             const blob = await stopRecording()
             if (blob.size > 0) {
                 setPendingSessionBlob(blob)
+                setSessionAnalysis(null) // Reset analysis for new session
                 setShowReviewModal(true)
+
+                // Trigger AI analysis for the modal
+                const textToAnalyze = transcript + (interimTranscript ? ' ' + interimTranscript : '')
+                if (textToAnalyze.trim().length > 20) {
+                    analyzeFreestyleLyrics(textToAnalyze)
+                        .then(keywords => setAiKeywords(keywords))
+                        .catch(err => console.warn("AI Analysis failed", err))
+                }
             }
         }
     }
@@ -144,10 +218,16 @@ export default function RecordPage() {
         if (!pendingSessionBlob) return
 
         let finalBlob = pendingSessionBlob
-        try {
-            finalBlob = await convertBlobToMp3(pendingSessionBlob, duration * 1000)
-        } catch (e) {
-            console.error("MP3 conversion failed", e)
+        // Only convert if it's a NEW recording. If loaded from DB, it's likely already MP3 (or we assume efficient).
+        // Actually, if loadedSessionId exists, we probably don't need to reconvert unless edited?
+        // Let's assume reconversion is safe or needed if blob changed.
+
+        if (!loadedSessionId) {
+            try {
+                finalBlob = await convertBlobToMp3(pendingSessionBlob, duration * 1000)
+            } catch (e) {
+                console.error("MP3 conversion failed", e)
+            }
         }
 
         const offset = Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000
@@ -171,29 +251,48 @@ export default function RecordPage() {
             }
         }
 
+        // AI Analysis (if not already done, or just do it here)
+        let finalKeywords = aiKeywords
+        if (finalKeywords.length === 0 && finalText.trim().length > 20) {
+            try {
+                finalKeywords = await analyzeFreestyleLyrics(finalText)
+            } catch (e) {
+                console.warn("AI Analysis failed", e)
+            }
+        }
+
         try {
-            await db.sessions.add({
-                title: `${mode === 'freestyle' ? 'Freestyle' : 'Thoughts'} ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
+            const sessionData = {
+                title: loadedSessionId ? undefined : `${mode === 'freestyle' ? 'Freestyle' : 'Thoughts'} ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
                 blob: finalBlob,
-                duration: duration,
-                createdAt: new Date(),
-                date: new Date(),
+                duration: duration > 0 ? duration : (enhancedTranscriptData?.segments?.[enhancedTranscriptData.segments.length - 1]?.timestamp || 0), // Fallback duration 
                 updatedAt: new Date(),
-                type: mode,
-                beatId: currentBeatId,
-                // Apply calibrated latency offset to compensate for roundtrip audio delay
-                beatStartTime: capturedBeatStartTime + (getCalibratedLatency() / 1000),
+                // Only set these on creation
+                ...(loadedSessionId ? {} : {
+                    createdAt: new Date(),
+                    date: new Date(),
+                    type: mode,
+                    beatId: currentBeatId,
+                    beatStartTime: capturedBeatStartTime + (getCalibratedLatency() / 1000),
+                }),
                 metadata: {
                     moments,
                     lyrics: finalText,
                     lyricsSegments: finalSegments,
                     lyricsWords: finalWordSegments,
-                    language
-                }
-            })
+                    language,
+                    notes,
+                    aiKeywords: finalKeywords
+                },
+                analysis: sessionAnalysis // Save the deep analysis if performed
+            }
 
-            if (user) {
-                syncService.syncSessions(user.uid).catch(console.error);
+            if (loadedSessionId) {
+                await db.sessions.update(loadedSessionId, sessionData)
+                if (user) syncService.syncSessions(user.uid).catch(console.error);
+            } else {
+                await db.sessions.add({ ...sessionData, title: sessionData.title!, createdAt: new Date(), date: new Date(), type: mode, beatId: currentBeatId, beatStartTime: 0 } as any)
+                if (user) syncService.syncSessions(user.uid).catch(console.error);
             }
 
             navigate('/library')
@@ -204,12 +303,16 @@ export default function RecordPage() {
     }
 
     const handleDiscard = () => {
-        if (confirm('Discard this session?')) {
+        if (confirm('Discard changes?')) {
             setShowReviewModal(false)
             setPendingSessionBlob(null)
             setEnhancedTranscriptData(null)
             resetTranscript()
             setMoments([])
+            setAiKeywords([])
+            setNotes('')
+            setLoadedSessionId(null)
+            setLoadedSessionDuration(0)
         }
     }
 
@@ -222,6 +325,24 @@ export default function RecordPage() {
         setFlowState('recording')
     }
 
+    const sessionForModal = {
+        id: loadedSessionId || undefined,
+        title: loadedSessionId ? "Loaded Session" : "New Session",
+        type: mode,
+        duration: loadedSessionId ? loadedSessionDuration : duration,
+        beatId: currentBeatId,
+        date: new Date(),
+        createdAt: new Date(),
+        metadata: {
+            lyrics: enhancedTranscriptData ? enhancedTranscriptData.text : transcript,
+            lyricsSegments: enhancedTranscriptData ? enhancedTranscriptData.segments : segments,
+            lyricsWords: enhancedTranscriptData ? enhancedTranscriptData.wordSegments : wordSegments,
+            aiKeywords: aiKeywords,
+            analysis: sessionAnalysis || undefined,
+            moments: moments
+        }
+    } as any as import('../db/db').DbSession;
+
     return (
         <div className="h-[100dvh] flex flex-col relative overflow-hidden bg-black text-white px-4" dir={language === 'he' ? 'rtl' : 'ltr'}>
             <RecordingHeader
@@ -231,6 +352,58 @@ export default function RecordPage() {
                 onShowMicSetup={() => setShowMicSetup(true)}
                 permissionError={!!permissionError}
             />
+
+            {/* Hidden File Input for Testing/Importing */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="audio/*,video/*"
+                onChange={handleFileImport}
+            />
+
+            {/* Test/Debug Controls (Only in Freestyle Mode) */}
+            {mode === 'freestyle' && flowState === 'idle' && (
+                <div className="flex justify-center -mt-2 mb-2 gap-2 relative z-50">
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[10px] text-subdued hover:text-white flex items-center gap-1 bg-[#282828] px-2 py-1 rounded-full opacity-50 hover:opacity-100 transition-all"
+                    >
+                        <Upload size={10} />
+                        Import File
+                    </button>
+
+                    <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        className="text-[10px] text-subdued hover:text-white flex items-center gap-1 bg-[#282828] px-2 py-1 rounded-full opacity-50 hover:opacity-100 transition-all relative"
+                    >
+                        <Clock size={10} />
+                        Recent Sessions
+                    </button>
+
+                    {/* Quick History Dropdown */}
+                    {showHistory && recentSessions && (
+                        <div className="absolute top-8 bg-[#181818] border border-[#282828] rounded-xl p-2 w-64 shadow-2xl flex flex-col gap-1">
+                            <h3 className="text-xs font-bold text-subdued px-2 mb-1">Recent Recordings</h3>
+                            {recentSessions.map(s => (
+                                <button
+                                    key={s.id}
+                                    onClick={() => handleLoadSession(s)}
+                                    className="text-left px-2 py-2 hover:bg-white/10 rounded flex justify-between items-center group"
+                                >
+                                    <div className="flex flex-col overflow-hidden">
+                                        <span className="text-xs font-bold truncate text-white">{s.title}</span>
+                                        <span className="text-[10px] text-subdued">{new Date(s.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <div className="opacity-0 group-hover:opacity-100 bg-[#1DB954] text-black text-[10px] px-1.5 py-0.5 rounded font-bold">
+                                        Analyze
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Mode Switcher */}
             <div className="flex-none flex justify-center py-2">
@@ -283,6 +456,9 @@ export default function RecordPage() {
                         onBeatChange={setCurrentBeatId}
                         segments={segments}
                         interimTranscript={interimTranscript}
+                        notes={notes}
+                        setNotes={setNotes}
+                        onSaveMoment={handleSaveMoment}
                     />
                 )}
                 {mode === 'thoughts' && (
@@ -331,13 +507,8 @@ export default function RecordPage() {
                 onDiscard={handleDiscard}
                 audioBlob={pendingSessionBlob}
                 onUpdateTranscript={(text, segs, words) => setEnhancedTranscriptData({ text, segments: segs, wordSegments: words })}
-                data={{
-                    transcript: enhancedTranscriptData ? enhancedTranscriptData.text : transcript,
-                    duration,
-                    beatId: currentBeatId,
-                    date: new Date(),
-                    segments: enhancedTranscriptData ? enhancedTranscriptData.segments : segments
-                }}
+                data={sessionForModal}
+                onAnalysisComplete={(analysis) => setSessionAnalysis(analysis)}
             />
 
             <MicrophoneSetupModal

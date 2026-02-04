@@ -1,5 +1,56 @@
 import Dexie, { type Table } from 'dexie';
 
+export interface Punchline {
+    text: string;
+    score: number;
+    reason: string;
+}
+
+export interface VaultItem {
+    id?: number;
+    type: 'punchline' | 'bar' | 'flow_pattern';
+    content: string;
+    metadata?: any; // Score, tags, source session title
+    createdAt: Date;
+    sessionId?: number; // Origin session ID
+}
+
+export interface RhymeScheme {
+    id: string;
+    name?: string; // e.g., "O-ach Family"
+    color: string;
+    words: { text: string; index: number }[];
+}
+
+
+export interface AnalysisToken {
+    text: string;
+    id: string | null; // rhyme scheme id
+    phonetic?: string;
+}
+
+export interface DetectedRhymeGroup {
+    id: string; // temporary UUID
+    words: string[];
+    phoneticSignature: string; // e.g., "a-a-a-n"
+    confidence: number;
+    type: 'terminal_rhyme' | 'multi_syllabic' | 'assonance' | 'perfect' | 'slant' | 'none';
+    status?: 'new' | 'match' | 'partial'; // Client-side state
+    existingGroupId?: number; // if matching an existing group
+}
+
+export interface SessionAnalysis {
+    correctedLyrics: string;
+    tokens: AnalysisToken[];
+    rhymeSchemes: RhymeScheme[];
+    detectedRhymeGroups?: DetectedRhymeGroup[]; // Newly detected groups from the session
+    punchlines: Punchline[];
+    flowMetrics: {
+        wpm: number;
+        density: string; // "High", "Low"
+    };
+}
+
 export interface WordGroup {
     id?: number;
     name: string;
@@ -29,7 +80,7 @@ export interface DbSession {
     syncedAt?: Date;
     updatedAt?: Date;
     title: string;
-    type: 'freestyle' | 'drill' | 'thoughts' | 'training';
+    type: 'freestyle' | 'drill' | 'thoughts' | 'training' | 'writing';
     subtype?: string;
     beatId?: string;
     beatStartTime?: number; // The timestamp in the beat where recording started
@@ -43,23 +94,42 @@ export interface DbSession {
         lyricsSegments?: any[];
         lyricsWords?: any[];
         language?: string;
+        moments?: number[]; // Array of timestamps
+        notes?: string; // Session notes
+        aiKeywords?: string[]; // AI extracted keywords
+        analysis?: SessionAnalysis; // Deep AI Analysis
         [key: string]: any;
     };
     content?: string; // For generic content like drill words
 }
 
+export interface Beat {
+    id?: number;
+    name: string;
+    videoId: string;
+    category?: 'custom' | 'preset';
+    createdAt: Date;
+}
+
 export class RapCapDatabase extends Dexie {
     wordGroups!: Table<WordGroup>;
     sessions!: Table<DbSession>; // Typed sessions table
+    beats!: Table<Beat>; // New beats table
+    vault!: Table<VaultItem>; // New vault table
 
     constructor() {
         super('rapCapDB');
 
         // Define tables and indexes
-        this.version(3).stores({
+        this.version(4).stores({
             wordGroups: '++id, name, lastUsedAt, isSystem, cloudId',
-            sessions: '++id, title, type, createdAt, updatedAt, cloudId'
+            sessions: '++id, title, type, createdAt, updatedAt, cloudId',
+            beats: '++id, videoId, name, createdAt', // New table
+            vault: '++id, type, createdAt, sessionId' // New table
         });
+
+        // Keep version 3 for reference if needed, but Dexie handles upgrades
+        // this.version(3).stores({...}) 
     }
 }
 
@@ -67,30 +137,25 @@ export const db = new RapCapDatabase();
 
 // Seed function to populate default data
 export const seedDatabase = async () => {
-    // Check for old data to force a migration/reset
-    // If we find the old "Full Story" name, we know we need to migrate to the new "Yarid" name.
-    const hasOldName = await db.wordGroups.where('name').equals("תרגיל ה-Story המלא").count();
-    const hasOldVerbs = await db.wordGroups.where('name').startsWith("להשמיד").count();
+    // DB SEED VERSION - Bump this number to force re-seeding of system groups
+    const CURRENT_SEED_VERSION = 5;
+    const storedVersion = parseInt(localStorage.getItem('rapcap_seed_version') || '0');
 
-    // Also check if we DO NOT have the new 'Lignoaḥ' or 'Migdal' entry yet.
-    const hasNewLignoah = await db.wordGroups.where('name').equals("לִגְנוֹחַ").count();
-    const hasMigdal = await db.wordGroups.where('name').equals("מִגְדָּל").count();
-    const hasZman = await db.wordGroups.where('name').equals("זְמַן").count();
+    if (storedVersion >= CURRENT_SEED_VERSION) {
+        return; // Already up to date
+    }
 
-    // Check for "Av" update in Achshav group
-    const achshavGroup = await db.wordGroups.where('name').equals("עַכְשָׁיו").first();
-    const needsAvUpdate = achshavGroup && !achshavGroup.items.includes("אָב");
+    console.log(`🌱 Improving Database (Migration v${storedVersion} -> v${CURRENT_SEED_VERSION})...`);
 
-    const shouldMigrate = hasOldName > 0 || hasOldVerbs > 0 || hasNewLignoah === 0 || hasMigdal === 0 || hasZman === 0 || !!needsAvUpdate;
-
-    if (!shouldMigrate && await db.wordGroups.count() > 0) return;
-
-    // Reset if migration needed
-    if (shouldMigrate) {
+    // Reset system groups if this is a migration
+    if (storedVersion > 0) {
         console.log("Updating system word groups...");
         // Safely delete only system groups to preserve user data
         await db.wordGroups.filter(g => !!g.isSystem).delete();
     }
+
+    // Update stored version
+    localStorage.setItem('rapcap_seed_version', CURRENT_SEED_VERSION.toString());
 
     const now = new Date();
 
