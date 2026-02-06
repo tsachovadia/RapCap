@@ -11,7 +11,12 @@ const groupSessionsByDate = (sessions: DbSession[]) => {
     const groups: Record<string, DbSession[]> = {};
 
     sessions.forEach(session => {
-        const date = new Date(session.createdAt);
+        let date = new Date(session.createdAt);
+        // Guard against invalid dates
+        if (isNaN(date.getTime())) {
+            date = new Date(); // Fallback to now, or use a specific error date
+        }
+
         // Reset time to midnight for grouping
         const dateKey = new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
 
@@ -35,8 +40,9 @@ export default function LibraryPage() {
     const sessions = useLiveQuery(() => db.sessions.toArray())
     const navigate = useNavigate()
 
-    // UI State
+    // State
     const [searchQuery, setSearchQuery] = useState('')
+    const [activeTab, setActiveTab] = useState<'all' | 'freestyle' | 'drill' | 'writing'>('all');
 
     // Multi-select State
     const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
@@ -63,16 +69,24 @@ export default function LibraryPage() {
         if (!sessions) return []
         return sessions
             .filter(s => {
+                // 1. Tab Filter
+                if (activeTab !== 'all') {
+                    const type = s.type || 'freestyle'; // Default to freestyle for legacy
+                    if (type !== activeTab) return false;
+                }
+
+                // 2. Search Filter
                 const query = searchQuery.toLowerCase()
                 return (
                     (s.metadata?.lyrics?.toLowerCase().includes(query)) ||
                     (s.beatId?.toLowerCase().includes(query)) ||
-                    (new Date(s.createdAt).toLocaleDateString().includes(query))
+                    (new Date(s.createdAt).toLocaleDateString().includes(query)) ||
+                    (s.title?.toLowerCase().includes(query))
                 )
             })
             // Sort by createdAt desc (Global sort before grouping, though grouping handles its own sort)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    }, [sessions, searchQuery])
+    }, [sessions, searchQuery, activeTab])
 
     const groupedSessions = useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions]);
 
@@ -165,6 +179,25 @@ export default function LibraryPage() {
                             {isMultiSelectMode ? <X size={20} /> : <CheckSquare size={20} />}
                         </button>
                     </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex items-center gap-2 mb-4 overflow-x-auto no-scrollbar">
+                    {(['all', 'freestyle', 'drill', 'writing'] as const).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`
+                                px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap capitalize
+                                ${activeTab === tab
+                                    ? 'bg-white text-black'
+                                    : 'bg-[#282828] text-white hover:bg-[#333]'
+                                }
+                            `}
+                        >
+                            {tab === 'drill' ? 'Practice' : tab}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Search */}

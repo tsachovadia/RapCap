@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import type { DbSession } from '../../db/db'
 import { db } from '../../db/db'
-import { Calendar, Clock, Music, Play, Pause, Edit2, Plus, Trash2 } from 'lucide-react'
+import { Calendar, Clock, Music, Play, Pause, Edit2, Plus, Trash2, Layers } from 'lucide-react'
 import YouTube from 'react-youtube'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useNavigate } from 'react-router-dom'
 
 // Simple auto-resize textarea component
 const AutoResizeTextarea = ({ value, onChange, className, ...props }: any) => {
@@ -34,6 +35,7 @@ interface WritingSessionViewerProps {
 }
 
 export default function WritingSessionViewer({ session }: WritingSessionViewerProps) {
+    const navigate = useNavigate()
     const [lines, setLines] = useState<string[]>(session.metadata?.lines || session.metadata?.lyrics?.split('\n') || [])
     const linkedRhymes = session.metadata?.linkedRhymes || []
 
@@ -135,7 +137,16 @@ export default function WritingSessionViewer({ session }: WritingSessionViewerPr
                     <Edit2 size={64} />
                 </div>
 
-                <h1 className="text-3xl font-black text-white mb-2">{session.title || 'Untitled Session'}</h1>
+                <div className="flex justify-between items-start mb-2">
+                    <h1 className="text-3xl font-black text-white">{session.title || 'Untitled Session'}</h1>
+                    <button
+                        onClick={() => navigate(`/rhyme-library/session/${session.id}`)}
+                        className="flex items-center gap-2 bg-[#1DB954] text-black font-bold px-4 py-2 rounded-full hover:scale-105 transition-transform text-sm shadow-lg shadow-[#1DB954]/20"
+                    >
+                        <Layers size={16} />
+                        <span>Open in Zen Mode</span>
+                    </button>
+                </div>
 
                 <div className="flex flex-wrap gap-4 text-sm text-subdued items-center">
                     <span className="flex items-center gap-1.5">

@@ -1,3 +1,4 @@
+
 import Dexie, { type Table } from 'dexie';
 
 export interface Punchline {
@@ -31,12 +32,21 @@ export interface AnalysisToken {
 
 export interface DetectedRhymeGroup {
     id: string; // temporary UUID
-    words: string[];
+    words: (string | {
+        lineId?: string;
+        wordIndex?: number;
+        text: string;
+        syllables?: string[];   // NEW: For decomposition view
+        phonemes?: string[];    // NEW: For granular analysis
+        charIndices?: number[]; // NEW: For manual fine-grained annotation
+    })[];
     phoneticSignature: string; // e.g., "a-a-a-n"
     confidence: number;
-    type: 'terminal_rhyme' | 'multi_syllabic' | 'assonance' | 'perfect' | 'slant' | 'none';
+    // Updated types for new engine
+    type: 'terminal_rhyme' | 'multi_syllabic' | 'assonance' | 'perfect' | 'slant' | 'none' | 'anchor' | 'multi';
     status?: 'new' | 'match' | 'partial'; // Client-side state
     existingGroupId?: number; // if matching an existing group
+    color?: string;
 }
 
 export interface SessionAnalysis {
@@ -48,6 +58,11 @@ export interface SessionAnalysis {
     flowMetrics: {
         wpm: number;
         density: string; // "High", "Low"
+    };
+    corrections?: {
+        mergedGroups: string[][]; // Array of merged Group IDs
+        splitWords: { word: string; originalGroupId: string }[];
+        ignoredWords: string[];
     };
 }
 
@@ -98,6 +113,13 @@ export interface DbSession {
         notes?: string; // Session notes
         aiKeywords?: string[]; // AI extracted keywords
         analysis?: SessionAnalysis; // Deep AI Analysis
+        userAnnotations?: {
+            groupId: string;
+            wordIndex: number;
+            lineId?: string;
+            syllableIndices?: number[];
+            text: string;
+        }[];
         [key: string]: any;
     };
     content?: string; // For generic content like drill words

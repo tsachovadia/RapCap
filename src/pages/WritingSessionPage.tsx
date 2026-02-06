@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Plus, X, Layers, Search, Check, ChevronLeft } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { db, type WordGroup, type DbSession } from '../db/db'
 import DictaModal from '../components/shared/DictaModal'
 import { syncService } from '../services/dbSync'
@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 export default function WritingSessionPage() {
     const navigate = useNavigate()
+    const { id } = useParams<{ id?: string }>()
     const { user } = useAuth()
 
     // Line-based State
@@ -47,20 +48,37 @@ export default function WritingSessionPage() {
         .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "")
         .trim()
 
-    // Load initial decks if none selected
+    // Load session if ID is provided
     useEffect(() => {
-        const loadInitialDecks = async () => {
-            if (visibleDeckIds.length === 0) {
-                // Try to load from a "current draft" or just recent groups? 
-                // For now, loading recent groups is a good default for a "New Session"
+        const loadExistingSession = async () => {
+            if (id) {
+                const numericId = parseInt(id, 10)
+                if (!isNaN(numericId)) {
+                    const session = await db.sessions.get(numericId)
+                    if (session && session.type === 'writing') {
+                        setTitle(session.title)
+                        setSessionId(id)
+                        sessionRef.current = session
+                        if (session.metadata?.lines) {
+                            setLines(session.metadata.lines)
+                        } else if (session.metadata?.lyrics) {
+                            setLines(session.metadata.lyrics.split('\n'))
+                        }
+                        if (session.metadata?.visibleDeckIds) {
+                            setVisibleDeckIds(session.metadata.visibleDeckIds)
+                        }
+                    }
+                }
+            } else {
+                // Pre-fill with recent decks for NEW session only
                 const recent = await db.wordGroups.orderBy('lastUsedAt').reverse().limit(4).toArray()
                 if (recent.length > 0) {
                     setVisibleDeckIds(recent.map(r => r.id!))
                 }
             }
         }
-        loadInitialDecks()
-    }, [])
+        loadExistingSession()
+    }, [id])
 
     // Visible Decks Query
     const visibleDecks = useLiveQuery(

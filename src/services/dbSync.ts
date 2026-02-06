@@ -395,8 +395,22 @@ export const syncService = {
     }
 };
 
-function cleanData(data: any) {
-    const clean = { ...data };
-    Object.keys(clean).forEach(key => (clean[key] === undefined || clean[key] === null) && delete clean[key]);
-    return clean;
+
+function cleanData(data: any): any {
+    if (data === null || data === undefined) return null;
+    if (data instanceof Date) return data;
+    if (Array.isArray(data)) {
+        return data.map(item => cleanData(item)).filter(i => i !== undefined);
+    }
+    if (typeof data === 'object') {
+        const clean: any = {};
+        Object.keys(data).forEach(key => {
+            const value = cleanData(data[key]);
+            if (value !== undefined) {
+                clean[key] = value;
+            }
+        });
+        return clean;
+    }
+    return data;
 }

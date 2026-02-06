@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Layers, Grid3X3, Maximize2, Minimize2, ChevronDown, ChevronUp, Save, X, Plus, Sparkles, Video, VideoOff, StickyNote, Flag, Music } from 'lucide-react'
+import { X, Plus, Save, Minimize2, Maximize2, Video, VideoOff, StickyNote, Sparkles, Layers, Search, Flag, Music, Check } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import { PRESET_BEATS, DEFAULT_BEAT_ID } from '../../data/beats'
@@ -35,12 +35,12 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
     // NEW: Multi-deck selection for column display
     const [selectedDeckIds, setSelectedDeckIds] = useState<number[]>([])
-    const [columnCount, setColumnCount] = useState(4)
     const [showDeckSelector, setShowDeckSelector] = useState(false)
-    const [viewMode, setViewMode] = useState<'normal' | 'expanded' | 'collapsed'>('normal')
 
-    // NEW: Zen Mode & Creation Modal
+    // Unified Zen Mode (Replaces conflicting ViewStates)
     const [isZenMode, setIsZenMode] = useState(false)
+
+    // Modal States
     const [showNewGroupModal, setShowNewGroupModal] = useState(false)
     const [newGroupDraft, setNewGroupDraft] = useState({ name: '', keywords: '', words: [] as string[] })
 
@@ -52,6 +52,9 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     const [showVideoInZen, setShowVideoInZen] = useState(true)
     const [showNotesInZen, setShowNotesInZen] = useState(false)
 
+    // Zen Mode / Swapping State
+    const [swappingDeckIndex, setSwappingDeckIndex] = useState<number | null>(null)
+    const [deckSearchQuery, setDeckSearchQuery] = useState('')
 
     // Fetch all word groups for selection
     const allWordGroups = useLiveQuery(() => db.wordGroups.toArray(), [])
@@ -441,11 +444,13 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     }
 
     return (
-        <div className={`h-full flex flex-col ${viewMode === 'expanded' ? 'absolute inset-0 z-50 bg-[#121212]' : ''}`}>
+        <div className={`h-full flex flex-col ${isZenMode ? 'absolute inset-0 z-50 bg-[#121212]' : ''}`}>
 
             {/* Header / Controls */}
-            <div className={`flex items-center justify-between p-2 border-b border-[#282828] ${viewMode === 'collapsed' ? 'hidden' : ''}`}>
-                <div className="flex items-center gap-2">
+            <div className={`relative flex items-center justify-center p-2 border-b border-[#282828] min-h-[50px]`}>
+
+                {/* Left Controls (Absolute) */}
+                <div className="absolute left-2 flex items-center gap-2 z-10">
                     {/* Capture Moment Button (Visible in normal mode) */}
                     {onSaveMoment && flowState === 'recording' && (
                         <button
@@ -456,132 +461,81 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                             <span>Moment</span>
                         </button>
                     )}
-
-                    {/* BEAT SELECTOR (Moved from overlay) */}
-                    <div className="flex items-center gap-1 bg-[#282828] rounded-lg p-0.5 border border-[#333]">
-                        {showUrlInput ? (
-                            <div className="flex items-center gap-1 px-1">
-                                <input
-                                    type="text"
-                                    value={urlInput}
-                                    onChange={(e) => setUrlInput(e.target.value)}
-                                    placeholder="Paste URL..."
-                                    className="bg-transparent border-none outline-none text-white text-xs w-32 font-mono"
-                                    onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
-                                    autoFocus
-                                />
-                                <button
-                                    onClick={handleUrlSubmit}
-                                    className="text-[#1DB954] hover:text-white font-bold px-1"
-                                >
-                                    OK
-                                </button>
-                                <button onClick={() => setShowUrlInput(false)}>
-                                    <X size={14} className="text-subdued" />
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="relative">
-                                    <select
-                                        className="bg-transparent text-white text-xs font-bold px-2 py-1 outline-none cursor-pointer appearance-none pr-6 max-w-[150px] truncate"
-                                        onChange={(e) => {
-                                            if (e.target.value === 'paste_new') {
-                                                setShowUrlInput(true)
-                                            } else {
-                                                setVideoId(e.target.value)
-                                            }
-                                        }}
-                                        value={videoId}
-                                    >
-                                        <option value="" disabled>Select Beat...</option>
-                                        {allBeats.map(beat => <option key={beat.id} value={beat.id}>{beat.name}</option>)}
-                                        <option value="paste_new" className="text-[#1DB954] font-bold">+ Import from YouTube</option>
-                                    </select>
-                                    <Music size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-subdued pointer-events-none" />
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    <button
-                        onClick={() => setShowDeckSelector(true)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-[#282828] hover:bg-[#3E3E3E] rounded-lg text-sm text-subdued hover:text-white transition-colors"
-                    >
-                        <Layers size={14} />
-                        <span>{language === 'he' ? 'בחר חרוזים' : 'Rhymes'}</span>
-                    </button>
-
-                    {/* NEW GROUP BUTTON */}
-                    <button
-                        onClick={() => setShowNewGroupModal(true)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/50 rounded-lg text-sm transition-colors"
-                    >
-                        <Plus size={14} />
-                        <span>{language === 'he' ? 'חדש' : 'New'}</span>
-                    </button>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* CENTER: BEAT SELECTOR */}
+                <div className="flex items-center gap-1 bg-[#282828] rounded-lg p-0.5 border border-[#333] z-10">
+                    {showUrlInput ? (
+                        <div className="flex items-center gap-1 px-1">
+                            <input
+                                type="text"
+                                value={urlInput}
+                                onChange={(e) => setUrlInput(e.target.value)}
+                                placeholder="Paste URL..."
+                                className="bg-transparent border-none outline-none text-white text-xs w-32 font-mono"
+                                onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
+                                autoFocus
+                            />
+                            <button
+                                onClick={handleUrlSubmit}
+                                className="text-[#1DB954] hover:text-white font-bold px-1"
+                            >
+                                OK
+                            </button>
+                            <button onClick={() => setShowUrlInput(false)}>
+                                <X size={14} className="text-subdued" />
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="relative">
+                                <select
+                                    className="bg-transparent text-white text-xs font-bold px-2 py-1 outline-none cursor-pointer appearance-none pr-6 max-w-[150px] truncate text-center"
+                                    onChange={(e) => {
+                                        if (e.target.value === 'paste_new') {
+                                            setShowUrlInput(true)
+                                        } else {
+                                            setVideoId(e.target.value)
+                                        }
+                                    }}
+                                    value={videoId}
+                                >
+                                    <option value="" disabled>Select Beat...</option>
+                                    {allBeats.map(beat => <option key={beat.id} value={beat.id}>{beat.name}</option>)}
+                                    <option value="paste_new" className="text-[#1DB954] font-bold">+ Import from YouTube</option>
+                                </select>
+                                <Music size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-subdued pointer-events-none" />
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* Right Controls (Absolute) */}
+                <div className="absolute right-2 flex items-center gap-2 z-10">
                     {/* ZEN MODE TOGGLE */}
                     <button
                         onClick={() => setIsZenMode(!isZenMode)}
-                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-2 ${isZenMode ? 'bg-purple-500/20 text-purple-400' : 'text-subdued hover:bg-[#282828]'}`}
+                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 ${isZenMode ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' : 'text-subdued hover:bg-[#282828] border border-transparent'}`}
                         title="Zen Mode"
                     >
                         {isZenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         <span className="text-xs font-bold">ZEN</span>
-                    </button>
-
-                    <div className="w-px h-6 bg-[#282828] mx-1" />
-
-                    <button
-                        onClick={() => setColumnCount(3)}
-                        className={`p-1.5 rounded-lg transition-colors ${columnCount === 3 ? 'bg-[#1DB954] text-black' : 'text-subdued hover:bg-[#282828]'}`}
-                        title="3 Columns"
-                    >
-                        <Grid3X3 size={16} />
-                    </button>
-                    <button
-                        onClick={() => setColumnCount(4)}
-                        className={`p-1.5 rounded-lg transition-colors ${columnCount === 4 ? 'bg-[#1DB954] text-black' : 'text-subdued hover:bg-[#282828]'}`}
-                        title="4 Columns"
-                    >
-                        <Grid3X3 size={16} />
-                    </button>
-
-                    <div className="w-px h-6 bg-[#282828] mx-1" />
-
-                    <button
-                        onClick={() => setViewMode(prev => prev === 'expanded' ? 'normal' : 'expanded')}
-                        className={`p-1.5 rounded-lg transition-colors ${viewMode === 'expanded' ? 'bg-[#1DB954] text-black' : 'text-subdued hover:bg-[#282828]'}`}
-                        title={viewMode === 'expanded' ? 'Exit Fullscreen' : 'Fullscreen'}
-                    >
-                        {viewMode === 'expanded' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                     </button>
                 </div>
             </div>
 
             <div className="flex-1 flex flex-col gap-2 min-h-0 relative">
                 {/* Upper Section: Beat & Words */}
-                <div className={`flex gap-2 min-h-0 relative transition-all duration-300 ${viewMode === 'expanded' ? 'flex-[3]' : 'flex-1'}`}>
+                <div className={`flex gap-2 min-h-0 relative transition-all duration-300 ${isZenMode ? 'flex-[10]' : 'flex-[10]'} overflow-hidden`}>
                     <div className="flex-1 flex flex-col gap-2 min-h-0">
 
-                        {/* Beat Player - Cleaned Up */}
-                        <div className={`h-20 flex-none bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group ${viewMode === 'collapsed' ? 'hidden' : ''}`}>
-                            <BeatPlayer
-                                videoId={videoId}
-                                isPlaying={flowState !== 'idle' && flowState !== 'paused'}
-                                volume={beatVolume}
-                                onReady={(player) => setYoutubePlayer(player)}
-                            />
-                        </div>
+                        {/* Grid was here, BeatPlayer moved below */}
 
                         {/* Rhyme Deck Columns Grid */}
                         <div
                             className={`flex-1 min-h-0 grid gap-2 transition-all duration-300
-                            ${columnCount === 3 ? 'grid-cols-3' : 'grid-cols-4'}
-                            ${isZenMode ? 'fixed inset-x-0 top-0 bottom-[30%] z-50 bg-black/95 p-8 backdrop-blur-sm' : ''}
+                            grid-cols-4
+                            ${isZenMode ? 'fixed inset-0 z-50 bg-black/95 p-8 backdrop-blur-sm' : ''}
                         `}>
                             {/* Zen Mode Type Controls */}
                             {isZenMode && (
@@ -609,13 +563,6 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                             <Flag size={20} />
                                         </button>
                                     )}
-                                    <button
-                                        onClick={() => setShowNewGroupModal(true)}
-                                        className="p-2 rounded-full bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 transition-colors"
-                                        title="Create New Group"
-                                    >
-                                        <Plus size={20} />
-                                    </button>
                                 </div>
                             )}
 
@@ -631,10 +578,10 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
                             {/* Zen Mode Notes Overlay */}
                             {isZenMode && showNotesInZen && (
-                                <div className="absolute top-16 right-4 bottom-4 w-80 bg-[#181818] border border-[#333] rounded-xl p-4 shadow-2xl z-[55] flex flex-col">
+                                <div className="absolute top-16 right-4 bottom-4 w-80 bg-[#181818] border border-[#333] rounded-xl p-4 shadow-2xl z-[55] flex flex-col animate-in slide-in-from-right duration-200">
                                     <h3 className="text-sm font-bold text-subdued mb-2">Session Notes</h3>
                                     <textarea
-                                        className="flex-1 bg-[#121212] rounded p-2 text-white text-sm outline-none resize-none focus:ring-1 ring-[#1DB954]"
+                                        className="flex-1 bg-[#121212] rounded p-2 text-white text-sm outline-none resize-none focus:ring-1 ring-[#1DB954] border border-[#282828]"
                                         placeholder="Write your thoughts..."
                                         value={notes || ''}
                                         onChange={e => setNotes?.(e.target.value)}
@@ -642,7 +589,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 </div>
                             )}
 
-                            {Array.from({ length: columnCount }).map((_, idx) => {
+                            {Array.from({ length: 4 }).map((_, idx) => {
                                 const deckId = selectedDeckIds[idx]
                                 const deck = allWordGroups?.find(g => g.id === deckId)
                                 const isEditing = editingDeckIndices.includes(idx)
@@ -708,34 +655,47 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 return (
                                     <div
                                         key={deck.id} // Use stable ID
-                                        className="bg-[#121212] rounded-lg p-1.5 flex flex-col border border-[#282828] h-full overflow-hidden relative group/deck"
+                                        className={`bg-[#121212] rounded-lg p-1.5 flex flex-col border border-[#282828] h-full overflow-hidden relative group/deck ${isZenMode ? 'bg-[#000]' : ''}`}
                                     >
                                         {/* Column Header */}
                                         <div className="text-center pb-1 border-b border-[#282828] mb-1 flex-none flex items-center justify-between px-1">
                                             <span className={`font-bold text-[#1DB954] uppercase tracking-wider truncate block flex-1 text-right ${isZenMode ? 'text-lg' : 'text-[10px]'}`}>
                                                 {deck.name}
                                             </span>
-                                            <div className="flex items-center gap-0.5 opacity-0 group-hover/deck:opacity-100 transition-opacity">
+                                            <div className={`flex items-center gap-0.5 transition-opacity ${isZenMode ? 'opacity-100' : 'opacity-0 group-hover/deck:opacity-100'}`}>
                                                 <button
                                                     onClick={() => handleOpenDicta(idx)}
                                                     className="text-purple-400 hover:text-purple-300 p-1 rounded-full hover:bg-purple-500/20"
                                                     title="Find Rhymes (Dicta)"
                                                 >
-                                                    <Sparkles size={12} />
+                                                    <Sparkles size={isZenMode ? 18 : 12} />
                                                 </button>
+
+                                                {/* Swap/Search Button */}
+                                                <button
+                                                    onClick={() => {
+                                                        setSwappingDeckIndex(idx)
+                                                        setDeckSearchQuery('') // Reset search on open
+                                                    }}
+                                                    className="text-blue-400 hover:text-blue-300 p-1 rounded-full hover:bg-blue-500/20"
+                                                    title="Swap Group"
+                                                >
+                                                    <Search size={isZenMode ? 18 : 12} />
+                                                </button>
+
                                                 <button
                                                     onClick={() => toggleEditMode(idx)}
                                                     className="text-subdued hover:text-white p-1 rounded-full hover:bg-white/10"
                                                     title="Create/Edit"
                                                 >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width={isZenMode ? 18 : 12} height={isZenMode ? 18 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                                 </button>
                                                 <button
                                                     onClick={() => replaceWithRandomDeck(idx)}
                                                     className="text-subdued hover:text-white p-1 rounded-full hover:bg-white/10"
                                                     title="Randomize Deck"
                                                 >
-                                                    <Layers size={10} />
+                                                    <Layers size={isZenMode ? 18 : 10} />
                                                 </button>
                                             </div>
                                         </div>
@@ -763,41 +723,60 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 )
                             })}
                         </div>
+
+                        {/* Beat Player - Moved Here (Bottom) */}
+                        <div className={`h-20 flex-none bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group transition-all duration-300 ${isZenMode && !showVideoInZen ? 'h-0 opacity-0 border-0 m-0' : ''}`}>
+                            <BeatPlayer
+                                videoId={videoId}
+                                isPlaying={flowState !== 'idle' && flowState !== 'paused'}
+                                volume={beatVolume}
+                                onReady={(player) => setYoutubePlayer(player)}
+                            />
+                        </div>
                     </div>
 
 
-                    {/* Volume Controls (Restored) */}
-                    <div className={`w-3 flex flex-col items-center justify-center gap-2 py-4 bg-[#121212] rounded-full border border-[#282828] ${viewMode === 'collapsed' ? 'hidden' : ''}`}>
-                        <div className="flex-1 w-1 bg-[#282828] rounded-full relative group">
+                    {/* Volume Controls (WIDENED & Improved) */}
+                    <div className="w-8 flex flex-col items-center justify-center gap-2 py-4 bg-[#121212] rounded-full border border-[#282828]">
+                        <Music size={14} className="text-subdued" />
+                        <div className="flex-1 w-2 bg-[#282828] rounded-full relative group cursor-pointer hover:w-3 transition-all">
                             <div
                                 className="absolute bottom-0 w-full bg-[#1DB954] rounded-full"
                                 style={{ height: `${beatVolume}%` }}
                             />
+                            <div className="absolute bottom-0 w-full flex items-end justify-center pb-2 pointer-events-none">
+                                {/* Thumb indicator could go here if needed */}
+                            </div>
                             <input
                                 type="range"
                                 min="0"
                                 max="100"
                                 value={beatVolume}
                                 onChange={(e) => setBeatVolume(parseInt(e.target.value))}
-                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                style={{ appearance: 'slider-vertical', WebkitAppearance: 'slider-vertical' } as any}
                                 title="Beat Volume"
                             />
                         </div>
+                        <span className="text-[10px] font-mono text-zinc-500">{beatVolume}</span>
                     </div>
                 </div>
 
-                {/* Transcript Area (Restored!) */}
+                {/* Transcript Area (Responsive) */}
                 <div className={`
                     bg-[#121212] rounded-xl border border-[#282828] p-4 overflow-hidden relative transition-all duration-300
-                    ${viewMode === 'expanded' ? 'flex-[2]' : 'h-40'}
+                     h-40 flex-none
                     ${isZenMode ? 'fixed inset-x-0 bottom-0 h-[30%] z-50 bg-black/95 border-t border-[#333] rounded-none' : ''}
                 `}>
                     <div className="absolute top-2 right-2 flex gap-2 z-10">
                         <button
-                            onClick={() => setViewMode(prev => prev === 'collapsed' ? 'normal' : 'collapsed')}
+                            onClick={() => {
+                                // Toggle Zen mode if user wants to minimize/expand from here
+                                setIsZenMode(!isZenMode)
+                            }}
                             className="p-1 hover:bg-[#282828] rounded text-subdued"
                         >
-                            {viewMode === 'collapsed' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            {isZenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         </button>
                     </div>
 
@@ -815,94 +794,171 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
             </div>
 
             {/* CREATE NEW GROUP MODAL */}
-            {showNewGroupModal && (
-                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="w-full max-w-lg bg-[#181818] p-6 rounded-xl border border-[#333] shadow-2xl flex flex-col gap-4">
-                        <h2 className="text-xl font-bold text-white">Create New Rhyme Group</h2>
-                        <input
-                            className="bg-[#121212] border border-[#333] rounded p-2 text-white focus:border-[#1DB954] outline-none"
-                            placeholder="Group Name (e.g., 'Battle Raps')"
-                            value={newGroupDraft.name}
-                            onChange={e => setNewGroupDraft(prev => ({ ...prev, name: e.target.value }))}
-                        />
-                        <input
-                            className="bg-[#121212] border border-[#333] rounded p-2 text-white focus:border-[#1DB954] outline-none"
-                            placeholder="Add words (comma separated)..."
-                            value={newGroupDraft.keywords}
-                            onChange={e => {
-                                const val = e.target.value
-                                const words = val.split(',').map(s => s.trim()).filter(Boolean)
-                                setNewGroupDraft(prev => ({ ...prev, keywords: val, words }))
-                            }}
-                        />
-                        {/* Preview Words */}
-                        <div className="flex flex-wrap gap-2 min-h-20 p-2 bg-[#121212] rounded border border-[#333]">
-                            {newGroupDraft.words.map((w, i) => (
-                                <span key={i} className="bg-white/10 px-2 py-1 rounded text-sm">{w}</span>
-                            ))}
-                            {newGroupDraft.words.length === 0 && <span className="text-subdued text-sm italic">Words will appear here...</span>}
-                        </div>
+            {
+                showNewGroupModal && (
+                    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="w-full max-w-lg bg-[#181818] p-6 rounded-xl border border-[#333] shadow-2xl flex flex-col gap-4">
+                            <h2 className="text-xl font-bold text-white">Create New Rhyme Group</h2>
+                            <input
+                                className="bg-[#121212] border border-[#333] rounded p-2 text-white focus:border-[#1DB954] outline-none"
+                                placeholder="Group Name (e.g., 'Battle Raps')"
+                                value={newGroupDraft.name}
+                                onChange={e => setNewGroupDraft(prev => ({ ...prev, name: e.target.value }))}
+                            />
+                            <input
+                                className="bg-[#121212] border border-[#333] rounded p-2 text-white focus:border-[#1DB954] outline-none"
+                                placeholder="Add words (comma separated)..."
+                                value={newGroupDraft.keywords}
+                                onChange={e => {
+                                    const val = e.target.value
+                                    const words = val.split(',').map(s => s.trim()).filter(Boolean)
+                                    setNewGroupDraft(prev => ({ ...prev, keywords: val, words }))
+                                }}
+                            />
+                            {/* Preview Words */}
+                            <div className="flex flex-wrap gap-2 min-h-20 p-2 bg-[#121212] rounded border border-[#333]">
+                                {newGroupDraft.words.map((w, i) => (
+                                    <span key={i} className="bg-white/10 px-2 py-1 rounded text-sm">{w}</span>
+                                ))}
+                                {newGroupDraft.words.length === 0 && <span className="text-subdued text-sm italic">Words will appear here...</span>}
+                            </div>
 
-                        <div className="flex gap-2 justify-end mt-2">
-                            <button
-                                onClick={() => setShowNewGroupModal(false)}
-                                className="px-4 py-2 text-subdued hover:text-white"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleCreateNewGroup}
-                                className="px-4 py-2 bg-[#1DB954] text-black font-bold rounded hover:bg-[#1ed760] disabled:opacity-50"
-                                disabled={!newGroupDraft.name || newGroupDraft.words.length === 0}
-                            >
-                                Create Group
-                            </button>
+                            <div className="flex gap-2 justify-end mt-2">
+                                <button
+                                    onClick={() => setShowNewGroupModal(false)}
+                                    className="px-4 py-2 text-subdued hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleCreateNewGroup}
+                                    className="px-4 py-2 bg-[#1DB954] text-black font-bold rounded hover:bg-[#1ed760] disabled:opacity-50"
+                                    disabled={!newGroupDraft.name || newGroupDraft.words.length === 0}
+                                >
+                                    Create Group
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Deck Selector Modal */}
-            {showDeckSelector && (
-                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="w-full max-w-2xl bg-[#181818] p-6 rounded-xl border border-[#333] shadow-2xl h-[80vh] flex flex-col">
-                        <div className="flex flex-col gap-4 flex-1 overflow-hidden">
-                            <h2 className="text-2xl font-bold text-white mb-4">Select Rhyme Decks</h2>
+            {
+                showDeckSelector && (
+                    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="w-full max-w-2xl bg-[#181818] p-6 rounded-xl border border-[#333] shadow-2xl h-[80vh] flex flex-col">
+                            <div className="flex flex-col gap-4 flex-1 overflow-hidden">
+                                <h2 className="text-2xl font-bold text-white mb-4">Select Rhyme Decks</h2>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto pr-2">
-                                {allWordGroups?.map(group => (
-                                    <button
-                                        key={group.id}
-                                        onClick={() => {
-                                            const id = group.id!
-                                            if (selectedDeckIds.includes(id)) {
-                                                setSelectedDeckIds(selectedDeckIds.filter(i => i !== id))
-                                            } else {
-                                                if (selectedDeckIds.length >= columnCount) return;
-                                                setSelectedDeckIds([...selectedDeckIds, id])
-                                            }
-                                        }}
-                                        className={`w-full p-3 rounded-lg text-right flex items-center justify-between transition-colors ${selectedDeckIds.includes(group.id!)
-                                            ? 'bg-[#1DB954]/20 border border-[#1DB954]'
-                                            : 'bg-[#282828] hover:bg-[#3E3E3E] border border-transparent'
-                                            }`}
-                                    >
-                                        <span className="text-subdued text-xs">{group.items.length} מילים</span>
-                                        <span className="font-medium">{group.name}</span>
-                                    </button>
-                                ))}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto pr-2">
+                                    {allWordGroups?.map(group => (
+                                        <button
+                                            key={group.id}
+                                            onClick={() => {
+                                                const id = group.id!
+                                                if (selectedDeckIds.includes(id)) {
+                                                    setSelectedDeckIds(selectedDeckIds.filter(i => i !== id))
+                                                } else {
+                                                    if (selectedDeckIds.length >= 4) return;
+                                                    setSelectedDeckIds([...selectedDeckIds, id])
+                                                }
+                                            }}
+                                            className={`w-full p-3 rounded-lg text-right flex items-center justify-between transition-colors ${selectedDeckIds.includes(group.id!)
+                                                ? 'bg-[#1DB954]/20 border border-[#1DB954]'
+                                                : 'bg-[#282828] hover:bg-[#3E3E3E] border border-transparent'
+                                                }`}
+                                        >
+                                            <span className="text-subdued text-xs">{group.items.length} מילים</span>
+                                            <span className="font-medium">{group.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={() => setShowDeckSelector(false)}
+                                    className="w-full mt-4 py-2 bg-[#1DB954] text-black font-bold rounded-lg"
+                                >
+                                    {language === 'he' ? 'סיום' : 'Done'}
+                                </button>
                             </div>
-                            <button
-                                onClick={() => setShowDeckSelector(false)}
-                                className="w-full mt-4 py-2 bg-[#1DB954] text-black font-bold rounded-lg"
-                            >
-                                {language === 'he' ? 'סיום' : 'Done'}
-                            </button>
+                        </div>
+                    </div>
+                )
+            }
+            {/* Dicta Modal */}
+            {/* Swap Deck Modal */}
+            {swappingDeckIndex !== null && (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSwappingDeckIndex(null)}>
+                    <div className="bg-[#1e1e1e] w-full max-w-sm rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[60vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-3 border-b border-white/5 bg-[#252525] flex justify-between items-center">
+                            <span className="text-xs font-bold uppercase text-white/50 tracking-wider">Select or Create Group</span>
+                            <button onClick={() => setSwappingDeckIndex(null)} className="text-white/50 hover:text-white"><X size={16} /></button>
+                        </div>
+
+                        <div className="p-3 border-b border-white/5">
+                            <div className="flex items-center bg-[#111] border border-white/10 rounded-lg px-2 py-1.5 focus-within:border-blue-500/50 transition-colors">
+                                <Search size={14} className="text-white/30 mr-2" />
+                                <input
+                                    autoFocus
+                                    className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-white/20"
+                                    placeholder="Search groups..."
+                                    value={deckSearchQuery}
+                                    onChange={e => setDeckSearchQuery(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                            {/* Create Option if search has input */}
+                            {deckSearchQuery.trim().length > 0 && (
+                                <button
+                                    onClick={() => {
+                                        setNewGroupDraft(prev => ({ ...prev, name: deckSearchQuery }))
+                                        setSwappingDeckIndex(null)
+                                        setShowNewGroupModal(true)
+                                    }}
+                                    className="w-full py-2 mb-2 bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/20 hover:bg-[#1DB954]/20 rounded-lg flex items-center justify-center gap-2 transition-colors font-bold text-xs uppercase"
+                                >
+                                    <Plus size={14} />
+                                    Create "{deckSearchQuery}"
+                                </button>
+                            )}
+
+                            {allWordGroups
+                                ?.filter(g => {
+                                    if (!deckSearchQuery) return true
+                                    const q = deckSearchQuery.toLowerCase()
+                                    return g.name.toLowerCase().includes(q) || g.items.some(i => i.toLowerCase().includes(q))
+                                })
+                                .map(g => (
+                                    <button
+                                        key={g.id}
+                                        onClick={() => {
+                                            const newIds = [...selectedDeckIds]
+                                            newIds[swappingDeckIndex] = g.id!
+                                            setSelectedDeckIds(newIds)
+                                            setSwappingDeckIndex(null)
+                                        }}
+                                        className={`w-full text-left px-3 py-2 rounded-lg mb-1 flex items-center justify-between group transition-colors
+                                            ${selectedDeckIds.includes(g.id!) ? 'bg-blue-500/10 border border-blue-500/30' : 'hover:bg-[#252525] border border-transparent'}
+                                        `}
+                                    >
+                                        <div className="overflow-hidden">
+                                            <div className={`text-sm font-bold truncate ${selectedDeckIds.includes(g.id!) ? 'text-blue-400' : 'text-white/80'}`}>{g.name}</div>
+                                            <div className="text-[10px] text-white/40 truncate">{g.items.slice(0, 4).join(', ')}...</div>
+                                        </div>
+                                        {selectedDeckIds.includes(g.id!) && <Check size={14} className="text-blue-400" />}
+                                    </button>
+                                ))
+                            }
+                            {allWordGroups?.length === 0 && (
+                                <div className="text-center p-4 text-white/30 text-xs">No groups found.</div>
+                            )}
                         </div>
                     </div>
                 </div>
             )}
-            {/* Dicta Modal */}
+
             <DictaModal
                 isOpen={isDictaOpen}
                 onClose={() => setIsDictaOpen(false)}
@@ -910,6 +966,6 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                     handleDictaAddWords(words)
                 }}
             />
-        </div>
+        </div >
     )
 }

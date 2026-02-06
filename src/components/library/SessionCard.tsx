@@ -141,6 +141,26 @@ export default function SessionCard({
                                 </span>
                             </>
                         )}
+                        {/* 4. Rhyme Scheme Badge */}
+                        {session.metadata?.analysis?.rhymeSchemes && session.metadata?.analysis?.rhymeSchemes.length > 0 && (
+                            <>
+                                <span>•</span>
+                                <div className="flex items-center gap-0.5" title="Detected Rhyme Schemes">
+                                    {/* Render simpler blocks if complex, or text if simple */}
+                                    {session.metadata.analysis.rhymeSchemes.slice(0, 3).map((rs, idx) => (
+                                        <div key={idx}
+                                            className="w-4 h-4 rounded-sm flex items-center justify-center text-[8px] font-bold text-black"
+                                            style={{ backgroundColor: rs.color || '#444' }}
+                                        >
+                                            {String.fromCharCode(65 + (idx % 26))}
+                                        </div>
+                                    ))}
+                                    {session.metadata.analysis.rhymeSchemes.length > 3 && (
+                                        <span className="text-[10px] ml-1">+{(session.metadata.analysis.rhymeSchemes.length - 3)}</span>
+                                    )}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 

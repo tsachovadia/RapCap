@@ -1,12 +1,13 @@
 
 import { getVocalization } from './dicta';
+import { Syllabifier } from './phonetic/Syllabifier';
 
 // --- Types ---
 
 export interface PhoneticAnalysisResult {
     timestamp: number;
     lines: AnalyzedLine[];
-    rhymeGroups: PhoneticRhymeGroup[];
+    rhymeGroups: RhymeGroup[];
 }
 
 export interface AnalyzedLine {
@@ -15,33 +16,51 @@ export interface AnalyzedLine {
     words: AnalyzedWord[];
 }
 
+export interface Syllable {
+    text: string;      // The visual text of the syllable (e.g. "Sha")
+    vowel: Vowel;      // The core vowel sound (e.g. "A")
+    isStressed: boolean;
+    startIndex: number; // Index in the word's string
+    endIndex: number;
+}
+
 export interface AnalyzedWord {
-    text: string;
-    clean: string; // no punctuation
-    vocalized?: string; // from Dicta
-    signature?: string; // "A-O"
+    text: string;       // Original text
+    clean: string;      // Clean text for keying
+    vocalized: string;  // Full Nikkud version
+    syllables: Syllable[];
+    vowelSignature: string; // "A-O"
+    anchorSignature: string; // Last syllable phonetic rep (e.g. "L-O-M")
+
+    // Positioning
     startIndex: number;
     endIndex: number;
     lineId?: string;
 }
 
-export interface PhoneticRhymeGroup {
+export interface RhymeGroup {
     id: string;
-    signature: string; // "A-O"
-    words: { lineId: string; wordIndex: number; text: string }[];
-    type: 'perfect' | 'slant' | 'assonance' | 'none';
-    color?: string; // Suggested UI color
+    signature: string; // The common denominator
+    words: {
+        lineId: string;
+        wordIndex: number;
+        text: string;
+        syllables?: string[];   // NEW
+        phonemes?: string[];    // NEW (Vowels)
+    }[];
+    type: 'perfect' | 'slant' | 'multi' | 'anchor' | 'assonance';
+    confidence: number;
+    color?: string;
 }
 
 // --- Constants & Mappings ---
 
-const CACHE_KEY = 'rapcap_phonetic_cache_v1';
+const CACHE_KEY = 'rapcap_phonetic_cache_v2'; // Bumped version
 
 // Base Vowels
 type Vowel = 'A' | 'E' | 'I' | 'O' | 'U' | '';
 
 // Unicode Map for Nikkud -> Vowel
-// Reference: https://en.wikipedia.org/wiki/Unicode_phonemes_for_Hebrew
 const NIKKUD_MAP: Record<string, Vowel> = {
     '\u05B8': 'A', // Qamats
     '\u05B7': 'A', // Patah
@@ -49,29 +68,36 @@ const NIKKUD_MAP: Record<string, Vowel> = {
 
     '\u05B5': 'E', // Tsere
     '\u05B6': 'E', // Segol
-    '\u05B0': 'E', // Sheva (Treating as Na/E for simplicity initially, or ignorable?) -> User said E
+    '\u05B0': 'E', // Sheva (Often silent, but treated as E if vocal)
 
     '\u05B4': 'I', // Hiriq
 
     '\u05B9': 'O', // Holam
-    '\u05BA': 'O', // Holam Haser for Vav
-    '\u05C1': '',  // Shin Dot (Ignore)
-    '\u05C2': '',  // Sin Dot (Ignore)
+    '\u05BA': 'O', // Holam Haser
+    '\u05C1': '',  // Shin Dot
+    '\u05C2': '',  // Sin Dot
 
     '\u05BB': 'U', // Qubuts
-    // Shuruq is handled via Vav + Dagesh logic usually, but sometimes represented as distinct in vocalized strings
+    '\u05BC': '', // Dagesh (handled specially)
 };
+
+interface CacheEntry {
+    vocalized: string;
+    syllables: Syllable[];
+    vowelSignature: string;
+    anchorSignature: string;
+}
 
 // --- Engine Class ---
 
 class PhoneticEngine {
-    private wordCache: Map<string, string>; // word -> signature
+    private wordCache: Map<string, CacheEntry>;
 
     constructor() {
         this.wordCache = this.loadCache();
     }
 
-    private loadCache(): Map<string, string> {
+    private loadCache(): Map<string, CacheEntry> {
         try {
             const stored = localStorage.getItem(CACHE_KEY);
             return stored ? new Map(JSON.parse(stored)) : new Map();
@@ -83,15 +109,16 @@ class PhoneticEngine {
 
     private saveCache() {
         try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify(Array.from(this.wordCache.entries())));
+            // Convert Map to array for JSON serialization
+            const array = Array.from(this.wordCache.entries());
+            localStorage.setItem(CACHE_KEY, JSON.stringify(array));
         } catch (e) {
             console.warn("Failed to save phonetic cache", e);
         }
     }
 
     /**
-     * Main Entry Point: Analyzes raw text for rhymes.
-     * Uses caching to minimize API calls.
+     * Main Entry Point
      */
     async analyze(text: string): Promise<PhoneticAnalysisResult> {
         const lines = text.split('\n').map((line, idx) => ({
@@ -100,7 +127,7 @@ class PhoneticEngine {
             words: this.tokenize(line, `line-${idx}`)
         }));
 
-        // 1. Identify unknown words (missing from cache)
+        // 1. Identify unknown words
         const allWords = lines.flatMap(l => l.words);
         const uniqueWordsToFetch = Array.from(new Set(
             allWords
@@ -108,17 +135,29 @@ class PhoneticEngine {
                 .map(w => w.clean)
         ));
 
-        // 2. Batch Fetch Vocalization
+        // 2. Batch Fetch & Process
         if (uniqueWordsToFetch.length > 0) {
             await this.fetchAndCacheWords(uniqueWordsToFetch);
         }
 
-        // 3. Apply Signatures
+        // 3. Hydrate Words from Cache
         allWords.forEach(w => {
-            w.signature = this.wordCache.get(w.clean) || '';
+            const entry = this.wordCache.get(w.clean);
+            if (entry) {
+                w.vocalized = entry.vocalized;
+                w.syllables = entry.syllables;
+                w.vowelSignature = entry.vowelSignature;
+                w.anchorSignature = entry.anchorSignature;
+            } else {
+                // Fallback for failed fetches
+                w.vocalized = w.clean;
+                w.syllables = [];
+                w.vowelSignature = '';
+                w.anchorSignature = '';
+            }
         });
 
-        // 4. Find Groups
+        // 4. Find Groups (The 3-Layer Logic)
         const groups = this.findRhymeGroups(allWords);
 
         return {
@@ -129,48 +168,56 @@ class PhoneticEngine {
     }
 
     /**
-     * Tokenizes a line into AnalyzedWords
+     * Tokenizes a line into AnalyzedWords (Shells)
      */
     private tokenize(line: string, lineId: string): AnalyzedWord[] {
         const words: AnalyzedWord[] = [];
-        // Regex to capture Hebrew words, ignoring punctuation
         const regex = /[\u0590-\u05FF]+/g;
         let match;
         while ((match = regex.exec(line)) !== null) {
             words.push({
                 text: match[0],
-                clean: match[0], // Already clean due to regex
+                clean: match[0],
                 startIndex: match.index,
                 endIndex: match.index + match[0].length,
-                lineId: lineId // Context for grouping
-            } as any); // Type assertion needed or update interface
+                lineId: lineId,
+                vocalized: '',
+                syllables: [],
+                vowelSignature: '',
+                anchorSignature: ''
+            });
         }
         return words;
     }
 
     /**
-     * Fetches vocalization for words and computes their signature
+     * Fetches, Analyzes, and Caches words
      */
     private async fetchAndCacheWords(words: string[]) {
-        // Limit concurrency
         const BATCH_SIZE = 5;
         for (let i = 0; i < words.length; i += BATCH_SIZE) {
             const batch = words.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(async (word) => {
                 try {
-                    // Call Dicta
                     const results = await getVocalization(word);
-                    // Take the first option (usually most common) or the one matching "word" structure best
                     const bestOption = results[0] || word;
 
-                    // Compute Signature
-                    const signature = this.extractPhoneticSignature(bestOption);
+                    // Deep Analysis of the single word
+                    const analysis = this.analyzeSingleWord(bestOption);
 
-                    // Cache it
-                    this.wordCache.set(word, signature);
+                    this.wordCache.set(word, {
+                        vocalized: bestOption,
+                        ...analysis
+                    });
                 } catch (e) {
                     console.error(`Failed to vocalize ${word}`, e);
-                    this.wordCache.set(word, ""); // Mark as failed to avoid refetching immediately
+                    // Cache empty to avoid retry loops implies "unknown"
+                    this.wordCache.set(word, {
+                        vocalized: word,
+                        syllables: [],
+                        vowelSignature: '',
+                        anchorSignature: ''
+                    });
                 }
             }));
         }
@@ -178,69 +225,131 @@ class PhoneticEngine {
     }
 
     /**
-     * The Magic: Maps vocalized Hebrew to Vowel Signature
-     * "שָׁלוֹם" -> "A-O"
+     * Helper: Analyzes a single vocalized word to extract signatures
      */
-    public extractPhoneticSignature(vocalizedWord: string): string {
-        const vowels: Vowel[] = [];
+    private analyzeSingleWord(vocalized: string): { syllables: Syllable[], vowelSignature: string, anchorSignature: string } {
+        const syllables = this.syllabify(vocalized);
 
-        for (let i = 0; i < vocalizedWord.length; i++) {
-            const char = vocalizedWord[i];
+        // Vowel Signature (e.g. "A-O")
+        const vowels = syllables
+            .map(s => s.vowel)
+            .filter(v => v !== '')
+            .join('-');
 
-            // Check for straight Nikkud map
-            if (NIKKUD_MAP[char]) {
-                vowels.push(NIKKUD_MAP[char]);
-                continue;
-            }
+        // Anchor Signature (Last Syllable Phonetic)
+        // This is a naive approximation: we take the last vowels + surrounding consonants if possible.
+        // Ideally, we'd transcribe to IPA, but for now, we use the last syllable's vowel + basic sound index.
+        const lastSyllable = syllables[syllables.length - 1];
+        const anchorSignature = lastSyllable ? lastSyllable.vowel : '';
+        // Note: For "Elohim" vs "Milim", we need the "im" sound. 
+        // Our current 'syllabify' extracts the vowel. We might need the 'ending consonant'. 
+        // Let's refine 'syllabify' later to capture coda.
 
-            // Special Case: Vav with Shuruq (\u05BC inside \u05D5)? 
-            // Often represented as \u05D5\u05BC in Unicode normalized forms.
-            if (char === '\u05D5') { // Vav
-                // Look ahead for Dagesh/Mapiq \u05BC
-                if (vocalizedWord[i + 1] === '\u05BC') {
-                    vowels.push('U');
-                    i++; // Skip the dagesh
-                }
-                // Holam Haser on Vav is sometimes implicit or specific char, tricky.
-                // Assuming standard Nikkud for now.
-            }
-        }
-
-        return vowels.join('-');
+        return { syllables, vowelSignature: vowels, anchorSignature };
     }
 
     /**
-     * Clustering Algorithm
-     * Groups words by shared signatures, focusing on End Rhymes and loose Internal Rhymes
+     * Naive Hebrew Syllabification
+     * Splits by vowels/Nikkud logic.
      */
-    private findRhymeGroups(words: AnalyzedWord[]): PhoneticRhymeGroup[] {
-        const groups: Map<string, PhoneticRhymeGroup> = new Map();
+    private syllabify(text: string): Syllable[] {
+        const rawSyllables = Syllabifier.syllabify(text);
+        let currentIndex = 0;
 
-        // 1. Group by exact signature
-        words.forEach((word) => {
-            if (!word.signature || word.signature.length < 3) return; // Need at least "X-Y" (len 3)
+        return rawSyllables.map((text, idx) => {
+            const start = currentIndex;
+            currentIndex += text.length;
 
-            if (!groups.has(word.signature)) {
-                groups.set(word.signature, {
-                    id: `group-${word.signature}`,
-                    signature: word.signature,
-                    words: [],
-                    type: 'assonance'
-                });
+            // Extract dominant vowel
+            let vowel: Vowel = '';
+            for (const char of text) {
+                if (NIKKUD_MAP[char]) {
+                    vowel = NIKKUD_MAP[char];
+                    break;
+                }
             }
 
-            const group = groups.get(word.signature);
-            if (group && word.lineId) {
-                group.words.push({
-                    lineId: word.lineId,
-                    wordIndex: word.startIndex, // Using start index as ID for now
-                    text: word.text
+            return {
+                text,
+                vowel,
+                isStressed: idx === rawSyllables.length - 1, // Naive default: Ultimate stress
+                startIndex: start,
+                endIndex: currentIndex
+            };
+        });
+    }
+
+
+    /**
+     * The 3-Layer Clustering Logic
+     */
+    private findRhymeGroups(words: AnalyzedWord[]): RhymeGroup[] {
+        const groups: Map<string, RhymeGroup> = new Map();
+
+        // Helper to add word to group
+        const addToGroup = (key: string, type: RhymeGroup['type'], word: AnalyzedWord, confidence: number) => {
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    id: `group-${key}`,
+                    signature: key,
+                    words: [],
+                    type,
+                    confidence
                 });
+            }
+            const g = groups.get(key)!;
+            // Dedup
+            if (!g.words.some(w => w.lineId === word.lineId && w.wordIndex === word.startIndex)) {
+                g.words.push({
+                    lineId: word.lineId || '',
+                    wordIndex: word.startIndex,
+                    text: word.text,
+                    syllables: word.syllables.map(s => s.text), // Map Syllable objects to strings
+                    phonemes: word.syllables.map(s => s.vowel)  // Map Vowels as phonemes
+                });
+            }
+        };
+
+        words.forEach(word => {
+            if (!word.vowelSignature) return;
+
+            // Layer 1: Multi-Syllabic (Last 2+ Vowels match)
+            // e.g. "A-A-E" -> matches "X-A-A-E"
+            const vowels = word.vowelSignature.split('-');
+            if (vowels.length >= 2) {
+                const signature = vowels.slice(-2).join('-');
+                // We use this as a 'Multi' key
+                addToGroup(`Multi:${signature}`, 'multi', word, 0.95);
+            }
+
+            // Layer 2: Anchor (Last Vowel + Specific Checking)
+            // Ideally should check Consonant too. For now, strict last vowel.
+            if (vowels.length >= 1) {
+                const lastVowel = vowels[vowels.length - 1];
+                addToGroup(`Assonance:${lastVowel}`, 'assonance', word, 0.6);
+            }
+
+            // Layer 3: Anchor Rhyme (e.g. "im")
+            // This requires capturing the final sound in 'syllabify'.
+            // If the word ends with 'Mem' (Mel) or 'Nun' (N), it's a strong anchor.
+            // Check original text for final letters?
+            const lastChar = word.text.trim().slice(-1);
+            if (['ם', 'ן', 'ך'].includes(lastChar)) {
+                // Suffix Rhyme
+                const lastVowel = vowels[vowels.length - 1] || '';
+                const suffixKey = `${lastVowel}-${lastChar}`; // e.g. "I-ם"
+                addToGroup(`Suffix:${suffixKey}`, 'anchor', word, 0.85);
             }
         });
 
-        // Filter out single-word "groups"
-        return Array.from(groups.values()).filter(g => g.words.length >= 2);
+        // Filtering: Remove singleton groups and select Best fit
+        // A word can be in multiple groups tentatively. We need to pick the "Best" one?
+        // Or present all? Usually we want the Strongest match.
+
+        // Flatten to array
+        const allGroups = Array.from(groups.values()).filter(g => g.words.length >= 2);
+
+        return allGroups;
     }
 }
 

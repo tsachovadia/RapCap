@@ -47,7 +47,7 @@ export default function App() {
         <AuthProvider>
           <OnboardingWizard />
           <Routes>
-            <Route path="/rhyme-library/session" element={<WritingSessionPage />} />
+            <Route path="/rhyme-library/session/:id?" element={<WritingSessionPage />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<AuthPage />} />

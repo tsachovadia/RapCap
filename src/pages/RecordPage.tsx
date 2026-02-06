@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
@@ -53,7 +53,7 @@ export default function RecordPage() {
 
     const [language, setLanguage] = useState<'he' | 'en'>('he')
     const [isTranscribing, setIsTranscribing] = useState(false)
-    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isTranscribing, language)
+    const { transcript, interimTranscript, segments, wordSegments, resetTranscript, transcriptRef } = useTranscription(isTranscribing, language)
 
     // --- Flow State ---
     const [flowState, setFlowState] = useState<FlowState>('idle')
@@ -164,6 +164,7 @@ export default function RecordPage() {
             setAiKeywords([]) // Reset keywords
             setLoadedSessionId(null) // Clear any loaded session
             setLoadedSessionDuration(0)
+            setEnhancedTranscriptData(null) // Clear enhanced data too
         } catch (e) {
             console.error('Failed to start flow:', e)
             setFlowState('idle')
@@ -192,9 +193,13 @@ export default function RecordPage() {
                 setShowReviewModal(true)
 
                 // Trigger AI analysis for the modal
-                const textToAnalyze = transcript + (interimTranscript ? ' ' + interimTranscript : '')
-                if (textToAnalyze.trim().length > 20) {
-                    analyzeFreestyleLyrics(textToAnalyze)
+                // Use Ref to avoid stale closure
+                const fullText = transcriptRef.current + (interimTranscript ? ' ' + interimTranscript : '');
+
+                console.log("📝 Finalizing Flow - Transcript Length:", fullText.length, "Text:", fullText.substring(0, 50) + "...");
+
+                if (fullText.trim().length > 20) {
+                    analyzeFreestyleLyrics(fullText)
                         .then(keywords => setAiKeywords(keywords))
                         .catch(err => console.warn("AI Analysis failed", err))
                 }
@@ -214,13 +219,14 @@ export default function RecordPage() {
         setMoments(prev => [...prev, finalTime])
     }
 
-    const handleConfirmSave = async () => {
+    const handleAnalysisComplete = useCallback((analysis: SessionAnalysis) => {
+        setSessionAnalysis(analysis);
+    }, []);
+
+    const handleConfirmSave = async (overrides?: Partial<import('../db/db').DbSession>) => {
         if (!pendingSessionBlob) return
 
         let finalBlob = pendingSessionBlob
-        // Only convert if it's a NEW recording. If loaded from DB, it's likely already MP3 (or we assume efficient).
-        // Actually, if loadedSessionId exists, we probably don't need to reconvert unless edited?
-        // Let's assume reconversion is safe or needed if blob changed.
 
         if (!loadedSessionId) {
             try {
@@ -237,12 +243,19 @@ export default function RecordPage() {
             .map(s => ({ ...s, timestamp: s.timestamp - offset }))
             .filter(s => s.timestamp >= 0)
 
+        // If overrides has metadata, respect it, otherwise fallback to local calculation
         let finalSegments = enhancedTranscriptData ? enhancedTranscriptData.segments : processSegments(segments)
         let finalWordSegments = enhancedTranscriptData ? enhancedTranscriptData.wordSegments : processSegments(wordSegments)
         let finalText = enhancedTranscriptData ? enhancedTranscriptData.text : (transcript + (interimTranscript ? ' ' + interimTranscript : ''))
 
+        if (overrides && overrides.metadata) {
+            if (overrides.metadata.lyrics) finalText = overrides.metadata.lyrics;
+            if (overrides.metadata.lyricsSegments) finalSegments = overrides.metadata.lyricsSegments;
+            if (overrides.metadata.lyricsWords) finalWordSegments = overrides.metadata.lyricsWords;
+        }
+
         // Manual Fallback: if there's still interim text not in segments
-        if (!enhancedTranscriptData && interimTranscript.trim()) {
+        if (!enhancedTranscriptData && interimTranscript.trim() && !(overrides && overrides.metadata && overrides.metadata.lyrics)) {
             const hasInterim = segments.some(s => s.text.includes(interimTranscript.trim().split(' ')[0]))
             if (!hasInterim) {
                 const ts = (Date.now() - transcriptionStartTimeRef.current) / 1000
@@ -253,7 +266,7 @@ export default function RecordPage() {
 
         // AI Analysis (if not already done, or just do it here)
         let finalKeywords = aiKeywords
-        if (finalKeywords.length === 0 && finalText.trim().length > 20) {
+        if (!(overrides && overrides.metadata && overrides.metadata.aiKeywords) && finalKeywords.length === 0 && finalText.trim().length > 20) {
             try {
                 finalKeywords = await analyzeFreestyleLyrics(finalText)
             } catch (e) {
@@ -261,11 +274,15 @@ export default function RecordPage() {
             }
         }
 
+        if (overrides && overrides.metadata && overrides.metadata.aiKeywords) {
+            finalKeywords = overrides.metadata.aiKeywords;
+        }
+
         try {
             const sessionData = {
                 title: loadedSessionId ? undefined : `${mode === 'freestyle' ? 'Freestyle' : 'Thoughts'} ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
                 blob: finalBlob,
-                duration: duration > 0 ? duration : (enhancedTranscriptData?.segments?.[enhancedTranscriptData.segments.length - 1]?.timestamp || 0), // Fallback duration 
+                duration: duration > 0 ? duration : (finalSegments?.[finalSegments.length - 1]?.timestamp || 0),
                 updatedAt: new Date(),
                 // Only set these on creation
                 ...(loadedSessionId ? {} : {
@@ -275,6 +292,7 @@ export default function RecordPage() {
                     beatId: currentBeatId,
                     beatStartTime: capturedBeatStartTime + (getCalibratedLatency() / 1000),
                 }),
+                ...overrides,
                 metadata: {
                     moments,
                     lyrics: finalText,
@@ -282,9 +300,10 @@ export default function RecordPage() {
                     lyricsWords: finalWordSegments,
                     language,
                     notes,
-                    aiKeywords: finalKeywords
+                    aiKeywords: finalKeywords,
+                    ...(overrides ? overrides.metadata : {})
                 },
-                analysis: sessionAnalysis // Save the deep analysis if performed
+                analysis: (overrides && overrides.metadata && overrides.metadata.analysis) ? overrides.metadata.analysis : sessionAnalysis
             }
 
             if (loadedSessionId) {
@@ -298,7 +317,6 @@ export default function RecordPage() {
             navigate('/library')
         } catch (e) {
             console.error('Failed to save session', e)
-            alert('Error saving session')
         }
     }
 
@@ -334,7 +352,7 @@ export default function RecordPage() {
         date: new Date(),
         createdAt: new Date(),
         metadata: {
-            lyrics: enhancedTranscriptData ? enhancedTranscriptData.text : transcript,
+            lyrics: enhancedTranscriptData ? enhancedTranscriptData.text : (transcript + (interimTranscript ? ' ' + interimTranscript : '')).trim(),
             lyricsSegments: enhancedTranscriptData ? enhancedTranscriptData.segments : segments,
             lyricsWords: enhancedTranscriptData ? enhancedTranscriptData.wordSegments : wordSegments,
             aiKeywords: aiKeywords,
@@ -507,8 +525,8 @@ export default function RecordPage() {
                 onDiscard={handleDiscard}
                 audioBlob={pendingSessionBlob}
                 onUpdateTranscript={(text, segs, words) => setEnhancedTranscriptData({ text, segments: segs, wordSegments: words })}
+                onAnalysisComplete={handleAnalysisComplete}
                 data={sessionForModal}
-                onAnalysisComplete={(analysis) => setSessionAnalysis(analysis)}
             />
 
             <MicrophoneSetupModal

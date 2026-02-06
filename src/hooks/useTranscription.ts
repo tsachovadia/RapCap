@@ -139,10 +139,13 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
                 onFinal: (text, resultIndex) => {
                     if (!isActive || !text) return
-                    if (processedIndexes.current.has(resultIndex)) return
+                    if (processedIndexes.current.has(resultIndex)) {
+                        console.log('Duplicate result index, skipping:', resultIndex);
+                        return;
+                    }
                     processedIndexes.current.add(resultIndex)
 
-                    console.log('📝 Final:', text)
+                    console.log('📝 Final:', text, 'ResultIndex:', resultIndex)
                     const now = Date.now()
                     const phraseStart = phraseStartRef.current || estimatePhraseStart(text, now)
 
@@ -226,11 +229,18 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         }
     }, [language, isRecording])
 
+    // Keep ref in sync
+    const transcriptRef = useRef('')
+    useEffect(() => {
+        transcriptRef.current = transcript
+    }, [transcript])
+
     const resetTranscript = useCallback(() => {
         setTranscript('')
         setInterimTranscript('')
         setSegments([])
         setWordSegments([])
+        transcriptRef.current = ''
         processedIndexes.current.clear()
         errorCountRef.current = 0
     }, [])
@@ -241,6 +251,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         segments,
         wordSegments,
         isListening,
-        resetTranscript
+        resetTranscript,
+        transcriptRef // Expose Ref for reading inside closures (handleFinishFlow)
     }
 }
