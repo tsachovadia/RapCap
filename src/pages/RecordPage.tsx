@@ -215,7 +215,12 @@ export default function RecordPage() {
                 //        setIsProcessingFallback(false)
                 //    }
                 // } else {
-                console.log("📝 Finalizing Flow - Transcript Length:", fullText.length, "Text:", fullText.substring(0, 50) + "...");
+                console.log("📝 Finalizing Flow - Detailed Report:", {
+                    transcriptRef: transcriptRef.current,
+                    interimTranscript,
+                    fullTextLength: fullText.length,
+                    fullTextPreview: fullText.substring(0, 50)
+                });
 
                 if (fullText.trim().length > 20) {
                     analyzeFreestyleLyrics(fullText)

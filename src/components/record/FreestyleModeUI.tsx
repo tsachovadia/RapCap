@@ -175,11 +175,15 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
     // Pre-roll Monitoring
     useEffect(() => {
-        if (flowState === 'preroll' && youtubePlayer) {
+        if (flowState === 'preroll' && youtubePlayer && typeof youtubePlayer.seekTo === 'function') {
             // Seek to start and play
-            youtubePlayer.seekTo(0)
-            youtubePlayer.playVideo()
-            youtubePlayer.setVolume(beatVolume)
+            try {
+                youtubePlayer.seekTo(0)
+                youtubePlayer.playVideo()
+                youtubePlayer.setVolume(beatVolume)
+            } catch (e) {
+                console.warn("YouTube Player error:", e)
+            }
 
             // Start polling for 2-second mark
             preRollCheckRef.current = window.setInterval(() => {

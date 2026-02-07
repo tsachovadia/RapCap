@@ -12,7 +12,7 @@ export function isIOS(): boolean {
 /** Check if running in Safari (desktop or iOS) */
 export function isSafari(): boolean {
     const ua = navigator.userAgent;
-    return /^((?!chrome|android).)*safari/i.test(ua);
+    return /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
 }
 
 /** Check if running on iOS Safari specifically */

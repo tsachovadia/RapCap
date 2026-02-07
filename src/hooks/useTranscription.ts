@@ -173,6 +173,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 },
 
                 onEnd: () => {
+                    console.log('🎤 Recognition ended')
                     if (!isActive) return
                     processedIndexes.current.clear()
 
@@ -200,6 +201,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 },
 
                 onError: (error) => {
+                    console.error('🎤 Recognition error:', error)
                     if (!isActive) return
                     if (error === 'not-allowed' || error === 'service-not-allowed') {
                         isRecordingRef.current = false
