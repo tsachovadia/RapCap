@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Minimize2, Layers, Save, Search, Check } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type WordGroup, type DbSession } from '../../db/db'
+import { db, type WordGroup, type DbSession, type Bar, type BarRecording } from '../../db/db'
 import DictaModal from '../shared/DictaModal'
 import { syncService } from '../../services/dbSync'
 import { useAuth } from '../../contexts/AuthContext'
+import { BarItem } from '../../components/writing/BarItem'
+import { useAudioRecorder } from '../../hooks/useAudioRecorder'
 
 interface RhymeZenModeProps {
     initialGroup: WordGroup | null
@@ -18,12 +20,42 @@ interface RhymeZenModeProps {
 export default function RhymeZenMode({ initialGroup, initialText: propText, initialTitle = '', onTextChange, onClose }: RhymeZenModeProps) {
     const { user } = useAuth()
 
-    // Line-based State
-    const [lines, setLines] = useState<string[]>(propText ? propText.split('\n') : [''])
+    // Bar-based State
+    // Parse propText (string) into Bar[]
+    const [bars, setBars] = useState<Bar[]>(() => {
+        if (propText) {
+            return propText.split('\n').map(line => ({ id: uuidv4(), text: line }))
+        }
+        return [{ id: uuidv4(), text: '' }]
+    })
+
+    // Sync bars back to onTextChange parent if needed
+    useEffect(() => {
+        if (onTextChange) {
+            onTextChange(bars.map(b => b.text).join('\n'))
+        }
+    }, [bars, onTextChange])
+
     const [title, setTitle] = useState(initialTitle || `Writing Session ${new Date().toLocaleDateString()}`)
+    const [sessionId, setSessionId] = useState<number | null>(null) // Local DB ID
 
     const [visibleDeckIds, setVisibleDeckIds] = useState<number[]>([])
     const [highlightedWords, setHighlightedWords] = useState<Set<string>>(new Set())
+
+    // Audio & Recording State
+    const {
+        startRecording: hookStartRecording,
+        stopRecording: hookStopRecording,
+        isRecording,
+        duration: recordingDuration
+    } = useAudioRecorder()
+
+    const [recordingBarId, setRecordingBarId] = useState<string | null>(null)
+    const [activePlaybackBarId, setActivePlaybackBarId] = useState<string | null>(null)
+    const [playbackState, setPlaybackState] = useState({ currentTime: 0, duration: 0 })
+
+    const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
+    const playbackIntervalRef = useRef<number | null>(null)
 
     // Group Selector State
     const [showDeckSelector, setShowDeckSelector] = useState(false)
@@ -35,14 +67,17 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
     const [newGroupItems, setNewGroupItems] = useState<string[]>([])
     const [newItemInput, setNewItemInput] = useState('')
     const [isDictaOpen, setIsDictaOpen] = useState(false)
-
-    // Managing Dicta for EXISTING groups
     const [editingDeckId, setEditingDeckId] = useState<number | null>(null)
 
     // Fetch all groups
     const allGroups = useLiveQuery(() => db.wordGroups.toArray())
 
-    // Auto-load 4 most recent
+    const normalize = (str: string) => str.toLowerCase()
+        .replace(/[\u0591-\u05C7]/g, "")
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "")
+        .trim()
+
+    // Auto-load 4 most recent or initial
     useEffect(() => {
         const loadInitialDecks = async () => {
             if (initialGroup?.id) {
@@ -60,18 +95,12 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
         loadInitialDecks()
     }, [initialGroup])
 
-    // Sync legacy
-    useEffect(() => {
-        if (onTextChange) onTextChange(lines.join('\n'))
-    }, [lines, onTextChange])
 
     // Visible Decks
     const visibleDecks = useLiveQuery(
         async () => {
             if (visibleDeckIds.length === 0) return []
-            const decks = await db.wordGroups.where('id').anyOf(visibleDeckIds).toArray()
-            // Sort by selection order or keep robust? Let's just return found
-            return decks
+            return await db.wordGroups.where('id').anyOf(visibleDeckIds).toArray()
         },
         [visibleDeckIds]
     )
@@ -80,20 +109,11 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
     useEffect(() => {
         if (!visibleDecks) return
 
-        const normalize = (str: string) => str.toLowerCase()
-            .replace(/[\u0591-\u05C7]/g, "")
-            .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "")
-            .trim()
-
         const HEBREW_PREFIXES = ['ה', 'ו', 'ב', 'ל', 'מ', 'ש', 'כ', 'וה', 'מה', 'שה', 'וכ', 'וב', 'ול']
         const newHighlights = new Set<string>()
 
-        // Flatten full text for easier searching, but we might want line-by-line if optimizing
-        // For now, checking inclusion in the full text string is easiest for multi-word phrases
-        const fullTextRaw = lines.join(' ')
+        const fullTextRaw = bars.map(b => b.text).join(' ')
         const fullTextNorm = normalize(fullTextRaw)
-
-        // Also keep a set of individual words for faster lookup of single words
         const textWords = fullTextNorm.split(/\s+/).filter(Boolean)
 
         visibleDecks.forEach(deck => {
@@ -102,19 +122,12 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                 if (!normItem) return
 
                 let isMatch = false
-
-                // 1. Direct phrase match in the full text (handles multi-word "lo noach")
                 if (fullTextNorm.includes(normItem)) {
                     isMatch = true
                 }
 
-                // 2. If not matched yet, check for prefixes on the *first word* of the item if it's a phrase,
-                // OR check prefixes on the item itself if it's a single word.
                 if (!isMatch) {
-                    // Check if any word in the text ends with this item (basic suffix check) - imprecise for phrases
-                    // Better: Check if any word in text IS (prefix + item)
                     const isSingleWord = !normItem.includes(' ')
-
                     if (isSingleWord) {
                         isMatch = textWords.some(tw => {
                             if (tw === normItem) return true
@@ -124,54 +137,102 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                             }
                             return false
                         })
-                    } else {
-                        // Multi-word phrase with prefix? e.g. "ve lo noach" for "lo noach"
-                        // We can check if "prefix" + " " + "phrase" exists? No usually attached. 
-                        // "velo noach" -> "lo noach".
-                        // Logic: split item into words [w1, ...rest]. Check if w1 matches with prefix, and rest follows.
-
-                        // Find indices of words that end with firstWord
-                        // This is getting complex. Let's stick to simple "includes" for phrases for now, 
-                        // and prefix support mainly for single words as per original requirements unless specifically asked.
-                        // But user said "lo noach" (phrase) didn't highlight. "includes" fixes that.
                     }
                 }
-
                 if (isMatch) newHighlights.add(item)
             })
         })
         setHighlightedWords(newHighlights)
 
-    }, [lines, visibleDecks])
+    }, [bars, visibleDecks])
+
+    // --- Auto-Discovery Logic ---
+    useEffect(() => {
+        const checkForNewDecks = async () => {
+            if (!allGroups || allGroups.length === 0) return
+
+            const fullText = bars.map(b => b.text).join(' ')
+            const words = new Set(normalize(fullText).split(/\s+/).filter(w => w.length > 1))
+
+            const newDeckIdsToVis = new Set<number>()
+
+            allGroups.forEach(group => {
+                if (visibleDeckIds.includes(group.id!)) return
+
+                const hasMatch = group.items.some(item => {
+                    const normItem = normalize(item)
+                    return words.has(normItem)
+                })
+
+                if (hasMatch) {
+                    newDeckIdsToVis.add(group.id!)
+                }
+            })
+
+            if (newDeckIdsToVis.size > 0) {
+                setVisibleDeckIds(prev => [...prev, ...Array.from(newDeckIdsToVis)])
+            }
+        }
+
+        const timer = setTimeout(checkForNewDecks, 1500)
+        return () => clearTimeout(timer)
+    }, [bars, allGroups, visibleDeckIds])
+
 
     // --- Actions ---
+
+    // Ensure session exists (Draft)
+    const ensureSessionExists = async (): Promise<number> => {
+        if (sessionId) return sessionId;
+
+        // Create draft session
+        const session: DbSession = {
+            title: title || 'Derived Session',
+            type: 'writing',
+            date: new Date(),
+            createdAt: new Date(),
+            duration: 0,
+            cloudId: uuidv4(),
+            metadata: {
+                lyrics: bars.map(b => b.text).join('\n'),
+                visibleDeckIds,
+                lines: bars.map(b => b.text),
+                bars,
+                linkedRhymes: []
+            }
+        }
+
+        // If we are in "text change mode" (embedded), we shouldn't really be creating sessions?
+        // But for Audio, we MUST have a session ID.
+        // So we create a "Shadow" session or just a normal session.
+        // Let's create a normal session.
+
+        const id = await db.sessions.add(session)
+        setSessionId(id as number)
+        return id as number
+    }
+
+
     const handleSave = async () => {
         if (onTextChange) { onClose(); return }
 
-        // --- Auto-Linking Logic ---
-        // Associates rhymes used in this session to the specific lines they appear in.
-        // This is valuable for the "Session Review" display.
+        // Use ensureSessionExists logic but with potentially updated data
+        const id = await ensureSessionExists()
+
+        // Sync Linked Rhymes
         const linkedRhymes: { lineIndex: number, rhymeId: number, word: string }[] = []
-
         if (visibleDecks) {
-            const normalize = (str: string) => str.toLowerCase().replace(/[\u0591-\u05C7]/g, "").replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").trim()
-
-            lines.forEach((line, idx) => {
-                const lineNorm = normalize(line)
+            bars.forEach((bar, idx) => {
+                const lineNorm = normalize(bar.text)
                 if (!lineNorm) return
-
                 visibleDecks.forEach(deck => {
                     deck.items.forEach(item => {
                         const itemNorm = normalize(item)
                         if (!itemNorm) return
-
-                        // Simple check: does the line include this rhyme word/phrase?
-                        // We can reuse the advanced logic from highlighting if we extracted it, 
-                        // but "includes" covers 90% and phrases.
                         if (lineNorm.includes(itemNorm)) {
                             linkedRhymes.push({
                                 lineIndex: idx,
-                                rhymeId: deck.id!, // Assuming deck has ID
+                                rhymeId: deck.id!,
                                 word: item
                             })
                         }
@@ -180,24 +241,22 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
             })
         }
 
-        const session: DbSession = {
-            title: title || 'Untitled Writing Session',
-            type: 'writing',
-            date: new Date(),
-            createdAt: new Date(),
-            duration: 0,
-            cloudId: uuidv4(),
+        const updateData = {
+            title,
             metadata: {
-                lyrics: lines.join('\n'),
+                lyrics: bars.map(b => b.text).join('\n'),
                 visibleDeckIds,
-                lines,
-                linkedRhymes // <--- NEW FIELD
+                lines: bars.map(b => b.text),
+                bars,
+                linkedRhymes
             }
         }
+
         try {
-            await db.sessions.add(session)
+            await db.sessions.update(id, updateData as any)
             if (visibleDeckIds.length > 0) {
-                await Promise.all(visibleDeckIds.map(id => db.wordGroups.update(id, { lastUsedAt: new Date() })))
+                // Fire and forget update stats
+                visibleDeckIds.forEach(did => db.wordGroups.update(did, { lastUsedAt: new Date() }).catch(() => { }))
             }
             alert('Session saved!')
             onClose()
@@ -207,11 +266,139 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
         }
     }
 
+    // --- Audio Logic ---
+    const handleStartRecording = async (barId: string) => {
+        if (onTextChange) {
+            alert("Audio recording available in full session mode only.")
+            return
+        }
+
+        if (isRecording || activePlaybackBarId) return
+
+        // Ensure session exists so we can link recording
+        await ensureSessionExists()
+
+        setRecordingBarId(barId)
+        await hookStartRecording()
+    }
+
+    const handleStopRecording = async (barId: string) => {
+        if (!isRecording || recordingBarId !== barId) return
+
+        const blob = await hookStopRecording()
+        setRecordingBarId(null)
+
+        // We need sessionId. ensureSessionExists should have set it.
+        if (blob && blob.size > 0 && sessionId) {
+            const recordingId = uuidv4()
+            const newRecording: BarRecording = {
+                id: recordingId,
+                sessionId: sessionId,
+                barId,
+                blob,
+                createdAt: new Date(),
+                duration: recordingDuration
+            }
+
+            try {
+                await db.barRecordings.add(newRecording)
+
+                // Update Bar State
+                const newBars = bars.map(b =>
+                    b.id === barId ? { ...b, audioId: recordingId } : b
+                )
+                setBars(newBars)
+
+                // Force save session to persist the link?
+                // For now, rely on manual save or explicit update
+                await db.sessions.update(sessionId, {
+                    'metadata.bars': newBars
+                } as any)
+
+            } catch (e) {
+                console.error("Failed to save recording", e)
+                alert("Failed to save recording")
+            }
+        }
+    }
+
+    const handlePlayAudio = async (barId: string, audioId: string) => {
+        if (activePlaybackBarId && audioPlayerRef.current) {
+            audioPlayerRef.current.pause()
+            audioPlayerRef.current.currentTime = 0
+            if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current)
+            setActivePlaybackBarId(null)
+            setPlaybackState({ currentTime: 0, duration: 0 })
+            if (activePlaybackBarId === barId) return
+        }
+
+        try {
+            const recording = await db.barRecordings.get(audioId)
+            if (!recording) return
+
+            const url = URL.createObjectURL(recording.blob)
+            const audio = new Audio(url)
+            audioPlayerRef.current = audio
+
+            audio.onloadedmetadata = () => {
+                setPlaybackState({ currentTime: 0, duration: audio.duration || recording.duration })
+            }
+
+            audio.onended = () => {
+                setActivePlaybackBarId(null)
+                setPlaybackState({ currentTime: 0, duration: 0 })
+                if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current)
+            }
+
+            audio.play()
+            setActivePlaybackBarId(barId)
+
+            playbackIntervalRef.current = window.setInterval(() => {
+                if (audioPlayerRef.current) {
+                    setPlaybackState({
+                        currentTime: audioPlayerRef.current.currentTime,
+                        duration: audioPlayerRef.current.duration
+                    })
+                }
+            }, 100)
+
+        } catch (e) {
+            console.error("Playback failed", e)
+        }
+    }
+
+    const handlePauseAudio = () => {
+        if (audioPlayerRef.current) {
+            audioPlayerRef.current.pause()
+            setActivePlaybackBarId(null)
+            if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current)
+        }
+    }
+
+    const handleDeleteAudio = async (barId: string, audioId: string) => {
+        if (confirm("Delete this recording?")) {
+            try {
+                await db.barRecordings.delete(audioId)
+                const newBars = bars.map(b =>
+                    b.id === barId ? { ...b, audioId: undefined } : b
+                )
+                setBars(newBars)
+                if (sessionId) {
+                    await db.sessions.update(sessionId, { 'metadata.bars': newBars } as any)
+                }
+                if (activePlaybackBarId === barId) handlePauseAudio()
+            } catch (e) {
+                console.error("Delete failed", e)
+            }
+        }
+    }
+
+
     const toggleDeckVisibility = (id: number) => {
         if (visibleDeckIds.includes(id)) setVisibleDeckIds(prev => prev.filter(did => did !== id))
         else setVisibleDeckIds(prev => [...prev, id])
-        setGroupSearchQuery('') // Clear search on select
-        setShowDeckSelector(false) // Close dropdown on select? User might want to select multiple. Let's keep one action for now.
+        setGroupSearchQuery('')
+        setShowDeckSelector(false)
     }
 
     const handleCreateGroup = async () => {
@@ -239,7 +426,6 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
         setNewItemInput('')
     }
 
-    // --- Deck Editing (Directly in View) ---
     const addWordToDeck = async (deckId: number, word: string) => {
         if (!word.trim()) return
         const deck = allGroups?.find(g => g.id === deckId)
@@ -257,10 +443,8 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
         if (user) syncService.syncWordGroups(user.uid).catch(console.error)
     }
 
-    // --- Filter Logic ---
     const filteredGroups = allGroups?.filter(g => {
         const q = groupSearchQuery.toLowerCase()
-        // Smart Search: Name OR Items
         return g.name.toLowerCase().includes(q) || g.items.some(i => i.toLowerCase().includes(q))
     }) || []
 
@@ -278,7 +462,7 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                     {/* Integrated Search & Group Selector */}
                     <div className="relative flex-1 max-w-md ml-4">
                         <div className="flex items-center bg-[#222] border border-[#333] rounded-lg focus-within:border-[#1DB954] transition-colors w-full">
-                            <Search size={16} className="text-subdued ml-3" />
+                            <Search size={16} className="text-white/40 ml-3" />
                             <input
                                 value={groupSearchQuery}
                                 onChange={(e) => {
@@ -287,11 +471,11 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                                 }}
                                 onFocus={() => setShowDeckSelector(true)}
                                 placeholder="Search groups or create..."
-                                className="bg-transparent border-none outline-none text-sm text-white px-3 py-2 w-full"
+                                className="bg-transparent border-none outline-none text-sm text-white px-3 py-2 w-full placeholder-white/20"
                             />
                             <button
                                 onClick={() => setShowDeckSelector(!showDeckSelector)}
-                                className="px-3 py-2 hover:bg-[#333] rounded-r-lg border-l border-[#333] flex items-center gap-2 text-subdued text-xs"
+                                className="px-3 py-2 hover:bg-[#333] rounded-r-lg border-l border-[#333] flex items-center gap-2 text-white/40 text-xs"
                             >
                                 <Layers size={14} />
                                 {visibleDeckIds.length}
@@ -301,8 +485,8 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                         {/* Dropdown Results */}
                         {showDeckSelector && (
                             <div className="absolute top-full left-0 mt-2 w-full min-w-[300px] bg-[#181818] border border-[#333] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-100 max-h-[60vh] flex flex-col z-[100]">
-                                <div className="p-2 border-b border-[#333] bg-[#222] flex justify-between items-center text-xs text-subdued uppercase font-bold">
-                                    <span>Select Groups to Show</span>
+                                <div className="p-2 border-b border-[#333] bg-[#222] flex justify-between items-center text-xs text-white/40 uppercase font-bold">
+                                    <span>Select Groups</span>
                                     <button onClick={() => setShowDeckSelector(false)}><X size={14} /></button>
                                 </div>
                                 <div className="overflow-y-auto p-2 custom-scrollbar">
@@ -326,7 +510,7 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                                                 setIsCreatingGroup(true)
                                                 setShowDeckSelector(false)
                                             }}
-                                            className="w-full py-2 mb-2 bg-[#333] text-subdued hover:text-white hover:bg-[#444] rounded-lg flex items-center justify-center gap-2 transition-colors font-bold text-xs uppercase"
+                                            className="w-full py-2 mb-2 bg-[#333] text-white/60 hover:text-white hover:bg-[#444] rounded-lg flex items-center justify-center gap-2 transition-colors font-bold text-xs uppercase"
                                         >
                                             <Plus size={14} />
                                             Create New Group
@@ -352,7 +536,7 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                                         )
                                     })}
                                     {filteredGroups.length === 0 && groupSearchQuery && (
-                                        <div className="text-center p-4 text-subdued text-xs">No groups match "{groupSearchQuery}"</div>
+                                        <div className="text-center p-4 text-white/40 text-xs">No groups match "{groupSearchQuery}"</div>
                                     )}
                                 </div>
                             </div>
@@ -382,14 +566,15 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                     </button>
                     <button
                         onClick={onClose}
-                        className="p-2 rounded-full hover:bg-white/10 text-subdued hover:text-white transition-colors"
+                        className="p-2 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-colors"
                     >
                         <Minimize2 size={24} />
                     </button>
                 </div>
             </div>
 
-            {/* Top Half: Horizontal Scrollable Decks */}
+
+            {/* Scrollable Decks Area */}
             <div className="flex-1 overflow-x-auto overflow-y-hidden bg-[#0a0a0a] min-h-[40%] border-b border-[#333] relative">
                 <div className="flex h-full p-4 gap-4 w-max items-stretch">
                     {visibleDecks?.map((deck, idx) => (
@@ -398,69 +583,23 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                             <div className="p-3 border-b border-[#282828] bg-[#181818] flex items-center justify-between shrink-0">
                                 <h3 className="font-bold text-[#1DB954] truncate flex-1 mr-2">{deck.name}</h3>
                                 <div className="flex items-center gap-1 opacity-100 transition-opacity">
-                                    <button
-                                        onClick={() => {
-                                            setEditingDeckId(deck.id!)
-                                            setIsDictaOpen(true)
-                                        }}
-                                        className="text-subdued hover:text-purple-400 p-1 rounded hover:bg-purple-400/10"
-                                        title="Find Rhymes (Dicta)"
-                                    >
-                                        <Search size={14} />
-                                    </button>
-                                    <button
-                                        onClick={() => deck.id && toggleDeckVisibility(deck.id)}
-                                        className="text-subdued hover:text-red-400 p-1 rounded hover:bg-red-400/10"
-                                        title="Close"
-                                    >
-                                        <X size={14} />
-                                    </button>
+                                    <button onClick={() => { setEditingDeckId(deck.id!); setIsDictaOpen(true) }} className="text-white/40 hover:text-purple-400 p-1 rounded hover:bg-purple-400/10"><Search size={14} /></button>
+                                    <button onClick={() => deck.id && toggleDeckVisibility(deck.id)} className="text-white/40 hover:text-red-400 p-1 rounded hover:bg-red-400/10"><X size={14} /></button>
                                 </div>
                             </div>
-
-                            {/* Quick Add Input */}
+                            {/* Quick Add */}
                             <div className="p-2 bg-[#111] border-b border-[#222] shrink-0">
-                                <input
-                                    placeholder="+ Add word (Enter)"
-                                    className="w-full bg-[#222] border border-[#333] rounded px-2 py-1 text-xs text-white focus:border-[#1DB954] outline-none"
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            const val = e.currentTarget.value
-                                            if (val && deck.id) {
-                                                addWordToDeck(deck.id, val)
-                                                e.currentTarget.value = ''
-                                            }
-                                        }
-                                    }}
-                                />
+                                <input placeholder="+ Add word (Enter)" className="w-full bg-[#222] border border-[#333] rounded px-2 py-1 text-xs text-white focus:border-[#1DB954] outline-none" onKeyDown={(e) => { if (e.key === 'Enter') { const val = e.currentTarget.value; if (val && deck.id) { addWordToDeck(deck.id, val); e.currentTarget.value = '' } } }} />
                             </div>
-
                             {/* Words */}
                             <div className="flex-1 overflow-y-auto p-2 content-start gap-2 custom-scrollbar">
                                 <div className="flex flex-wrap gap-2">
                                     {deck.items.map((word, wIdx) => {
                                         const isHighlighted = highlightedWords.has(word)
                                         return (
-                                            <span
-                                                key={wIdx}
-                                                className={`
-                                                relative group/word px-2 py-1 rounded text-sm font-medium transition-all duration-300 transform flex items-center gap-1 pr-1
-                                                ${isHighlighted
-                                                        ? 'bg-[#1DB954] text-black scale-105 shadow-[0_0_15px_rgba(29,185,84,0.4)] font-bold z-10'
-                                                        : 'bg-[#222] text-white/80 border border-white/5 hover:border-white/20'
-                                                    }
-                                                `}
-                                            >
+                                            <span key={wIdx} className={`relative group/word px-2 py-1 rounded text-sm font-medium transition-all duration-300 transform flex items-center gap-1 pr-1 ${isHighlighted ? 'bg-[#1DB954] text-black scale-105 shadow-[0_0_15px_rgba(29,185,84,0.4)] font-bold z-10' : 'bg-[#222] text-white/80 border border-white/5 hover:border-white/20'}`}>
                                                 {word}
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        if (deck.id) removeWordFromDeck(deck.id, word)
-                                                    }}
-                                                    className={`hover:text-red-500 opacity-0 group-hover/word:opacity-100 transition-opacity ${isHighlighted ? 'text-black/50' : 'text-white/30'}`}
-                                                >
-                                                    <X size={10} />
-                                                </button>
+                                                <button onClick={(e) => { e.stopPropagation(); if (deck.id) removeWordFromDeck(deck.id, word) }} className={`hover:text-red-500 opacity-0 group-hover/word:opacity-100 transition-opacity ${isHighlighted ? 'text-black/50' : 'text-white/30'}`}><X size={10} /></button>
                                             </span>
                                         )
                                     })}
@@ -468,60 +607,72 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                             </div>
                         </div>
                     ))}
-
-                    {/* Empty State / Add Helper */}
                     {visibleDeckIds.length === 0 && (
-                        <div className="flex flex-col items-center justify-center p-8 text-subdued border border-dashed border-[#333] rounded-xl w-64 h-full bg-[#111]/50">
+                        <div className="flex flex-col items-center justify-center p-8 text-white/30 border border-dashed border-[#333] rounded-xl w-64 h-full bg-[#111]/50">
                             <Layers size={32} className="mb-2 opacity-50" />
-                            <span className="text-sm font-medium text-center">No groups selected.<br />Use the search bar above to add one!</span>
+                            <span className="text-sm font-medium text-center">No groups selected.<br />Use the search bar above.</span>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Bottom Half: Writing Area (Line Based) */}
+            {/* Bottom Half: Writing Area (Bar Based) */}
             <div className="h-[40%] bg-[#121212] p-4 flex flex-col relative z-0 box-border overflow-y-auto custom-scrollbar">
-                {/* ... existing writing code ... */}
-                <div className="flex flex-col gap-2 max-w-4xl mx-auto w-full">
-                    {lines.map((line, idx) => (
-                        <div key={idx} className="flex items-center gap-2 group animate-in slide-in-from-bottom-2 duration-300">
-                            {/* Same as before */}
-                            <span className="text-subdued text-xs font-mono w-6 text-right opacity-20 group-hover:opacity-100 uppercase">{idx + 1}</span>
-                            <div className="relative flex-1">
-                                <input
-                                    id={`line-${idx}`}
-                                    value={line}
-                                    onChange={(e) => {
-                                        const newLines = [...lines]
-                                        newLines[idx] = e.target.value
-                                        setLines(newLines)
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault()
-                                            const newLines = [...lines]; newLines.splice(idx + 1, 0, ''); setLines(newLines);
-                                            setTimeout(() => document.getElementById(`line-${idx + 1}`)?.focus(), 0)
-                                        } else if (e.key === 'Backspace' && lines[idx] === '' && lines.length > 1) {
-                                            e.preventDefault()
-                                            const newLines = [...lines]; newLines.splice(idx, 1); setLines(newLines);
-                                            setTimeout(() => document.getElementById(`line-${idx - 1}`)?.focus(), 0)
-                                        }
-                                    }}
-                                    placeholder={idx === 0 ? "Start writing bars..." : ""}
-                                    className="w-full bg-transparent outline-none text-xl leading-relaxed text-white/90 font-hebrew placeholder-white/20 border-b border-transparent focus:border-[#1DB954]/30 transition-colors py-1"
-                                    style={{ direction: 'rtl' }}
-                                    autoFocus={idx === lines.length - 1 && lines.length === 1}
-                                />
-                            </div>
-                        </div>
+                <div className="flex flex-col gap-2 max-w-4xl mx-auto w-full pb-20">
+                    {bars.map((bar, idx) => (
+                        <BarItem
+                            key={bar.id || idx} // fallback idx if id missing (shouldn't happen)
+                            bar={bar}
+                            index={idx}
+                            isActive={false}
+
+                            isRecording={recordingBarId === bar.id}
+                            isPlaying={activePlaybackBarId === bar.id}
+                            currentAudioTime={activePlaybackBarId === bar.id ? playbackState.currentTime : 0}
+                            audioDuration={playbackState.duration || (recordingBarId === bar.id ? recordingDuration : 0)}
+
+                            onChange={(text) => {
+                                const newBars = [...bars]
+                                newBars[idx] = { ...newBars[idx], text }
+                                setBars(newBars)
+                            }}
+                            onSplit={(cursorPos) => {
+                                const currentText = bar.text
+                                const textBefore = currentText.slice(0, cursorPos)
+                                const textAfter = currentText.slice(cursorPos)
+                                const newBars = [...bars]
+                                newBars[idx] = { ...bar, text: textBefore }
+                                const newId = uuidv4()
+                                newBars.splice(idx + 1, 0, { id: newId, text: textAfter })
+                                setBars(newBars)
+                                setTimeout(() => document.getElementById(`bar-${newId}`)?.focus(), 0)
+                            }}
+                            onMergePrev={() => { }}
+                            onMergeNext={() => { }}
+                            onDelete={() => {
+                                if (bars.length > 1) {
+                                    const newBars = [...bars]
+                                    newBars.splice(idx, 1)
+                                    setBars(newBars)
+                                    setTimeout(() => document.getElementById(`bar-${bars[idx - 1]?.id || bars[0].id}`)?.focus(), 0)
+                                }
+                            }}
+
+                            onStartRecording={() => handleStartRecording(bar.id)}
+                            onStopRecording={() => handleStopRecording(bar.id)}
+                            onPlayAudio={() => bar.audioId && handlePlayAudio(bar.id, bar.audioId)}
+                            onPauseAudio={handlePauseAudio}
+                            onDeleteAudio={() => bar.audioId && handleDeleteAudio(bar.id, bar.audioId)}
+                        />
                     ))}
 
                     <button
                         onClick={() => {
-                            setLines(prev => [...prev, ''])
-                            setTimeout(() => document.getElementById(`line-${lines.length}`)?.focus(), 0)
+                            const newId = uuidv4()
+                            setBars(prev => [...prev, { id: newId, text: '' }])
+                            setTimeout(() => document.getElementById(`bar-${newId}`)?.focus(), 0)
                         }}
-                        className="mt-4 self-center flex items-center gap-2 text-subdued hover:text-[#1DB954] transition-colors text-sm py-2 px-4 rounded-lg hover:bg-[#1DB954]/5"
+                        className="mt-4 self-center flex items-center gap-2 text-white/30 hover:text-[#1DB954] transition-colors text-sm py-2 px-4 rounded-lg hover:bg-[#1DB954]/5"
                     >
                         <Plus size={16} />
                         Add next bar
@@ -529,38 +680,29 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                 </div>
             </div>
 
-            {/* Quick Group Creator Modal (Global) - Unchanged essentially, but let's keep it consistent */}
+            {/* Same Creation Modal */}
             {isCreatingGroup && (
-                <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    {/* Simplified structure to match existing helpers logic, already defined above */}
                     <div className="bg-[#1e1e1e] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl flex flex-col max-h-[80vh]">
-                        {/* Same Creation Modal Logic */}
                         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#252525] rounded-t-2xl">
-                            <h3 className="font-bold flex items-center gap-2 text-white">
-                                <Plus size={18} className="text-[#1DB954]" />
-                                Create New Rhyme Group
-                            </h3>
-                            <button onClick={() => setIsCreatingGroup(false)} className="text-white/50 hover:text-white"><X size={20} /></button>
+                            <h3 className="font-bold flex items-center gap-2 text-white"><Plus size={18} className="text-[#1DB954]" /> New Group</h3>
+                            <button onClick={() => setIsCreatingGroup(false)} className="text-white/50"><X size={20} /></button>
                         </div>
-                        <div className="p-4 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
-                            <div>
-                                <label className="text-xs text-subdued uppercase font-bold block mb-1">Group Name</label>
-                                <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white focus:border-[#1DB954] outline-none" autoFocus />
+                        <div className="p-4 space-y-4">
+                            <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white" placeholder="Group Name" autoFocus />
+                            <div className="flex gap-2">
+                                <input value={newItemInput} onChange={e => setNewItemInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addManualItem()} placeholder="Add word..." className="flex-1 bg-[#111] px-3 py-2 rounded-lg text-white" />
+                                <button onClick={addManualItem} className="bg-[#333] text-white p-2 rounded-lg"><Plus /></button>
                             </div>
-                            <div className="space-y-2">
-                                <div className="flex gap-2">
-                                    <input value={newItemInput} onChange={e => setNewItemInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addManualItem()} placeholder="Add word..." className="flex-1 bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none" />
-                                    <button onClick={addManualItem} className="bg-[#333] text-white p-2 rounded-lg"><Plus size={18} /></button>
-                                    <button onClick={() => { setEditingDeckId(null); setIsDictaOpen(true) }} className="bg-purple-600/20 text-purple-400 border border-purple-500/30 px-3 rounded-lg flex items-center gap-1 text-sm"><Search size={14} /> Dicta</button>
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2 p-2 bg-[#111] rounded-xl min-h-[100px] border border-white/5 content-start">
+                            <div className="flex flex-wrap gap-2">
                                 {newGroupItems.map((item, idx) => (
-                                    <span key={idx} className="bg-[#222] text-white/90 px-2 py-1 rounded text-sm flex items-center gap-1 border border-white/5 group">{item} <button onClick={() => setNewGroupItems(prev => prev.filter((_, i) => i !== idx))}><X size={12} /></button></span>
+                                    <span key={idx} className="bg-[#222] text-white px-2 py-1 rounded text-sm flex gap-1">{item}</span>
                                 ))}
                             </div>
                         </div>
-                        <div className="p-4 border-t border-white/5 bg-[#252525] rounded-b-2xl">
-                            <button onClick={handleCreateGroup} className="w-full bg-[#1DB954] text-black font-bold py-3 rounded-xl hover:scale-[1.02] shadow-lg">Create Group</button>
+                        <div className="p-4 border-t border-white/5 bg-[#252525]">
+                            <button onClick={handleCreateGroup} className="w-full bg-[#1DB954] text-black font-bold py-2 rounded-lg">Create</button>
                         </div>
                     </div>
                 </div>
@@ -570,21 +712,18 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                 isOpen={isDictaOpen}
                 onClose={() => setIsDictaOpen(false)}
                 onAddWords={(words) => {
-                    // Logic: If editing existing deck, update DB. If creating new, update state.
                     if (editingDeckId) {
-                        // Add to existing
                         const deck = allGroups?.find(g => g.id === editingDeckId)
                         if (deck) {
                             const newItems = [...deck.items, ...words]
-                            db.wordGroups.update(editingDeckId, { items: newItems }).then(() => {
-                                if (user) syncService.syncWordGroups(user.uid)
-                            })
+                            db.wordGroups.update(editingDeckId, { items: newItems }).then(() => { if (user) syncService.syncWordGroups(user.uid) })
                         }
                     } else {
                         setNewGroupItems(prev => [...prev, ...words])
                     }
                 }}
             />
+
         </div>
     )
 }

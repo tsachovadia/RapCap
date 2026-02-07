@@ -48,14 +48,22 @@ export default function SessionDetailsPage() {
     // Default: View for Audio/Freestyle Sessions
     return (
         <div className="flex flex-col h-[calc(100dvh-80px)] bg-[#121212] text-white">
+
             {/* Header / Nav */}
-            <div className="p-4 bg-[#121212] border-b border-[#282828] shrink-0 z-10">
+            <div className="p-4 bg-[#121212] border-b border-[#282828] shrink-0 z-10 flex items-center justify-between">
                 <button
                     onClick={handleClose}
                     className="flex items-center gap-2 text-subdued hover:text-white transition-colors"
                 >
                     <ChevronLeft size={20} />
                     <span className="font-bold text-sm">Back to Library</span>
+                </button>
+
+                <button
+                    onClick={() => navigate(`/rhyme-library/session/${session.id}`)}
+                    className="flex items-center gap-2 bg-[#1DB954] text-black px-3 py-1.5 rounded-full font-bold hover:bg-[#1ed760] text-xs transition-colors"
+                >
+                    Open in Writing Session
                 </button>
             </div>
 

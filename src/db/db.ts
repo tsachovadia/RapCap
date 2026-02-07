@@ -87,6 +87,11 @@ export interface WordGroup {
         stressPattern?: string; // e.g., "0101" (0=unstressed, 1=stressed)
         weight?: string; // e.g., "Mishkal X"
     }>;
+    connections?: {
+        targetGroupId: number;
+        type: 'perfect' | 'slant' | 'family';
+        strength?: number;
+    }[];
 }
 
 export interface DbSession {
@@ -105,7 +110,7 @@ export interface DbSession {
     blob?: Blob;
     syncOffset?: number;
     metadata?: {
-        lyrics?: string;
+        lyrics?: string; // Legacy: full text
         lyricsSegments?: any[];
         lyricsWords?: any[];
         language?: string;
@@ -120,6 +125,7 @@ export interface DbSession {
             syllableIndices?: number[];
             text: string;
         }[];
+        bars?: Bar[]; // NEW: Structured bars with audio
         [key: string]: any;
     };
     content?: string; // For generic content like drill words
@@ -133,21 +139,40 @@ export interface Beat {
     createdAt: Date;
 }
 
+// NEW: Structured Bar Interface
+export interface Bar {
+    id: string; // UUID
+    text: string;
+    audioId?: string; // reference to barRecordings.id
+}
+
+// NEW: Audio Recording for a specific bar
+export interface BarRecording {
+    id: string; // UUID
+    blob: Blob;
+    sessionId: number; // Foreign key to session
+    barId: string; // Foreign key to bar (in metadata)
+    createdAt: Date;
+    duration: number; // in seconds
+}
+
 export class RapCapDatabase extends Dexie {
     wordGroups!: Table<WordGroup>;
     sessions!: Table<DbSession>; // Typed sessions table
     beats!: Table<Beat>; // New beats table
     vault!: Table<VaultItem>; // New vault table
+    barRecordings!: Table<BarRecording>; // NEW: Audio recordings per bar
 
     constructor() {
         super('rapCapDB');
 
         // Define tables and indexes
-        this.version(4).stores({
+        this.version(5).stores({ // Bump version to 5
             wordGroups: '++id, name, lastUsedAt, isSystem, cloudId',
             sessions: '++id, title, type, createdAt, updatedAt, cloudId',
             beats: '++id, videoId, name, createdAt', // New table
-            vault: '++id, type, createdAt, sessionId' // New table
+            vault: '++id, type, createdAt, sessionId', // New table
+            barRecordings: 'id, sessionId, barId, createdAt' // NEW TABLE
         });
 
         // Keep version 3 for reference if needed, but Dexie handles upgrades
