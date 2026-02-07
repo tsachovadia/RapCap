@@ -16,6 +16,7 @@ import {
     chunkIntoSegments,
     estimatePhraseStart
 } from '../services/transcriptProcessor'
+import { hasReliableSpeechRecognition } from '../utils/platformDetection'
 
 /** Silence threshold in ms - commit interim if no change */
 const SILENCE_THRESHOLD_MS = 2500
@@ -104,8 +105,9 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
     // Main recognition effect
     useEffect(() => {
-        if (!isSpeechRecognitionSupported()) {
-            console.warn('Speech Recognition not supported')
+        // If API is missing OR we are on iOS Chrome (unreliable), skip native logic
+        if (!isSpeechRecognitionSupported() || !hasReliableSpeechRecognition()) {
+            console.warn('Speech Recognition not supported or unreliable (using fallback)')
             return
         }
 
