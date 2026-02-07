@@ -19,7 +19,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { Music, Mic, GraduationCap, Upload, Clock } from 'lucide-react'
 import { DEFAULT_BEAT_ID } from '../data/beats'
 import { analyzeFreestyleLyrics } from '../services/gemini'
-import { transcribeWithWhisper, shouldUseWhisperFallback } from '../services/whisperTranscription'
 
 export type RecordingMode = 'freestyle' | 'thoughts' | 'training'
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
@@ -70,7 +69,6 @@ export default function RecordPage() {
     const [notes, setNotes] = useState('')
     const [aiKeywords, setAiKeywords] = useState<string[]>([])
     const [sessionAnalysis, setSessionAnalysis] = useState<SessionAnalysis | null>(null)
-    const [isProcessingFallback, setIsProcessingFallback] = useState(false)
 
     // Precise timing refs
     const recordingStartTimeRef = useRef<number>(0)
@@ -198,32 +196,33 @@ export default function RecordPage() {
                 const fullText = transcriptRef.current + (interimTranscript ? ' ' + interimTranscript : '');
 
                 // Check for Fallback (iOS Chrome or failed Speech API)
-                if (shouldUseWhisperFallback(fullText, duration)) {
-                    setIsProcessingFallback(true)
-                    try {
-                        const whisperResult = await transcribeWithWhisper(blob, language)
-                        setEnhancedTranscriptData(whisperResult)
-                        // Trigger AI analysis on the *new* text
-                        if (whisperResult.text.trim().length > 20) {
-                            analyzeFreestyleLyrics(whisperResult.text)
-                                .then(keywords => setAiKeywords(keywords))
-                                .catch(err => console.warn("AI Analysis failed (Fallback)", err))
-                        }
-                    } catch (e) {
-                        console.error("Fallback transcription failed", e)
-                        // Fallback failed, just show what we have (nothing)
-                    } finally {
-                        setIsProcessingFallback(false)
-                    }
-                } else {
-                    console.log("📝 Finalizing Flow - Transcript Length:", fullText.length, "Text:", fullText.substring(0, 50) + "...");
+                // DISABLED PER USER REQUEST: Network issues caused blocking UI
+                // if (shouldUseWhisperFallback(fullText, duration)) {
+                //    setIsProcessingFallback(true)
+                //    try {
+                //        const whisperResult = await transcribeWithWhisper(blob, language)
+                //        setEnhancedTranscriptData(whisperResult)
+                //        // Trigger AI analysis on the *new* text
+                //        if (whisperResult.text.trim().length > 20) {
+                //            analyzeFreestyleLyrics(whisperResult.text)
+                //                .then(keywords => setAiKeywords(keywords))
+                //                .catch(err => console.warn("AI Analysis failed (Fallback)", err))
+                //        }
+                //    } catch (e) {
+                //        console.error("Fallback transcription failed", e)
+                //        // Fallback failed, just show what we have (nothing)
+                //    } finally {
+                //        setIsProcessingFallback(false)
+                //    }
+                // } else {
+                console.log("📝 Finalizing Flow - Transcript Length:", fullText.length, "Text:", fullText.substring(0, 50) + "...");
 
-                    if (fullText.trim().length > 20) {
-                        analyzeFreestyleLyrics(fullText)
-                            .then(keywords => setAiKeywords(keywords))
-                            .catch(err => console.warn("AI Analysis failed", err))
-                    }
+                if (fullText.trim().length > 20) {
+                    analyzeFreestyleLyrics(fullText)
+                        .then(keywords => setAiKeywords(keywords))
+                        .catch(err => console.warn("AI Analysis failed", err))
                 }
+                // }
 
                 setShowReviewModal(true)
             }
@@ -565,17 +564,7 @@ export default function RecordPage() {
             />
 
             {/* Fallback Processing Overlay */}
-            {isProcessingFallback && (
-                <div className="absolute inset-0 z-[60] bg-black/80 flex flex-col items-center justify-center gap-4 backdrop-blur-sm">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1DB954]"></div>
-                    <div className="text-center">
-                        <h3 className="text-xl font-bold text-white mb-1">Transcribing...</h3>
-                        <p className="text-sm text-subdued max-w-xs">
-                            Optimizing lyrics for iOS...
-                        </p>
-                    </div>
-                </div>
-            )}
+
         </div>
     )
 }
