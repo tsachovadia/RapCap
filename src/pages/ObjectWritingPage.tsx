@@ -7,9 +7,11 @@ import { getDrillById, getRandomPrompt, type DrillPrompt } from '../data/drills'
 
 import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
+import { useToast } from '../contexts/ToastContext'
 
 export default function ObjectWritingPage() {
     const navigate = useNavigate()
+    const { showToast } = useToast()
     const [prompt, setPrompt] = useState<DrillPrompt | null>(null)
     const [showInstructions, setShowInstructions] = useState(true)
     const [text, setText] = useState('')
@@ -44,11 +46,11 @@ export default function ObjectWritingPage() {
                     prompt: prompt
                 }
             })
-            alert('האימון נשמר בהצלחה! 💾')
+            showToast('האימון נשמר בהצלחה!', 'success')
             navigate('/drills')
         } catch (e) {
             console.error('Failed to save drill', e)
-            alert('שגיאה בשמירה')
+            showToast('שגיאה בשמירה', 'error')
         }
     }
 

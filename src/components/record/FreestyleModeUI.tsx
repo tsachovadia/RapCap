@@ -8,6 +8,7 @@ import { syncService } from '../../services/dbSync'
 import { useAuth } from '../../contexts/AuthContext'
 import type { FlowState } from '../../pages/RecordPage'
 import DictaModal from '../shared/DictaModal'
+import { useToast } from '../../contexts/ToastContext'
 
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
 
 export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onBeatChange, segments, interimTranscript, notes, setNotes, onSaveMoment }: Props) {
     const { user } = useAuth()
+    const { showToast } = useToast()
     const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)
     const [beatVolume, setBeatVolume] = useState(50)
     const [youtubePlayer, setYoutubePlayer] = useState<any>(null)
@@ -242,7 +244,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                 console.error("Failed to auto-save beat", e)
             }
         } else {
-            alert(language === 'he' ? 'קישור לא תקין' : 'Invalid YouTube URL')
+            showToast(language === 'he' ? 'קישור לא תקין' : 'Invalid YouTube URL', 'warning')
         }
     }
 
@@ -319,7 +321,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     const saveDraft = async (index: number) => {
         const draft = drafts[index]
         if (!draft || !draft.name.trim() || draft.words.length === 0) {
-            alert("Please enter a name and at least one word.")
+            showToast('Please enter a name and at least one word.', 'warning')
             return
         }
 
@@ -376,13 +378,13 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
         } catch (e) {
             console.error("Failed to save group:", e)
-            alert("Failed to save group")
+            showToast('Failed to save group', 'error')
         }
     }
 
     const handleCreateNewGroup = async () => {
         if (!newGroupDraft.name.trim() || newGroupDraft.words.length === 0) {
-            alert("Please enter a name and words")
+            showToast('Please enter a name and words', 'warning')
             return
         }
 
@@ -758,7 +760,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 value={beatVolume}
                                 onChange={(e) => setBeatVolume(parseInt(e.target.value))}
                                 className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                style={{ appearance: 'slider-vertical', WebkitAppearance: 'slider-vertical' } as any}
+                                style={{ writingMode: 'vertical-lr', direction: 'rtl' } as any}
                                 title="Beat Volume"
                             />
                         </div>

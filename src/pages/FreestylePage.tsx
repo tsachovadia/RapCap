@@ -28,9 +28,11 @@ import { db } from '../db/db'
 import { convertBlobToMp3 } from '../services/audioEncoder'
 import { syncService } from '../services/dbSync'
 import { DEFAULT_BEAT_ID } from '../data/beats'
+import { useToast } from '../contexts/ToastContext'
 
 export default function FreestylePage() {
     const navigate = useNavigate()
+    const { showToast } = useToast()
 
     // Audio Recorder
     const {
@@ -182,7 +184,7 @@ export default function FreestylePage() {
             navigate('/library')
         } catch (e) {
             console.error('Failed to save session', e)
-            alert('שגיאה בשמירה: ' + (e instanceof Error ? e.message : String(e)))
+            showToast('שגיאה בשמירה: ' + (e instanceof Error ? e.message : String(e)), 'error')
         }
 
         setShowReviewModal(false)

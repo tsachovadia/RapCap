@@ -7,10 +7,21 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
-    host: true
+    host: true,
+    port: 5174,
   },
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toLocaleString('he-IL')),
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+        }
+      }
+    }
   },
   plugins: [
     react(),

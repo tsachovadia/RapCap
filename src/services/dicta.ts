@@ -13,10 +13,15 @@ export interface DictaRhymeResult {
     score: number;
 }
 
+const HEBREW_LETTER_RE = /[\u05D0-\u05EA]/;
+
 /**
- * Step 1: Get vocalization options for a raw Hebrew word
+ * Step 1: Get vocalization options for a raw Hebrew word.
+ * Returns the original word if it contains no Hebrew letters (API rejects non-Hebrew input).
  */
 export async function getVocalization(word: string): Promise<string[]> {
+    if (!word || !HEBREW_LETTER_RE.test(word)) return [word];
+
     try {
         const response = await fetch(`${DICTA_BASE_URL}/tipsoundplay`, {
             method: 'POST',
@@ -27,18 +32,10 @@ export async function getVocalization(word: string): Promise<string[]> {
         if (!response.ok) throw new Error("Vocalization failed");
 
         const data = await response.json();
-        // The API returns a list of results. We usually want the first/most likely one or let user choose.
-        // For simplicity now, we'll return all unique vocalized forms.
-        // The structure is usually array of objects with 'all_nikud' or similar. 
-        // Based on research note: "Output: A list of valid... Hebrew words with full Nikkud."
-        // Let's assume data.all_nikud is the array if it exists, or verify response structure.
-        // Actually, let's look at the research again carefully. 
-        // "Payload: {'w': '...'}" -> "Retrieves phonetic suggestions".
-        // Let's safe-guard:
         if (Array.isArray(data)) {
             return data;
         }
-        return data.all_nikud || [word]; // Fallback
+        return data.all_nikud || [word];
     } catch (e) {
         console.error("Dicta Vocalization Error:", e);
         return [word];

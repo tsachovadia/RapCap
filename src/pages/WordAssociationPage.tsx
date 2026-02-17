@@ -8,9 +8,11 @@ import { getDrillById, getRandomPrompt, type DrillPrompt } from '../data/drills'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import { ArrowLeft, Clock, Pause, Play, Send, BrainCircuit, Save, Share2 } from 'lucide-react'
+import { useToast } from '../contexts/ToastContext'
 
 export default function WordAssociationPage() {
     const navigate = useNavigate()
+    const { showToast } = useToast()
     const [initialPrompt, setInitialPrompt] = useState<DrillPrompt | null>(null)
     const [currentWord, setCurrentWord] = useState<string>('')
     const [showInstructions, setShowInstructions] = useState(true)
@@ -86,7 +88,7 @@ export default function WordAssociationPage() {
             navigate('/drills')
         } catch (e) {
             console.error('Failed to save drill', e)
-            alert('שגיאה בשמירה')
+            showToast('שגיאה בשמירה', 'error')
         }
     }
 

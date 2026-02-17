@@ -40,16 +40,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             try {
                 // 1. Set persistence explicitly
+                console.log("🔍 Auth: Setting persistence...");
                 await setPersistence(auth, browserLocalPersistence);
+                console.log("✅ Auth: Persistence set.");
 
-                // 2. Check for redirect result
+                // 2. Check for redirect result with a timeout to prevent hanging
                 console.log("🔍 Auth: Checking redirect result...");
-                const result = await getRedirectResult(auth);
-                if (result && isMounted) {
-                    console.log("✅ Auth: Redirect result found for", result.user.email);
-                    setUser(result.user);
-                } else {
-                    console.log("ℹ️ Auth: No redirect result found on this load");
+
+                // Create a promise that rejects after 5 seconds
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Redirect result check timed out')), 5000)
+                );
+
+                try {
+                    const result = await Promise.race([
+                        getRedirectResult(auth),
+                        timeoutPromise
+                    ]) as any; // Cast to any to avoid complex type union issues with the timeout
+
+                    if (result && isMounted) {
+                        console.log("✅ Auth: Redirect result found for", result.user.email);
+                        setUser(result.user);
+                    } else {
+                        console.log("ℹ️ Auth: No redirect result found on this load");
+                    }
+                } catch (timeoutError) {
+                    console.warn("⚠️ Auth: Redirect check timed out or failed, proceeding anyway:", timeoutError);
                 }
             } catch (error) {
                 console.error("❌ Auth: Initialization error", error);

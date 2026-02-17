@@ -1,6 +1,61 @@
 
 import Dexie, { type Table } from 'dexie';
 
+console.log('[RapCap] 💽 db.ts module evaluating...');
+
+// --- Verse Editor Types ---
+
+export type HebrewVowel = 'A' | 'E' | 'I' | 'O' | 'U' | '';
+
+export interface VerseSyllable {
+    text: string;           // "אַר" — the vocalized syllable text
+    vowel: HebrewVowel;     // extracted from nikkud
+    onset: string;          // opening consonant(s)
+    coda: string;           // closing consonant(s)
+}
+
+export interface VerseWord {
+    text: string;           // "ארנב" — original unvocalized
+    vocalized: string;      // "אַרְנָב" — with nikkud
+    syllables: VerseSyllable[];
+}
+
+export interface VerseBar {
+    id: string;             // UUID
+    text: string;           // raw text user typed
+    words: VerseWord[];     // computed from text + Dicta vocalization
+}
+
+export interface SchemeHit {
+    barId: string;
+    startSyllable: number;  // index in flattened bar syllables
+    endSyllable: number;    // inclusive
+}
+
+export interface VerseScheme {
+    id: string;
+    color: string;          // hex color from palette
+    name?: string;          // optional user label
+    syllableCount: number;  // how many syllables this scheme targets
+    hits: SchemeHit[];
+}
+
+export interface Verse {
+    id?: number;
+    title: string;
+    bars: VerseBar[];
+    schemes: VerseScheme[];
+    beatBpm?: number;
+    timeSignature?: string; // "4/4" default
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface VocalizationCacheEntry {
+    word: string;           // primary key — clean word
+    vocalized: string;      // vocalized form with nikkud
+}
+
 export interface Punchline {
     text: string;
     score: number;
@@ -158,29 +213,57 @@ export interface BarRecording {
 
 export class RapCapDatabase extends Dexie {
     wordGroups!: Table<WordGroup>;
-    sessions!: Table<DbSession>; // Typed sessions table
-    beats!: Table<Beat>; // New beats table
-    vault!: Table<VaultItem>; // New vault table
-    barRecordings!: Table<BarRecording>; // NEW: Audio recordings per bar
+    sessions!: Table<DbSession>;
+    beats!: Table<Beat>;
+    vault!: Table<VaultItem>;
+    barRecordings!: Table<BarRecording>;
+    verses!: Table<Verse>;
+    vocalizationCache!: Table<VocalizationCacheEntry>;
 
     constructor() {
         super('rapCapDB');
 
-        // Define tables and indexes
-        this.version(5).stores({ // Bump version to 5
+        this.version(5).stores({
             wordGroups: '++id, name, lastUsedAt, isSystem, cloudId',
             sessions: '++id, title, type, createdAt, updatedAt, cloudId',
-            beats: '++id, videoId, name, createdAt', // New table
-            vault: '++id, type, createdAt, sessionId', // New table
-            barRecordings: 'id, sessionId, barId, createdAt' // NEW TABLE
+            beats: '++id, videoId, name, createdAt',
+            vault: '++id, type, createdAt, sessionId',
+            barRecordings: 'id, sessionId, barId, createdAt'
         });
 
-        // Keep version 3 for reference if needed, but Dexie handles upgrades
-        // this.version(3).stores({...}) 
+        this.version(6).stores({
+            wordGroups: '++id, name, lastUsedAt, isSystem, cloudId',
+            sessions: '++id, title, type, createdAt, updatedAt, cloudId',
+            beats: '++id, videoId, name, createdAt',
+            vault: '++id, type, createdAt, sessionId',
+            barRecordings: 'id, sessionId, barId, createdAt',
+            verses: '++id, title, createdAt, updatedAt',
+            vocalizationCache: '&word'
+        });
     }
 }
 
 export const db = new RapCapDatabase();
+
+// Handle version upgrade blocked by other tabs
+db.on('blocked', () => {
+    console.error('⛔️ DB upgrade blocked! Please close other tabs.');
+    alert('Database upgrade blocked. Please close all other RapCap tabs and refresh.');
+});
+
+db.on('versionchange', () => {
+    // Another tab is trying to upgrade the DB — close our connection
+    console.warn('⚠️ DB version changed in another tab — reloading...');
+    db.close();
+    window.location.reload();
+});
+
+// Force open to catch errors early
+db.open().then(() => {
+    console.log('✅ DB: Critical connection established (v' + db.verno + ')');
+}).catch(err => {
+    console.error('❌ DB: Failed to open database:', err);
+});
 
 // Seed function to populate default data
 export const seedDatabase = async () => {

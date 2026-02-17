@@ -2,80 +2,84 @@
  * RapCap - Main App Component
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-// import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import AppLayout from './layouts/AppLayout'
 import ReloadPrompt from './components/ReloadPrompt'
-import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
-import HomePage from './pages/HomePage'
-import RecordPage from './pages/RecordPage'
-import LibraryPage from './pages/LibraryPage'
-import DrillsPage from './pages/DrillsPage'
-import ObjectWritingPage from './pages/ObjectWritingPage'
-import RhymeChainsPage from './pages/RhymeChainsPage'
-import SessionDetailsPage from './pages/SessionDetailsPage'
-import WordAssociationPage from './pages/WordAssociationPage'
-import SettingsPage from './pages/SettingsPage'
-import FlowPatternsPage from './pages/FlowPatternsPage'
-import RhymeLibraryPage from './pages/RhymeLibraryPage'
-import RhymeEditorPage from './pages/RhymeEditorPage'
-import WritingSessionPage from './pages/WritingSessionPage'
-import AuthPage from './pages/AuthPage'
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard'
 import { AuthProvider } from './contexts/AuthContext'
-import { useEffect } from 'react'
+import { ToastProvider } from './contexts/ToastContext'
+import { ErrorBoundary } from './components/shared/ErrorBoundary'
+import { PageLoader } from './components/shared/PageLoader'
 import { seedDatabase } from './db/db'
 
-
-
-
+// Lazy-loaded pages
+const HomePage = lazy(() => import('./pages/HomePage'))
+const RecordPage = lazy(() => import('./pages/RecordPage'))
+const LibraryPage = lazy(() => import('./pages/LibraryPage'))
+const DrillsPage = lazy(() => import('./pages/DrillsPage'))
+const ObjectWritingPage = lazy(() => import('./pages/ObjectWritingPage'))
+const RhymeChainsPage = lazy(() => import('./pages/RhymeChainsPage'))
+const SessionDetailsPage = lazy(() => import('./pages/SessionDetailsPage'))
+const WordAssociationPage = lazy(() => import('./pages/WordAssociationPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const FlowPatternsPage = lazy(() => import('./pages/FlowPatternsPage'))
+const RhymeLibraryPage = lazy(() => import('./pages/RhymeLibraryPage'))
+const RhymeEditorPage = lazy(() => import('./pages/RhymeEditorPage'))
+const WritingSessionPage = lazy(() => import('./pages/WritingSessionPage'))
+// const VerseEditorPage = lazy(() => import('./pages/VerseEditorPage'))
+const VerseEditorPage = lazy(() => import('./pages/VerseEditorPage'))
+const AuthPage = lazy(() => import('./pages/AuthPage'))
+const StudioPage = lazy(() => import('./pages/StudioPage'))
 
 import { Agentation } from 'agentation'
 
-
 export default function App() {
-  // Request mic permission on app load
-  // Request mic permission on app load - REMOVED to prevent race conditions
-
   // Initialize DB with seed data
   useEffect(() => {
-    seedDatabase().catch(console.error)
-    console.log("🚀 RapCap started. Build:", typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : "Development");
+    console.log('[RapCap] 🚀 App mounted. Starting DB seed...');
+    seedDatabase()
+      .then(() => console.log('[RapCap] ✅ DB Seed completed successfully.'))
+      .catch(err => console.error('[RapCap] ❌ DB Seed failed:', err));
+
+    console.log("RapCap started. Build:", typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : "Development");
   }, [])
 
   return (
-    <>
-      <BrowserRouter>
-        <AuthProvider>
-          <OnboardingWizard />
-          <Routes>
-            <Route path="/rhyme-library/session/:id?" element={<WritingSessionPage />} />
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<AuthPage />} />
-              <Route path="/record" element={<RecordPage />} />
-              <Route path="/freestyle" element={<Navigate to="/record?mode=freestyle" replace />} />
-              <Route path="/library" element={<LibraryPage />} />
-              <Route path="/drills" element={<DrillsPage />} />
-              <Route path="/drills/object-writing" element={<ObjectWritingPage />} />
-              <Route path="/drills/rhyme-chains" element={<RhymeChainsPage />} />
-              <Route path="/drills/word-association" element={<WordAssociationPage />} />
-              <Route path="/drills/flow-patterns" element={<FlowPatternsPage />} />
-
-              <Route path="/rhyme-library" element={<RhymeLibraryPage />} />
-              <Route path="/rhyme-library/new" element={<RhymeEditorPage />} />
-              <Route path="/rhyme-library/:id" element={<RhymeEditorPage />} />
-
-              {/* New Library Detail Route */}
-              <Route path="/library/:id" element={<SessionDetailsPage />} />
-
-              <Route path="/settings" element={<SettingsPage />} />
-
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
+    <ToastProvider>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <AuthProvider>
+            <OnboardingWizard />
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/studio/:id?" element={<StudioPage />} />
+                <Route path="/rhyme-library/session/:id?" element={<WritingSessionPage />} />
+                <Route element={<AppLayout />}>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/login" element={<AuthPage />} />
+                  <Route path="/record" element={<RecordPage />} />
+                  <Route path="/freestyle" element={<Navigate to="/record?mode=freestyle" replace />} />
+                  <Route path="/library" element={<LibraryPage />} />
+                  <Route path="/drills" element={<DrillsPage />} />
+                  <Route path="/drills/object-writing" element={<ObjectWritingPage />} />
+                  <Route path="/drills/rhyme-chains" element={<RhymeChainsPage />} />
+                  <Route path="/drills/word-association" element={<WordAssociationPage />} />
+                  <Route path="/drills/flow-patterns" element={<FlowPatternsPage />} />
+                  <Route path="/rhyme-library" element={<RhymeLibraryPage />} />
+                  <Route path="/rhyme-library/new" element={<RhymeEditorPage />} />
+                  <Route path="/rhyme-library/:id" element={<RhymeEditorPage />} />
+                  <Route path="/library/:id" element={<SessionDetailsPage />} />
+                  <Route path="/verse-editor/:id?" element={<VerseEditorPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </BrowserRouter>
+      </ErrorBoundary>
       {import.meta.env.DEV && <Agentation />}
       <ReloadPrompt />
-    </>
+    </ToastProvider>
   )
 }

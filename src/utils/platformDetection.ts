@@ -12,7 +12,7 @@ export function isIOS(): boolean {
 /** Check if running in Safari (desktop or iOS) */
 export function isSafari(): boolean {
     const ua = navigator.userAgent;
-    return /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+    return /^((?!chrome|android).)*safari/i.test(ua);
 }
 
 /** Check if running on iOS Safari specifically */
@@ -31,24 +31,12 @@ export function isIOSPWA(): boolean {
     return isIOS() && isStandalonePWA();
 }
 
-/** Check if running on iOS Chrome */
-export function isIOSChrome(): boolean {
-    const ua = navigator.userAgent;
-    return isIOS() && /CriOS/i.test(ua);
-}
-
 /**
  * Check if Web Speech API is likely to work reliably
  * iOS Safari has partial support since 14.5 but with frequent failures
- * iOS Chrome (and other iOS browsers) use WebKit but have NO access to Speech API
  * Chrome/Edge on desktop/Android have full support
  */
 export function hasReliableSpeechRecognition(): boolean {
-    // iOS Chrome/Firefox etc. do NOT support Speech Recognition at all
-    if (isIOS() && !isSafari()) {
-        return false;
-    }
-
     // Check if API exists at all
     const hasAPI = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
     if (!hasAPI) return false;

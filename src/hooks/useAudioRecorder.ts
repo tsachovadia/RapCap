@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useToast } from '../contexts/ToastContext';
 
 export interface RecorderState {
     isRecording: boolean;
@@ -8,6 +9,7 @@ export interface RecorderState {
 }
 
 export function useAudioRecorder() {
+    const { showToast } = useToast();
     const [permissionError, setPermissionError] = useState<Error | null>(null);
 
     const [recorderState, setRecorderState] = useState<RecorderState>({
@@ -342,7 +344,7 @@ export function useAudioRecorder() {
 
         } catch (err) {
             console.error("❌ Failed to start recording:", err);
-            alert("שגיאה בהתחלת ההקלטה");
+            showToast('שגיאה בהתחלת ההקלטה', 'error');
             setIsInitializing(false)
         }
     }, [initializeStream]);

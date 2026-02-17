@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 export default function AuthPage() {
     const { signInWithGoogle, user } = useAuth();
     const navigate = useNavigate();
+    const { showToast } = useToast();
     const [isLoggingIn, setIsLoggingIn] = useState(false);
 
     // Redirect if already logged in
@@ -21,7 +23,7 @@ export default function AuthPage() {
             navigate('/library');
         } catch (error) {
             console.error(error);
-            alert("Login failed");
+            showToast('שגיאה בהתחברות', 'error');
         } finally {
             setIsLoggingIn(false);
         }

@@ -137,11 +137,19 @@ export const syncService = {
                     // 1. Try lookup by cloudId
                     let localSession = await localDb.sessions.where('cloudId').equals(cloudId).first();
 
-                    // 2. Fallback: Fingerprint lookup (same createdAt)
+                    // 2. Fallback: Fingerprint lookup (same title + createdAt within tolerance)
                     if (!localSession && cloudData.createdAt) {
                         const cloudCreated = cloudData.createdAt instanceof Timestamp ? cloudData.createdAt.toDate() : new Date(cloudData.createdAt);
                         const allSessions = await localDb.sessions.toArray();
-                        localSession = allSessions.find(s => Math.abs(s.createdAt.getTime() - cloudCreated.getTime()) < 2000); // 2s tolerance
+                        // First try: match by title + close timestamp (most reliable for dupes)
+                        localSession = allSessions.find(s =>
+                            s.title === cloudData.title &&
+                            Math.abs(s.createdAt.getTime() - cloudCreated.getTime()) < 30000 // 30s tolerance
+                        );
+                        // Second try: match by close timestamp only
+                        if (!localSession) {
+                            localSession = allSessions.find(s => Math.abs(s.createdAt.getTime() - cloudCreated.getTime()) < 2000);
+                        }
 
                         if (localSession) {
                             console.log(`🔗 Linked local Session ${localSession.id} to cloudId ${cloudId} via fingerprint`);
@@ -264,6 +272,8 @@ export const syncService = {
         try {
             const allSessions = await localDb.sessions.toArray();
             const pendingSessions = allSessions.filter(s => {
+                // Skip untitled sessions - they haven't been completed yet
+                if (s.title === 'New Session') return false;
                 const isDirty = !s.syncedAt || !s.cloudId || (s.updatedAt && s.updatedAt > s.syncedAt);
                 return isDirty;
             });
@@ -392,13 +402,43 @@ export const syncService = {
         if (deletedCount > 0) {
             console.log(`🧹 Cleanup finished: Removed ${deletedCount} duplicate groups.`);
         }
+
+        // Also cleanup duplicate sessions (same title + similar duration)
+        const allSessions = await localDb.sessions.toArray();
+        const sessionsByKey: Record<string, typeof allSessions> = {};
+        for (const session of allSessions) {
+            const key = `${session.title}|${Math.round(session.duration)}`;
+            if (!sessionsByKey[key]) sessionsByKey[key] = [];
+            sessionsByKey[key].push(session);
+        }
+
+        let sessionDeletedCount = 0;
+        for (const key in sessionsByKey) {
+            const sessions = sessionsByKey[key];
+            if (sessions.length > 1) {
+                sessions.sort((a, b) => {
+                    if (a.cloudId && !b.cloudId) return -1;
+                    if (!a.cloudId && b.cloudId) return 1;
+                    return (b.updatedAt || b.createdAt).getTime() - (a.updatedAt || a.createdAt).getTime();
+                });
+                for (const dupe of sessions.slice(1)) {
+                    console.log(`❌ Deleting duplicate session "${dupe.title}" (id: ${dupe.id})`);
+                    await localDb.sessions.delete(dupe.id!);
+                    sessionDeletedCount++;
+                }
+            }
+        }
+        if (sessionDeletedCount > 0) {
+            console.log(`🧹 Session cleanup: Removed ${sessionDeletedCount} duplicate sessions.`);
+        }
     }
 };
 
 
 function cleanData(data: any): any {
     if (data === null || data === undefined) return null;
-    if (data instanceof Date) return data;
+    if (data instanceof Timestamp) return data;
+    if (data instanceof Date) return Timestamp.fromDate(data);
     if (Array.isArray(data)) {
         return data.map(item => cleanData(item)).filter(i => i !== undefined);
     }

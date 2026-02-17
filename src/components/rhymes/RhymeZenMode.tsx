@@ -8,6 +8,7 @@ import { syncService } from '../../services/dbSync'
 import { useAuth } from '../../contexts/AuthContext'
 import { BarItem } from '../../components/writing/BarItem'
 import { useAudioRecorder } from '../../hooks/useAudioRecorder'
+import { useToast } from '../../contexts/ToastContext'
 
 interface RhymeZenModeProps {
     initialGroup: WordGroup | null
@@ -19,6 +20,7 @@ interface RhymeZenModeProps {
 
 export default function RhymeZenMode({ initialGroup, initialText: propText, initialTitle = '', onTextChange, onClose }: RhymeZenModeProps) {
     const { user } = useAuth()
+    const { showToast } = useToast()
 
     // Bar-based State
     // Parse propText (string) into Bar[]
@@ -258,18 +260,18 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
                 // Fire and forget update stats
                 visibleDeckIds.forEach(did => db.wordGroups.update(did, { lastUsedAt: new Date() }).catch(() => { }))
             }
-            alert('Session saved!')
+            showToast('Session saved!', 'success')
             onClose()
         } catch (error) {
             console.error('Failed to save session:', error)
-            alert('Failed to save session')
+            showToast('Failed to save session', 'error')
         }
     }
 
     // --- Audio Logic ---
     const handleStartRecording = async (barId: string) => {
         if (onTextChange) {
-            alert("Audio recording available in full session mode only.")
+            showToast('Audio recording available in full session mode only.', 'info')
             return
         }
 
@@ -317,7 +319,7 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
 
             } catch (e) {
                 console.error("Failed to save recording", e)
-                alert("Failed to save recording")
+                showToast('Failed to save recording', 'error')
             }
         }
     }
@@ -402,8 +404,8 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
     }
 
     const handleCreateGroup = async () => {
-        if (!newGroupName.trim()) return alert("Give your group a name!")
-        if (newGroupItems.length === 0) return alert("Add some words first!")
+        if (!newGroupName.trim()) return showToast('Give your group a name!', 'warning')
+        if (newGroupItems.length === 0) return showToast('Add some words first!', 'warning')
         const newGroup: WordGroup = {
             name: newGroupName,
             items: newGroupItems,
@@ -416,7 +418,7 @@ export default function RhymeZenMode({ initialGroup, initialText: propText, init
             setVisibleDeckIds(prev => [...prev, id as number])
             setIsCreatingGroup(false); setNewGroupName(''); setNewGroupItems([]); setShowDeckSelector(false)
         } catch (e) {
-            console.error(e); alert("Failed to create group")
+            console.error(e); showToast('Failed to create group', 'error')
         }
     }
 

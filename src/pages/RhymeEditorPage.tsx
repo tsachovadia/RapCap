@@ -5,6 +5,7 @@ import { Plus, Trash2, Save, ArrowLeft, Sparkles, Loader2, ChevronDown, ChevronU
 import { generateMnemonicStory } from '../services/gemini'
 import { syncService } from '../services/dbSync'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import DictaModal from '../components/shared/DictaModal'
 import { useLiveQuery } from 'dexie-react-hooks'
 
@@ -12,6 +13,7 @@ export default function RhymeEditorPage() {
     const { id } = useParams()
     const navigate = useNavigate()
     const { user } = useAuth()
+    const { showToast } = useToast()
     const isNew = !id || id === 'new'
 
     // Form State
@@ -69,7 +71,7 @@ export default function RhymeEditorPage() {
 
     const handleSave = async () => {
         if (isSaving) return
-        if (!name.trim()) return alert('Please give your rhyme group a name!')
+        if (!name.trim()) return showToast('Please give your rhyme group a name!', 'warning')
 
         setIsSaving(true)
         const groupData: WordGroup = {
@@ -105,7 +107,7 @@ export default function RhymeEditorPage() {
             navigate('/rhyme-library') // Go back to library
         } catch (err) {
             console.error("Failed to save:", err)
-            alert("Error saving group.")
+            showToast('Error saving group.', 'error')
             setIsSaving(false)
         }
     }
@@ -137,7 +139,7 @@ export default function RhymeEditorPage() {
     // --- AI Story ---
     const handleMagicStory = async () => {
         if (items.length < 2) {
-            alert("Please add at least 2 words first!");
+            showToast('Please add at least 2 words first!', 'warning');
             return;
         }
 
@@ -151,7 +153,7 @@ export default function RhymeEditorPage() {
             setStory(result.story);
             setMnemonicLogic(result.logic);
         } catch (error) {
-            alert("Failed to generate story. Check your internet or API key.");
+            showToast('Failed to generate story. Check your internet or API key.', 'error');
             console.error(error);
         } finally {
             setIsGenerating(false);

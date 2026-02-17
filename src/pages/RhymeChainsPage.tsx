@@ -9,9 +9,11 @@ import { useNavigate } from 'react-router-dom'
 import { db } from '../db/db'
 import { ArrowLeft, Clock, Pause, Play, Send, Link as LinkIcon, Save, Share2 } from 'lucide-react'
 import { syncService } from '../services/dbSync'
+import { useToast } from '../contexts/ToastContext'
 
 export default function RhymeChainsPage() {
     const navigate = useNavigate()
+    const { showToast } = useToast()
     const [prompt, setPrompt] = useState<DrillPrompt | null>(null)
     const [showInstructions, setShowInstructions] = useState(true)
     const [rhymes, setRhymes] = useState<string[]>([])
@@ -74,7 +76,7 @@ export default function RhymeChainsPage() {
             navigate('/drills')
         } catch (e) {
             console.error('Failed to save drill', e)
-            alert('שגיאה בשמירה')
+            showToast('שגיאה בשמירה', 'error')
         }
     }
 

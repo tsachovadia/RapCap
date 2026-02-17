@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react'
-import { Mic } from 'lucide-react'
+import { useRef, useEffect, type Dispatch, type SetStateAction } from 'react'
+import { Mic, Keyboard } from 'lucide-react'
 import type { FlowState } from '../../pages/RecordPage'
 
 interface Props {
@@ -7,14 +7,40 @@ interface Props {
     language: 'he' | 'en'
     segments: any[]
     interimTranscript: string
+    notes: string
+    setNotes: Dispatch<SetStateAction<string>>
 }
 
-export default function ThoughtsModeUI({ flowState, language, segments, interimTranscript }: Props) {
-    const transcriptEndRef = useRef<HTMLDivElement>(null)
+export default function ThoughtsModeUI({ flowState, language, segments, interimTranscript, notes, setNotes }: Props) {
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const lastSegmentsLengthRef = useRef(segments.length)
+
+    // Auto-scroll logic for textarea? Or maybe just for the transcript if we kept it?
+    // We want to append new transcription segments to the notes.
 
     useEffect(() => {
-        transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    }, [segments, interimTranscript])
+        // If new segments arrived, append them to notes
+        if (segments.length > lastSegmentsLengthRef.current) {
+            const newSegments = segments.slice(lastSegmentsLengthRef.current)
+            const newText = newSegments.map(s => s.text).join(' ')
+
+            setNotes((prev: string) => {
+                const needsSpace = prev.length > 0 && !prev.endsWith(' ') && !prev.endsWith('\n');
+                return prev + (needsSpace ? ' ' : '') + newText;
+            })
+
+            lastSegmentsLengthRef.current = segments.length
+        }
+    }, [segments, setNotes])
+
+    // Scroll textarea to bottom when notes update (if user is not manually editing?)
+    // Basic implementation: Scroll to bottom on update
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+        }
+    }, [notes])
+
 
     return (
         <div className="flex-1 flex flex-col gap-4 min-h-0 bg-[#121212] rounded-3xl border border-white/5 shadow-2xl overflow-hidden p-6 md:p-10">
@@ -23,45 +49,35 @@ export default function ThoughtsModeUI({ flowState, language, segments, interimT
                 <div className="flex items-center gap-2">
                     <Mic size={20} className={flowState === 'recording' ? 'text-red-500 animate-pulse' : ''} />
                     <span className="text-sm font-medium tracking-wide">
-                        {flowState === 'recording' ? (language === 'he' ? 'מקליט מחשבות...' : 'Recording thoughts...') : (language === 'he' ? 'התחל לדבר כדי לתמלל' : 'Start speaking to transcribe')}
+                        {flowState === 'recording' ? (language === 'he' ? 'מקליט מחשבות...' : 'Recording thoughts...') : (language === 'he' ? 'התחל לדבר או לכתוב' : 'Start speaking or typing')}
                     </span>
                 </div>
-                <div className="text-xs font-mono uppercase tracking-widest">
-                    {language === 'he' ? 'זיהוי קולי פעיל' : 'Voice Recognition Active'}
+                <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest">
+                    <Keyboard size={14} />
+                    <span>{language === 'he' ? 'עורך טקסט' : 'Text Editor'}</span>
                 </div>
             </div>
 
-            {/* Large Scrollable Transcript */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar no-scrollbar flex flex-col pt-4">
-                <div className="max-w-3xl mx-auto w-full space-y-8 pb-32">
-                    {segments.length === 0 && !interimTranscript && (
-                        <div className="flex flex-col items-center justify-center py-20 text-white/20 text-center gap-4">
-                            <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/10 flex items-center justify-center">
-                                <Mic size={32} />
-                            </div>
-                            <p className="text-lg italic font-light italic">
-                                {language === 'he' ? 'זה המקום לפרוק הכל...' : 'This is your space to let it flow...'}
-                            </p>
-                        </div>
-                    )}
+            {/* Hybrid Input Area */}
+            <div className="flex-1 flex flex-col relative">
+                <textarea
+                    ref={textareaRef}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder={language === 'he' ? 'המחשבות שלך יופיעו כאן...' : 'Your thoughts will appear here...'}
+                    className="flex-1 w-full bg-transparent text-xl md:text-2xl font-light leading-relaxed text-white/90 resize-none outline-none placeholder:text-white/20 p-2"
+                    dir={language === 'he' ? 'rtl' : 'ltr'}
+                />
 
-                    {segments.map((seg, i) => (
-                        <div
-                            key={i}
-                            className="text-2xl md:text-4xl font-light leading-relaxed text-white/90 animate-in fade-in slide-in-from-bottom-2 duration-500"
-                        >
-                            <p>{seg.text}</p>
-                        </div>
-                    ))}
-
-                    {interimTranscript && (
-                        <div className="text-2xl md:text-4xl font-medium leading-relaxed text-[#1DB954] drop-shadow-sm animate-in fade-in duration-300">
-                            <p>{interimTranscript}</p>
-                        </div>
-                    )}
-                    <div ref={transcriptEndRef} className="h-10" />
-                </div>
+                {/* Interim Transcript Overlay (Ghost text) */}
+                {interimTranscript && (
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/80 backdrop-blur-sm border-t border-white/10 text-[#1DB954] text-lg animate-in fade-in slide-in-from-bottom-2">
+                        <p className="font-mono text-xs opacity-70 mb-1">LISTENING...</p>
+                        <p>{interimTranscript}</p>
+                    </div>
+                )}
             </div>
         </div>
     )
 }
+

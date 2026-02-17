@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Mic2, Dumbbell, BookOpen, Library } from 'lucide-react'
+import { BookOpen, Library, Layers, PenLine, Mic2 } from 'lucide-react'
 
 const tabs = [
-    { path: '/', icon: Home, label: 'בית' },
-    { path: '/freestyle', icon: Mic2, label: 'הקלטה' },
+    { path: '/studio', icon: Layers, label: 'סטודיו' },
+    { path: '/verse-editor', icon: PenLine, label: 'כתיבה' },
+    { path: '/record?mode=freestyle', icon: Mic2, label: 'הקלטה' },
     { path: '/rhyme-library', icon: BookOpen, label: 'חרוזים' },
     { path: '/library', icon: Library, label: 'הקלטות' },
-    { path: '/drills', icon: Dumbbell, label: 'אימון' },
 ]
 
 export default function BottomNav() {

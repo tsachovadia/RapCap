@@ -6,6 +6,7 @@ import { Link as LinkIcon, ExternalLink } from 'lucide-react'
 import BeatPlayer from './BeatPlayer'
 import type { FlowState } from '../../hooks/useFlowState'
 import { PRESET_BEATS } from '../../data/beats'
+import { useToast } from '../../contexts/ToastContext'
 
 interface BeatSectionProps {
     videoId: string
@@ -30,6 +31,7 @@ export function BeatSection({
     onPlayerStateChange,
     language
 }: BeatSectionProps) {
+    const { showToast } = useToast()
     const [showUrlInput, setShowUrlInput] = useState(false)
     const [urlInput, setUrlInput] = useState('')
 
@@ -50,7 +52,7 @@ export function BeatSection({
             setShowUrlInput(false)
             setUrlInput('')
         } else {
-            alert(language === 'he' ? 'קישור לא תקין' : 'Invalid YouTube URL')
+            showToast(language === 'he' ? 'קישור לא תקין' : 'Invalid YouTube URL', 'warning')
         }
     }
 

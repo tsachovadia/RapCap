@@ -7,6 +7,7 @@ import { Trash2, Download, Upload, Save, UserCircle, Cloud, RefreshCw } from 'lu
 import { db } from '../db/db'
 import { useProfile } from '../hooks/useProfile'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { syncService } from '../services/dbSync'
 
 const AVATAR_COLORS = [
@@ -24,6 +25,7 @@ export default function SettingsPage() {
     const navigate = useNavigate()
     const { profile, updateProfile, resetProfile } = useProfile()
     const { user, logout } = useAuth()
+    const { showToast } = useToast()
     const [name, setName] = useState(profile.name)
     const [bio, setBio] = useState(profile.bio)
     const [selectedColor, setSelectedColor] = useState(profile.avatarColor)
@@ -35,10 +37,10 @@ export default function SettingsPage() {
         setIsSyncing(true);
         try {
             await syncService.syncAll();
-            alert("סנכרון הושלם בהצלחה!");
+            showToast('סנכרון הושלם בהצלחה!', 'success');
         } catch (e) {
             console.error(e);
-            alert("שגיאה בסנכרון");
+            showToast('שגיאה בסנכרון', 'error');
         } finally {
             setIsSyncing(false);
         }
@@ -51,11 +53,11 @@ export default function SettingsPage() {
                 await db.delete()
                 await db.open()
                 resetProfile()
-                alert('כל הנתונים נמחקו בהצלחה.')
+                showToast('כל הנתונים נמחקו בהצלחה.', 'success')
                 navigate('/')
             } catch (error) {
                 console.error('Failed to delete database:', error)
-                alert('שגיאה במחיקת הנתונים.')
+                showToast('שגיאה במחיקת הנתונים.', 'error')
             }
         }
     }
@@ -84,7 +86,7 @@ export default function SettingsPage() {
             URL.revokeObjectURL(url)
         } catch (e) {
             console.error('Export failed', e)
-            alert('שגיאה בייצוא הנתונים')
+            showToast('שגיאה בייצוא הנתונים', 'error')
         }
     }
 
@@ -122,11 +124,11 @@ export default function SettingsPage() {
                     updateProfile(data.profile)
                 }
 
-                alert(`שוחזרו בהצלחה ${sessionsToImport.length} פריטים!`)
+                showToast(`שוחזרו בהצלחה ${sessionsToImport.length} פריטים!`, 'success')
                 navigate('/')
             } catch (error) {
                 console.error('Import failed', error)
-                alert('שגיאה בטעינת הקובץ. וודא שזהו קובץ גיבוי תקין.')
+                showToast('שגיאה בטעינת הקובץ. וודא שזהו קובץ גיבוי תקין.', 'error')
             }
         }
         reader.readAsText(file)
@@ -140,7 +142,7 @@ export default function SettingsPage() {
             avatarUrl: selectedColor === 'image' ? profile.avatarUrl : null,
             isOnboarded: true
         })
-        alert('הפרופיל עודכן בהצלחה! ✨')
+        showToast('הפרופיל עודכן בהצלחה!', 'success')
     }
 
     return (

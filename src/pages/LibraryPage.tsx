@@ -3,7 +3,7 @@ import { db } from '../db/db'
 import type { DbSession } from '../db/db'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Filter, CheckSquare, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { Search, Filter, CheckSquare, Trash2, ChevronDown, ChevronRight, X, Download } from 'lucide-react'
 import SessionCard from '../components/library/SessionCard'
 
 // -- Helper: Group by Date --
@@ -41,8 +41,9 @@ export default function LibraryPage() {
     const navigate = useNavigate()
 
     // State
+    // State
     const [searchQuery, setSearchQuery] = useState('')
-    const [activeTab, setActiveTab] = useState<'all' | 'freestyle' | 'drill' | 'writing'>('all');
+    const [activeTab, setActiveTab] = useState<'all' | 'freestyle' | 'writing' | 'thoughts'>('all');
 
     // Multi-select State
     const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
@@ -63,7 +64,6 @@ export default function LibraryPage() {
         }
     }, [sessions]);
 
-
     // Filter Logic
     const filteredSessions = useMemo(() => {
         if (!sessions) return []
@@ -71,18 +71,21 @@ export default function LibraryPage() {
             .filter(s => {
                 // 1. Tab Filter
                 if (activeTab !== 'all') {
-                    const type = s.type || 'freestyle'; // Default to freestyle for legacy
+                    // Normalize type (legacy support)
+                    const type = s.type || 'freestyle';
                     if (type !== activeTab) return false;
                 }
 
                 // 2. Search Filter
                 const query = searchQuery.toLowerCase()
-                return (
-                    (s.metadata?.lyrics?.toLowerCase().includes(query)) ||
-                    (s.beatId?.toLowerCase().includes(query)) ||
-                    (new Date(s.createdAt).toLocaleDateString().includes(query)) ||
-                    (s.title?.toLowerCase().includes(query))
-                )
+                // Safely handle potentially missing fields
+                const lyricsMatch = s.metadata?.lyrics?.toLowerCase().includes(query)
+                const notesMatch = s.metadata?.notes?.toLowerCase().includes(query) // Add notes search for thoughts
+                const beatMatch = s.beatId?.toLowerCase().includes(query)
+                const dateMatch = new Date(s.createdAt).toLocaleDateString().includes(query)
+                const titleMatch = s.title?.toLowerCase().includes(query)
+
+                return lyricsMatch || notesMatch || beatMatch || dateMatch || titleMatch
             })
             // Sort by createdAt desc (Global sort before grouping, though grouping handles its own sort)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -139,6 +142,48 @@ export default function LibraryPage() {
         setExpandedGroups(newSet);
     };
 
+    const handleExportThoughts = async () => {
+        if (!sessions) return;
+
+        // Filter for thoughts and sort by date descending
+        const thoughtSessions = sessions
+            .filter(s => s.type === 'thoughts')
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        if (thoughtSessions.length === 0) {
+            alert('No thoughts to export!');
+            return;
+        }
+
+        console.log("DEBUG: Investigating Thought Sessions:", thoughtSessions);
+
+        // generate text content
+        let fileContent = `RapCap Thoughts Export\nGenerated: ${new Date().toLocaleString()}\n\n========================================\n\n`;
+
+        thoughtSessions.forEach(session => {
+            console.log(`DEBUG: Session ${session.id}`, session);
+            const dateStr = session.createdAt ? new Date(session.createdAt).toLocaleString() : 'Invalid Date';
+
+            // Check for content in various possible locations
+            const noteContent = session.metadata?.notes || session.metadata?.lyrics || '(No content)';
+
+            fileContent += `DATE: ${dateStr}\n`;
+            fileContent += `----------------------------------------\n`;
+            fileContent += `${noteContent}\n\n`;
+            fileContent += `========================================\n\n`;
+        });
+
+        // Trigger download
+        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `rapcap_thoughts_export_${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
 
     // Helper for formatting date headers
     const formatDateHeader = (date: Date) => {
@@ -161,6 +206,17 @@ export default function LibraryPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2">
+                        {activeTab === 'thoughts' && (
+                            <button
+                                onClick={handleExportThoughts}
+                                className="px-3 py-2 bg-[#1DB954] text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#1ed760] transition-colors animate-in fade-in"
+                                title="Export thoughts to TXT"
+                            >
+                                <Download size={16} />
+                                <span className="hidden sm:inline">Export</span>
+                            </button>
+                        )}
+
                         {isMultiSelectMode && selectedSessionIds.size > 0 && (
                             <button
                                 onClick={handleBulkDelete}
@@ -183,7 +239,7 @@ export default function LibraryPage() {
 
                 {/* Tabs */}
                 <div className="flex items-center gap-2 mb-4 overflow-x-auto no-scrollbar">
-                    {(['all', 'freestyle', 'drill', 'writing'] as const).map(tab => (
+                    {(['all', 'freestyle', 'writing', 'thoughts'] as const).map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -195,7 +251,7 @@ export default function LibraryPage() {
                                 }
                             `}
                         >
-                            {tab === 'drill' ? 'Practice' : tab}
+                            {tab}
                         </button>
                     ))}
                 </div>
@@ -211,10 +267,10 @@ export default function LibraryPage() {
                         className="w-full bg-[#282828] rounded-full py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954] placeholder-subdued/50 transition-all"
                     />
                 </div>
-            </header>
+            </header >
 
             {/* Main Content - Scrollable List */}
-            <div className="flex-1 overflow-y-auto px-4 py-2 custom-scrollbar space-y-4">
+            < div className="flex-1 overflow-y-auto px-4 py-2 custom-scrollbar space-y-4" >
                 {!sessions ? (
                     <div className="flex items-center justify-center py-20">Loading...</div>
                 ) : filteredSessions.length === 0 ? (
@@ -264,10 +320,11 @@ export default function LibraryPage() {
                             );
                         })}
                     </div>
-                )}
-            </div>
+                )
+                }
+            </div >
 
             {/* Removed internal player rendering - now handled by route */}
-        </div>
+        </div >
     )
 }

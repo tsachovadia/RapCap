@@ -6,6 +6,7 @@ import { db } from '../db/db'
 import { ArrowLeft, Clock, Pause, Play, Waves, Volume2, Save, Share2, SkipForward, Activity } from 'lucide-react'
 import BeatPlayer from '../components/freestyle/BeatPlayer'
 import { syncService } from '../services/dbSync'
+import { useToast } from '../contexts/ToastContext'
 
 // Flow patterns to cycle through
 const FLOW_PATTERNS = [
@@ -17,6 +18,7 @@ const FLOW_PATTERNS = [
 
 export default function FlowPatternsPage() {
     const navigate = useNavigate()
+    const { showToast } = useToast()
     const [showInstructions, setShowInstructions] = useState(true)
     const [beatVolume, setBeatVolume] = useState(80)
     const [isPlayingBeat, setIsPlayingBeat] = useState(false)
@@ -101,7 +103,7 @@ export default function FlowPatternsPage() {
             navigate('/drills')
         } catch (e) {
             console.error('Failed to save drill', e)
-            alert('שגיאה בשמירה')
+            showToast('שגיאה בשמירה', 'error')
         }
     }
 

@@ -3,6 +3,7 @@
  * States: idle → preroll → recording → paused
  */
 import { useState, useRef, useCallback } from 'react'
+import { useToast } from '../contexts/ToastContext'
 
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
 
@@ -25,6 +26,7 @@ export function useFlowState({
     initializeStream,
     setIsTranscribing
 }: UseFlowStateOptions) {
+    const { showToast } = useToast()
     const [flowState, setFlowState] = useState<FlowState>('idle')
     const [moments, setMoments] = useState<number[]>([])
 
@@ -40,7 +42,7 @@ export function useFlowState({
             console.warn("⚠️ Beat Buffering detected! Pausing flow to maintain sync.")
             wasPausedByBuffering.current = true
             handlePauseFlow()
-            alert('האינטרנט איטי. ההקלטה הושהתה כדי לשמור על סנכרון.')
+            showToast('האינטרנט איטי. ההקלטה הושהתה כדי לשמור על סנכרון.', 'warning')
         }
         // State 1 = Playing
         if (state === 1 && flowState === 'paused' && wasPausedByBuffering.current) {

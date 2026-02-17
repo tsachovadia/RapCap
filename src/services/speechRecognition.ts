@@ -46,18 +46,21 @@ export function createRecognition(
 
     // Event handlers
     recognition.onstart = () => {
-        console.log(`🎤 Speech Recognition Started (${config.language})`)
+        console.log(`🎤 [SpeechRecognition] Started (${config.language})`)
         callbacks.onStart()
     }
 
     recognition.onresult = (event: any) => {
+        // console.log('🎤 [SpeechRecognition] Result event', event.results.length)
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i]
             const text = result[0].transcript.trim()
 
             if (result.isFinal) {
+                console.log('🎤 [SpeechRecognition] Final:', text)
                 callbacks.onFinal(text, i)
             } else {
+                console.log('🎤 [SpeechRecognition] Interim:', text)
                 callbacks.onInterim(text)
             }
         }
@@ -66,13 +69,15 @@ export function createRecognition(
     recognition.onerror = (event: any) => {
         // Ignore 'no-speech' which is common and not an error
         if (event.error !== 'no-speech') {
-            console.error('Speech Recognition Error:', event.error)
+            console.error('❌ [SpeechRecognition] Error:', event.error, event.message)
             callbacks.onError(event.error)
+        } else {
+            console.log('⚠️ [SpeechRecognition] No Speech Detected')
         }
     }
 
     recognition.onend = () => {
-        console.log('🛑 Speech Recognition Ended')
+        console.log('🛑 [SpeechRecognition] Ended')
         callbacks.onEnd()
     }
 

@@ -12,15 +12,14 @@ import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
 import type { SessionAnalysis } from '../db/db';
 import FreestyleModeUI from '../components/record/FreestyleModeUI'
 import ThoughtsModeUI from '../components/record/ThoughtsModeUI'
-import RhymeTrainingModeUI from '../components/record/RhymeTrainingModeUI'
 import RecordingHeader from '../components/record/RecordingHeader'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import { useAuth } from '../contexts/AuthContext'
-import { Music, Mic, GraduationCap, Upload, Clock } from 'lucide-react'
+import { Music, Mic, Upload, Clock } from 'lucide-react'
 import { DEFAULT_BEAT_ID } from '../data/beats'
 import { analyzeFreestyleLyrics } from '../services/gemini'
 
-export type RecordingMode = 'freestyle' | 'thoughts' | 'training'
+export type RecordingMode = 'freestyle' | 'thoughts'
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
 
 export default function RecordPage() {
@@ -146,11 +145,14 @@ export default function RecordPage() {
             return
         }
 
-        setIsTranscribing(true)
         transcriptionStartTimeRef.current = Date.now()
 
         try {
             await initializeStream()
+
+            // Start transcription only after stream is initialized
+            setIsTranscribing(true)
+
             // different modes might have different pre-roll needs
             if (mode === 'freestyle') {
                 setFlowState('preroll')
@@ -190,46 +192,19 @@ export default function RecordPage() {
             if (blob.size > 0) {
                 setPendingSessionBlob(blob)
                 setSessionAnalysis(null) // Reset analysis for new session
+                setShowReviewModal(true)
 
                 // Trigger AI analysis for the modal
                 // Use Ref to avoid stale closure
                 const fullText = transcriptRef.current + (interimTranscript ? ' ' + interimTranscript : '');
 
-                // Check for Fallback (iOS Chrome or failed Speech API)
-                // DISABLED PER USER REQUEST: Network issues caused blocking UI
-                // if (shouldUseWhisperFallback(fullText, duration)) {
-                //    setIsProcessingFallback(true)
-                //    try {
-                //        const whisperResult = await transcribeWithWhisper(blob, language)
-                //        setEnhancedTranscriptData(whisperResult)
-                //        // Trigger AI analysis on the *new* text
-                //        if (whisperResult.text.trim().length > 20) {
-                //            analyzeFreestyleLyrics(whisperResult.text)
-                //                .then(keywords => setAiKeywords(keywords))
-                //                .catch(err => console.warn("AI Analysis failed (Fallback)", err))
-                //        }
-                //    } catch (e) {
-                //        console.error("Fallback transcription failed", e)
-                //        // Fallback failed, just show what we have (nothing)
-                //    } finally {
-                //        setIsProcessingFallback(false)
-                //    }
-                // } else {
-                console.log("📝 Finalizing Flow - Detailed Report:", {
-                    transcriptRef: transcriptRef.current,
-                    interimTranscript,
-                    fullTextLength: fullText.length,
-                    fullTextPreview: fullText.substring(0, 50)
-                });
+                console.log("📝 Finalizing Flow - Transcript Length:", fullText.length, "Text:", fullText.substring(0, 50) + "...");
 
                 if (fullText.trim().length > 20) {
                     analyzeFreestyleLyrics(fullText)
                         .then(keywords => setAiKeywords(keywords))
                         .catch(err => console.warn("AI Analysis failed", err))
                 }
-                // }
-
-                setShowReviewModal(true)
             }
         }
     }
@@ -477,18 +452,6 @@ export default function RecordPage() {
                         <Mic size={14} />
                         <span>{language === 'he' ? 'מחשבות' : 'Thoughts'}</span>
                     </button>
-                    <button
-                        onClick={() => navigate('/record?mode=training')}
-                        disabled={flowState !== 'idle'}
-                        className={`
-                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
-                            ${mode === 'training' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
-                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        <GraduationCap size={14} />
-                        <span>{language === 'he' ? 'אימון' : 'Training'}</span>
-                    </button>
                 </div>
             </div>
 
@@ -512,10 +475,9 @@ export default function RecordPage() {
                         language={language}
                         segments={segments}
                         interimTranscript={interimTranscript}
+                        notes={notes}
+                        setNotes={setNotes}
                     />
-                )}
-                {mode === 'training' && (
-                    <RhymeTrainingModeUI />
                 )}
             </main>
 
@@ -567,9 +529,6 @@ export default function RecordPage() {
                 setDeviceId={setDeviceId}
                 resetAudioState={resetAudioState}
             />
-
-            {/* Fallback Processing Overlay */}
-
         </div>
     )
 }

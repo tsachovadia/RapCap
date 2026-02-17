@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Search, Loader2, X, Check } from 'lucide-react'
 import { getVocalization, getRhymes } from '../../services/dicta'
+import { useToast } from '../../contexts/ToastContext'
 
 interface DictaModalProps {
     isOpen: boolean
@@ -9,6 +10,7 @@ interface DictaModalProps {
 }
 
 export default function DictaModal({ isOpen, onClose, onAddWords }: DictaModalProps) {
+    const { showToast } = useToast()
     const [dictaQuery, setDictaQuery] = useState('')
     const [dictaResults, setDictaResults] = useState<string[]>([])
     const [selectedDictaWords, setSelectedDictaWords] = useState<string[]>([])
@@ -30,7 +32,7 @@ export default function DictaModal({ isOpen, onClose, onAddWords }: DictaModalPr
             setDictaResults(rhymes)
         } catch (err) {
             console.error(err)
-            alert("Failed to fetch rhymes.")
+            showToast('Failed to fetch rhymes.', 'error')
         } finally {
             setIsSearchingDicta(false)
         }

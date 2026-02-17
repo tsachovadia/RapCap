@@ -8,6 +8,7 @@ import { db, type WordGroup, type DbSession, type Bar, type BarRecording } from 
 import DictaModal from '../components/shared/DictaModal'
 import { syncService } from '../services/dbSync'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { BarItem } from '../components/writing/BarItem'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { WritingBeatControl } from '../components/writing/WritingBeatControl'
@@ -16,6 +17,7 @@ export default function WritingSessionPage() {
     const navigate = useNavigate()
     const { id } = useParams<{ id?: string }>()
     const { user } = useAuth()
+    const { showToast } = useToast()
     const isOnline = useOnlineStatus()
 
     // Bar-based State
@@ -339,10 +341,10 @@ export default function WritingSessionPage() {
 
             } catch (e) {
                 console.error("Failed to save recording", e)
-                alert("Failed to save recording")
+                showToast('Failed to save recording', 'error')
             }
         } else if (!sessionRef.current?.id) {
-            alert("Please wait for session to initialize (auto-save) before recording.")
+            showToast('Please wait for session to initialize before recording.', 'warning')
         }
     }
 
@@ -430,8 +432,8 @@ export default function WritingSessionPage() {
     }
 
     const handleCreateGroup = async () => {
-        if (!newGroupName.trim()) return alert("Give your group a name!")
-        if (newGroupItems.length === 0) return alert("Add some words first!")
+        if (!newGroupName.trim()) return showToast('Give your group a name!', 'warning')
+        if (newGroupItems.length === 0) return showToast('Add some words first!', 'warning')
         const newGroup: WordGroup = {
             name: newGroupName,
             items: newGroupItems,
@@ -444,7 +446,7 @@ export default function WritingSessionPage() {
             setVisibleDeckIds(prev => [...prev, id as number])
             setIsCreatingGroup(false); setNewGroupName(''); setNewGroupItems([]); setShowDeckSelector(false)
         } catch (e) {
-            console.error(e); alert("Failed to create group")
+            console.error(e); showToast('Failed to create group', 'error')
         }
     }
 

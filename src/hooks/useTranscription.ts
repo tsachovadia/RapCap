@@ -16,12 +16,11 @@ import {
     chunkIntoSegments,
     estimatePhraseStart
 } from '../services/transcriptProcessor'
-import { hasReliableSpeechRecognition } from '../utils/platformDetection'
 
-/** Silence threshold in ms - commit interim if no change */
-const SILENCE_THRESHOLD_MS = 2500
+/** Default silence threshold in ms - commit interim if no change */
+const DEFAULT_SILENCE_THRESHOLD_MS = 2500
 
-export function useTranscription(isRecording: boolean, language: 'he' | 'en' = 'he') {
+export function useTranscription(isRecording: boolean, language: 'he' | 'en' = 'he', silenceThresholdMs: number = DEFAULT_SILENCE_THRESHOLD_MS) {
     // State
     const [transcript, setTranscript] = useState('')
     const [interimTranscript, setInterimTranscript] = useState('')
@@ -39,6 +38,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     const processedIndexes = useRef<Set<number>>(new Set())
     const isRestartingRef = useRef(false)
     const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const lastCommittedTextRef = useRef('')
 
     // Sync ref with prop
     useEffect(() => {
@@ -50,6 +50,8 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         const text = interimRef.current.trim()
         if (!text) return
 
+        // Mark as committed so onFinal won't double-process
+        lastCommittedTextRef.current = text
         console.log(`📤 Committing interim (${reason}):`, text)
         const now = Date.now()
         const phraseStart = phraseStartRef.current || estimatePhraseStart(text, now)
@@ -63,9 +65,10 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         )
         setWordSegments(prev => [...prev, ...newWordSegments])
 
-        // Create segment
-        const timestamp = (phraseStart - startTimeRef.current) / 1000
-        setSegments(prev => [...prev, { text, timestamp }])
+        // Chunk into segments (same logic as onFinal for consistency)
+        const words = text.split(/\s+/)
+        const newSegments = chunkIntoSegments(words, newWordSegments)
+        setSegments(prev => [...prev, ...newSegments])
         setTranscript(prev => prev + text + ' ')
 
         // Reset interim state
@@ -91,7 +94,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         const timeout = setTimeout(() => {
             console.log('🤫 Silence detected')
             commitInterim('silence')
-        }, SILENCE_THRESHOLD_MS)
+        }, silenceThresholdMs)
 
         return () => clearTimeout(timeout)
     }, [interimTranscript, isListening, commitInterim])
@@ -105,9 +108,10 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
     // Main recognition effect
     useEffect(() => {
-        // If API is missing OR we are on iOS Chrome (unreliable), skip native logic
-        if (!isSpeechRecognitionSupported() || !hasReliableSpeechRecognition()) {
-            console.warn('Speech Recognition not supported or unreliable (using fallback)')
+        console.log('🎙️ [useTranscription] Effect Triggered. isRecording:', isRecording, 'Supported:', isSpeechRecognitionSupported())
+
+        if (!isSpeechRecognitionSupported()) {
+            console.warn('Speech Recognition not supported')
             return
         }
 
@@ -147,6 +151,21 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                     }
                     processedIndexes.current.add(resultIndex)
 
+                    // Skip if this text was already committed by silence detection
+                    if (lastCommittedTextRef.current) {
+                        const committed = lastCommittedTextRef.current
+                        const trimmed = text.trim()
+                        if (trimmed === committed || committed.includes(trimmed) || trimmed.includes(committed)) {
+                            console.log('⏭️ Already committed by silence, skipping onFinal:', text)
+                            lastCommittedTextRef.current = ''
+                            interimRef.current = ''
+                            setInterimTranscript('')
+                            phraseStartRef.current = 0
+                            return
+                        }
+                        lastCommittedTextRef.current = ''
+                    }
+
                     console.log('📝 Final:', text, 'ResultIndex:', resultIndex)
                     const now = Date.now()
                     const phraseStart = phraseStartRef.current || estimatePhraseStart(text, now)
@@ -173,7 +192,6 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 },
 
                 onEnd: () => {
-                    console.log('🎤 Recognition ended')
                     if (!isActive) return
                     processedIndexes.current.clear()
 
@@ -201,7 +219,6 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 },
 
                 onError: (error) => {
-                    console.error('🎤 Recognition error:', error)
                     if (!isActive) return
                     if (error === 'not-allowed' || error === 'service-not-allowed') {
                         isRecordingRef.current = false

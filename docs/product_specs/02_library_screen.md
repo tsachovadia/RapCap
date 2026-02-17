@@ -1,17 +1,25 @@
-# Library Screen & Beat Selector
+# Library Screen & Navigation
 
-## 1. MVP Decisions (V1)
-*   **Playback Context**: טעינת הוידאו והאודיו במקביל.
-*   **Moment Navigation**: לחיצה על סימוני "moments" מקפיצה את הנגן 10 שניות אחורה (Pre-roll) כדי לתפוס את הכניסה.
-*   **Export**:
-    *   כפתור **Download Mixed Track** יהיה קיים אך **Disabled** (Coming Soon).
-    *   הסיבה: מגבלות טכניות (CORS) למיזוג אודיו מיוטיוב ב-Client Side.
-*   **Persistence**: שמירה לוקאלית (IndexedDB) בשלב ראשון לוודא מהירות.
+## 1. Core Structure
+The Library screen is the central hub for all user content.
+With the new navigation structure, it is accessible via the "Library" tab in the bottom navigation.
 
-## 2. Future Roadmap (Ideas for Later)
-*   [ ] **AI Transcription + Timestamps**:
-    *   שליחת האודיו (Vocal) לשירות תמלול (כמו Whisper).
-    *   הצגת המילים על המסך בזמן אמת (Karaoke Style) בזמן ניגון.
-    *   יכולת חיפוש טקסטואלי בתוך פריסטיילים ("מתי אמרתי 'דרקון'?").
-*   [ ] **Cloud Sync**: סנכרון הסשנים לענן לשמירה וגיבוי.
-*   [ ] **Server-Side Rendering (Export)**: שירות ענן שיוריד את הביט וימזג אותו עם ההקלטה לקובץ MP3 איכותי להורדה.
+## 2. Filtering & Tabs
+To organize the different types of creative output, the library uses a tabbed filter system:
+
+*   **All**: Shows everything chronologically.
+*   **Freestyle**: Recorded freestyle sessions (audio + optional beat).
+*   **Writing (Verses)**: Written verses (text).
+*   **Thoughts**: Audio/Text captures from the "Thoughts" mode.
+
+## 3. List Item Design
+*   **Session Card**:
+    *   **Icon**: Differentiates the type (Mic for Freestyle, Pen for Write, Brain for Thoughts).
+    *   **Title**: User defined or Auto-generated (e.g., "Freestyle 10:23").
+    *   **Metadata**: Date, Duration, and a snippet of lyrics/text if available.
+    *   **Quick Actions**: Play, Delete, Share.
+
+## 4. MVP Decisions (V1)
+*   **Search**: textual search across Titles and Lyric content.
+*   **Multi-select**: Bulk delete capabilities.
+*   **Playback**: Clicking a session navigates to the specific Detail/Player view.

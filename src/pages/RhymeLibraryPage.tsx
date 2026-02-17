@@ -6,12 +6,14 @@ import { useState, useEffect } from 'react'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { syncService } from '../services/dbSync'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import DictaModal from '../components/shared/DictaModal'
 
 export default function RhymeLibraryPage() {
     const list = useLiveQuery(() => db.wordGroups.toArray())
     const navigate = useNavigate()
     const { user } = useAuth()
+    const { showToast } = useToast()
 
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [isSelectionMode, setIsSelectionMode] = useState(false)
@@ -68,10 +70,10 @@ export default function RhymeLibraryPage() {
 
             setSelectedIds([])
             setIsSelectionMode(false)
-            alert("Groups merged successfully!")
+            showToast('Groups merged successfully!', 'success')
         } catch (e) {
             console.error(e)
-            alert("Failed to merge groups")
+            showToast('Failed to merge groups', 'error')
         }
     }
 
@@ -113,10 +115,10 @@ export default function RhymeLibraryPage() {
 
             setSelectedIds([])
             setIsSelectionMode(false)
-            alert(`Groups connected as ${type} rhymes!`)
+            showToast(`Groups connected as ${type} rhymes!`, 'success')
         } catch (e) {
             console.error(e)
-            alert("Failed to connect groups")
+            showToast('Failed to connect groups', 'error')
         }
     }
 
@@ -135,7 +137,7 @@ export default function RhymeLibraryPage() {
             navigate(`/rhyme-library/${id}`)
         } catch (e) {
             console.error(e)
-            alert("Failed to create group")
+            showToast('Failed to create group', 'error')
         }
     }
 

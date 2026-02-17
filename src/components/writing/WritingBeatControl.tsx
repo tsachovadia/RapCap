@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Play, Pause, Volume2, Music, X, Link as LinkIcon } from 'lucide-react'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import { PRESET_BEATS } from '../../data/beats'
+import { useToast } from '../../contexts/ToastContext'
 
 interface WritingBeatControlProps {
     videoId: string | null
@@ -20,6 +21,7 @@ export function WritingBeatControl({
     volume,
     setVolume
 }: WritingBeatControlProps) {
+    const { showToast } = useToast()
     const [showSelector, setShowSelector] = useState(false)
     const [urlInput, setUrlInput] = useState('')
     const playerRef = useRef<any>(null)
@@ -42,7 +44,7 @@ export function WritingBeatControl({
             setUrlInput('')
             setIsPlaying(true) // Auto-play on select
         } else {
-            alert('Invalid YouTube URL')
+            showToast('Invalid YouTube URL', 'warning')
         }
     }
 

@@ -1,8 +1,8 @@
-import { X, Check, Music2, Clock, Sparkles, Loader2, Plus, Trash2, Pencil, CheckCircle } from 'lucide-react'
+import { X, Check, Music2, Clock, Sparkles, Plus, Trash2, Pencil, CheckCircle } from 'lucide-react'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { type DbSession, type DetectedRhymeGroup } from '../../db/db'
 import { usePhoneticAnalysis } from '../../hooks/usePhoneticAnalysis'
-import { transcribeAudio } from '../../services/whisper'
+
 import { clsx } from 'clsx'
 import { Dialog } from '@headlessui/react'
 
@@ -29,7 +29,7 @@ interface ReviewSessionModalProps<T extends DbSession> {
 }
 
 export default function ReviewSessionModal<T extends DbSession = DbSession>({
-    isOpen, onClose, onSave, onDiscard, data, audioBlob, onUpdateTranscript, onAnalysisComplete
+    isOpen, onClose, onSave, onDiscard, data, onAnalysisComplete
 }: ReviewSessionModalProps<T>) {
 
     // --- State ---
@@ -42,7 +42,6 @@ export default function ReviewSessionModal<T extends DbSession = DbSession>({
             setLyrics(data.metadata.lyrics);
         }
     }, [data.metadata?.lyrics]);
-    const [isEnhancing, setIsEnhancing] = useState(false);
 
     // Annotation State
     const [localGroups, setLocalGroups] = useState<DetectedRhymeGroup[]>([]);
@@ -571,34 +570,8 @@ export default function ReviewSessionModal<T extends DbSession = DbSession>({
                                         </div>
                                     </div>
 
-                                    <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-800">
-                                        <h4 className="text-sm font-bold text-white mb-2">Transcript AI</h4>
-                                        <button
-                                            onClick={async () => {
-                                                if (isEnhancing || !audioBlob || !onUpdateTranscript) return;
+                                    {/* AI Suggestion Area - Removed pending stable Whisper implementation */}
 
-                                                if (localGroups.length > 0) {
-                                                    if (!confirm("Improving the transcript will reset your manual annotations. Continue?")) {
-                                                        return;
-                                                    }
-                                                    setLocalGroups([]);
-                                                }
-
-                                                setIsEnhancing(true);
-                                                try {
-                                                    const result = await transcribeAudio(audioBlob, 'he');
-                                                    onUpdateTranscript(result.text, result.segments, result.wordSegments);
-                                                    setLyrics(result.text);
-                                                } catch (e) { console.error(e); }
-                                                setIsEnhancing(false);
-                                            }}
-                                            disabled={isEnhancing || !audioBlob}
-                                            className="w-full py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                                        >
-                                            {isEnhancing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                                            Improve Transcript
-                                        </button>
-                                    </div>
                                 </div>
                             )}
                         </div>

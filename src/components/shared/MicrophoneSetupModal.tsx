@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Mic, AlertCircle, CheckCircle, RefreshCw, Play } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
 
 interface MicrophoneSetupModalProps {
     isOpen: boolean;
@@ -24,6 +25,7 @@ export function MicrophoneSetupModal({
     setDeviceId,
     resetAudioState
 }: MicrophoneSetupModalProps) {
+    const { showToast } = useToast();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [testRecordingState, setTestRecordingState] = useState<'idle' | 'recording' | 'playing'>('idle');
     const testMediaRecorder = useRef<MediaRecorder | null>(null);
@@ -151,7 +153,7 @@ export function MicrophoneSetupModal({
 
         } catch (e) {
             console.error("Test recording failed", e);
-            alert("לא ניתן לבצע הקלטת בדיקה - וודא שהמיקרופון מחובר.");
+            showToast('לא ניתן לבצע הקלטת בדיקה - וודא שהמיקרופון מחובר.', 'error');
         }
     };
 
