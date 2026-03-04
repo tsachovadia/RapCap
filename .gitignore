@@ -25,3 +25,17 @@ dist-ssr
 .vercel
 .env*.local
 .env
+
+# AI agent artifacts
+CLAUDE.md
+.cursor/
+.roo/
+.roomodes/
+.windsurfrules
+memory_bank/
+cursor-memory-bank/
+.agent/
+
+# Generated data files
+*_results.json
+*_results_meta.json
