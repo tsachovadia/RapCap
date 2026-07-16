@@ -6,6 +6,7 @@ import { useStudio } from '../../contexts/StudioContext';
 import { useToast } from '../../contexts/ToastContext';
 import { db } from '../../db/db';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { extractYouTubeVideoId, youtubeWatchUrl } from '../../core/youtube';
 
 export default function StudioBeatBar() {
     const { showToast } = useToast();
@@ -26,13 +27,8 @@ export default function StudioBeatBar() {
 
     const isPlaying = flowState !== 'idle' && flowState !== 'paused';
 
-    const extractYoutubeId = (url: string) => {
-        const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/)
-        return (match && match[2].length === 11) ? match[2] : null;
-    };
-
     const handleUrlSubmit = async () => {
-        const id = extractYoutubeId(urlInput);
+        const id = extractYouTubeVideoId(urlInput);
         if (!id) {
             showToast(language === 'he' ? 'קישור לא תקין' : 'Invalid YouTube URL', 'warning');
             return;
@@ -44,10 +40,11 @@ export default function StudioBeatBar() {
         // Auto-save custom beat
         try {
             const existing = await db.beats.where('videoId').equals(id).first();
-            if (!existing) {
+            const isPreset = PRESET_BEATS.some(beat => beat.id === id);
+            if (!existing && !isPreset) {
                 let title = 'Imported Beat';
                 try {
-                    const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`);
+                    const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(youtubeWatchUrl(id)!)}`);
                     const data = await res.json();
                     if (data.title) title = data.title;
                 } catch { }

@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import type { FlowState } from '../../pages/RecordPage'
 import DictaModal from '../shared/DictaModal'
 import { useToast } from '../../contexts/ToastContext'
+import { extractYouTubeVideoId, youtubeWatchUrl } from '../../core/youtube'
 
 
 interface Props {
@@ -209,14 +210,8 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     }, [flowState, onPreRollComplete, youtubePlayer])
 
 
-    const extractYoutubeId = (url: string) => {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
-        const match = url.match(regExp)
-        return (match && match[2].length === 11) ? match[2] : null
-    }
-
     const handleUrlSubmit = async () => {
-        const id = extractYoutubeId(urlInput)
+        const id = extractYouTubeVideoId(urlInput)
         if (id) {
             setVideoId(id)
             setShowUrlInput(false)
@@ -225,12 +220,13 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
             // Auto-save beat if new
             try {
                 const existing = await db.beats.where('videoId').equals(id).first()
-                if (!existing) {
+                const isPreset = PRESET_BEATS.some(beat => beat.id === id)
+                if (!existing && !isPreset) {
                     let beatTitle = 'Imported Beat'
 
                     // Fetch title from oEmbed
                     try {
-                        const response = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`)
+                        const response = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(youtubeWatchUrl(id)!)}`)
                         const data = await response.json()
                         if (data.title) beatTitle = data.title
                     } catch (err) {
