@@ -14,22 +14,22 @@ export const WelcomeStep: React.FC<WelcomeStepProps> = ({ onNext }) => {
 
             <div className="space-y-2">
                 <h2 className="text-3xl font-bold tracking-tighter text-white">
-                    Welcome to <span className="text-green-400">RapCap</span>
+                    הפריסטייל שלך, <span className="text-green-400">נשמר.</span>
                 </h2>
                 <p className="text-zinc-400 text-lg">
-                    Your personal AI freestyle coach.
+                    בוחרים ביט, מקליטים את הזרימה ושומרים את המילים.
                 </p>
             </div>
 
             <p className="text-zinc-500 leading-relaxed max-w-sm">
-                We'll get you set up in just a few seconds so you can start spitting bars instantly.
+                בלי להתחבר ובלי להגדיר הכול מראש. אפשר להוסיף אימון וקבוצות חריזה כשתרצה.
             </p>
 
             <button
                 onClick={onNext}
                 className="group relative w-full max-w-xs flex items-center justify-center gap-3 bg-green-500 hover:bg-green-400 text-black font-bold py-4 px-8 rounded-full transition-all active:scale-95"
             >
-                <span>Let's Go</span>
+                <span>יאללה, לפריסטייל</span>
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
         </div>
