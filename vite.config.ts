@@ -29,7 +29,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'masked-icon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
       workbox: {
         // Essential: Prevent the Service Worker from intercepting Firebase Auth paths
         navigateFallbackDenylist: [/^\/__\/auth/],
@@ -45,18 +45,23 @@ export default defineConfig({
         background_color: '#121212',
         display: 'standalone',
         scope: '/',
-        start_url: '/',
-        orientation: 'portrait',
+        id: '/',
+        start_url: '/record?mode=freestyle',
+        orientation: 'portrait-primary',
+        lang: 'he',
+        dir: 'rtl',
         icons: [
           {
-            src: 'pwa-192x192.svg',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
-            src: 'pwa-512x512.svg',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }
