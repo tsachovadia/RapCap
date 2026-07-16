@@ -10,12 +10,17 @@ import type { FlowState } from '../../pages/RecordPage'
 import DictaModal from '../shared/DictaModal'
 import { useToast } from '../../contexts/ToastContext'
 import { extractYouTubeVideoId, youtubeWatchUrl } from '../../core/youtube'
+import { evaluateBeatPreroll, isBeatResetObserved } from '../../core/beatPreroll'
+import type { YouTubePlayerHandle } from '../../types/youtube'
+import { beatRepo } from '../../db/beatRepo'
 
 
 interface Props {
     flowState: FlowState
     language: 'he' | 'en'
     onPreRollComplete: (getBeatTime: () => number) => Promise<void>
+    onPreRollFailure: () => void
+    onBeatPlayerReady?: (player: YouTubePlayerHandle) => void
     onBeatChange?: (beatId: string) => void
     segments: any[]
     interimTranscript: string
@@ -24,16 +29,18 @@ interface Props {
     onSaveMoment?: () => void
 }
 
-export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onBeatChange, segments, interimTranscript, notes, setNotes, onSaveMoment }: Props) {
+export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onPreRollFailure, onBeatPlayerReady, onBeatChange, segments, interimTranscript, notes, setNotes, onSaveMoment }: Props) {
     const { user } = useAuth()
     const { showToast } = useToast()
     const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)
     const [beatVolume, setBeatVolume] = useState(50)
-    const [youtubePlayer, setYoutubePlayer] = useState<any>(null)
+    const [youtubePlayer, setYoutubePlayer] = useState<YouTubePlayerHandle | null>(null)
     const [showUrlInput, setShowUrlInput] = useState(false)
     const [urlInput, setUrlInput] = useState('')
     const preRollCheckRef = useRef<number | null>(null)
     const preRollCompletedRef = useRef(false)
+    const preRollStartedAtRef = useRef(0)
+    const beatResetObservedRef = useRef(false)
     const transcriptContainerRef = useRef<HTMLDivElement>(null)
 
 
@@ -191,35 +198,56 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
     // Pre-roll Monitoring
     useEffect(() => {
-        if (flowState === 'preroll' && youtubePlayer && typeof youtubePlayer.seekTo === 'function') {
+        if (flowState !== 'preroll') {
             preRollCompletedRef.current = false
-            // Seek to start and play
+            preRollStartedAtRef.current = 0
+            beatResetObservedRef.current = false
+            if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
+            return
+        }
+
+        if (!preRollStartedAtRef.current) preRollStartedAtRef.current = performance.now()
+
+        if (youtubePlayer && typeof youtubePlayer.seekTo === 'function') {
             try {
-                youtubePlayer.seekTo(0)
+                youtubePlayer.seekTo(0, true)
                 youtubePlayer.playVideo()
-                youtubePlayer.setVolume(beatVolume)
             } catch (e) {
                 console.warn("YouTube Player error:", e)
             }
-
-            // Start polling for 2-second mark
-            preRollCheckRef.current = window.setInterval(() => {
-                const currentTime = youtubePlayer.getCurrentTime()
-                if (currentTime >= 2 && !preRollCompletedRef.current) { // 2 seconds pre-roll
-                    preRollCompletedRef.current = true
-                    if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
-                    void onPreRollComplete(() => youtubePlayer.getCurrentTime())
-                }
-            }, 100)
-        } else {
-            preRollCompletedRef.current = false
-            if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
         }
+
+        preRollCheckRef.current = window.setInterval(() => {
+            let currentTime = Number.NaN
+            try {
+                currentTime = youtubePlayer?.getCurrentTime?.() ?? Number.NaN
+            } catch (e) {
+                console.warn('Could not read YouTube beat time', e)
+            }
+
+            if (isBeatResetObserved(currentTime)) beatResetObservedRef.current = true
+
+            const status = evaluateBeatPreroll({
+                beatTimeSec: currentTime,
+                elapsedMs: performance.now() - preRollStartedAtRef.current,
+                resetObserved: beatResetObservedRef.current,
+            })
+
+            if (status === 'ready' && youtubePlayer && !preRollCompletedRef.current) {
+                preRollCompletedRef.current = true
+                if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
+                void onPreRollComplete(() => youtubePlayer.getCurrentTime())
+            } else if (status === 'timed_out' && !preRollCompletedRef.current) {
+                preRollCompletedRef.current = true
+                if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
+                onPreRollFailure()
+            }
+        }, 100)
 
         return () => {
             if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
         }
-    }, [flowState, onPreRollComplete, youtubePlayer])
+    }, [flowState, onPreRollComplete, onPreRollFailure, youtubePlayer])
 
 
     const handleUrlSubmit = async () => {
@@ -231,12 +259,13 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
             // Auto-save beat if new
             try {
-                const existing = await db.beats.where('videoId').equals(id).first()
                 const isPreset = PRESET_BEATS.some(beat => beat.id === id)
-                if (!existing && !isPreset) {
+                const existing = await beatRepo.findByVideoId(id)
+                if (!isPreset && !existing) {
                     let beatTitle = 'Imported Beat'
 
-                    // Fetch title from oEmbed
+                    // Fetch title from oEmbed. Saving still succeeds offline
+                    // with the fallback name so the beat is never lost.
                     try {
                         const response = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(youtubeWatchUrl(id)!)}`)
                         const data = await response.json()
@@ -245,11 +274,10 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                         console.warn('Failed to fetch YouTube title', err)
                     }
 
-                    await db.beats.add({
+                    await beatRepo.saveCustom({
                         name: beatTitle,
                         videoId: id,
-                        category: 'custom',
-                        createdAt: new Date()
+                        presetVideoIds: PRESET_BEATS.map(beat => beat.id),
                     })
                 }
             } catch (e) {
@@ -758,7 +786,10 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                 videoId={videoId}
                                 isPlaying={flowState !== 'idle' && flowState !== 'paused'}
                                 volume={beatVolume}
-                                onReady={(player) => setYoutubePlayer(player)}
+                                onReady={(player) => {
+                                    setYoutubePlayer(player)
+                                    onBeatPlayerReady?.(player)
+                                }}
                             />
                         </div>
                     </div>

@@ -21,6 +21,8 @@ import { analyzeFreestyleLyrics } from '../services/gemini'
 import { transitionFlow, type FlowState } from '../core/recordingFlow'
 import { captureBeatStartTimeSec } from '../core/sessionTiming'
 import { sessionRepo } from '../db/sessionRepo'
+import { useToast } from '../contexts/ToastContext'
+import type { YouTubePlayerHandle } from '../types/youtube'
 
 export type RecordingMode = 'freestyle' | 'thoughts'
 export type { FlowState } from '../core/recordingFlow'
@@ -30,6 +32,7 @@ export default function RecordPage() {
     const mode = (searchParams.get('mode') as RecordingMode) || 'freestyle'
     const navigate = useNavigate()
     const { user } = useAuth()
+    const { showToast } = useToast()
 
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -42,6 +45,7 @@ export default function RecordPage() {
         pauseRecording,
         resumeRecording,
         isRecording,
+        isReady: isAudioReady,
         duration,
         analyser,
         availableDevices,
@@ -77,6 +81,8 @@ export default function RecordPage() {
     const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{ text: string, segments: any[], wordSegments: any[] } | null>(null)
     const [currentBeatId, setCurrentBeatId] = useState(DEFAULT_BEAT_ID)
     const [capturedBeatStartTime, setCapturedBeatStartTime] = useState<number>(0)
+    const [isBeatReady, setIsBeatReady] = useState(false)
+    const beatPlayerRef = useRef<YouTubePlayerHandle | null>(null)
 
     // NEW: Notes & AI State
     const [notes, setNotes] = useState('')
@@ -139,13 +145,6 @@ export default function RecordPage() {
         setShowHistory(false)
     }
 
-    // Ensure stream is initialized
-    useEffect(() => {
-        if (flowState === 'idle' && !isRecording) {
-            initializeStream().catch(err => console.error("Stream init failed", err))
-        }
-    }, [initializeStream, flowState, isRecording])
-
     // Trigger mic setup on error
     useEffect(() => {
         if (permissionError) setShowMicSetup(true)
@@ -160,7 +159,17 @@ export default function RecordPage() {
         }
 
         try {
-            await initializeStream()
+            if (!isAudioReady) {
+                await initializeStream()
+                showToast(
+                    language === 'he'
+                        ? 'המיקרופון מוכן. לחץ שוב כדי להתחיל את הפריסטייל.'
+                        : 'Microphone ready. Tap again to start the freestyle.',
+                    'success',
+                )
+                return
+            }
+
             resetTranscript()
             setMoments([])
             setAiKeywords([])
@@ -169,6 +178,19 @@ export default function RecordPage() {
             setEnhancedTranscriptData(null)
 
             if (mode === 'freestyle') {
+                const player = beatPlayerRef.current
+                if (!player || !isBeatReady) {
+                    showToast(
+                        language === 'he' ? 'הביט עדיין נטען. נסה שוב בעוד רגע.' : 'The beat is still loading. Try again in a moment.',
+                        'warning',
+                    )
+                    return
+                }
+
+                // Keep this call inside the user's tap. Mobile Safari is much
+                // more reliable when YouTube playback begins from a gesture.
+                player.seekTo(0, true)
+                player.playVideo()
                 setIsTranscribing(false)
                 setFlowState(current => transitionFlow(current, 'START_PREROLL'))
             } else {
@@ -190,12 +212,14 @@ export default function RecordPage() {
 
     const handlePauseFlow = () => {
         if (!pauseRecording()) return
+        if (mode === 'freestyle') beatPlayerRef.current?.pauseVideo?.()
         setFlowState(current => transitionFlow(current, 'PAUSE'))
         setIsTranscribing(false)
     }
 
     const handleResumeFlow = () => {
         if (!resumeRecording()) return
+        if (mode === 'freestyle') beatPlayerRef.current?.playVideo?.()
         setFlowState(current => transitionFlow(current, 'RESUME'))
         setIsTranscribing(true)
     }
@@ -377,6 +401,23 @@ export default function RecordPage() {
         setFlowState(current => transitionFlow(current, 'START_RECORDING'))
     }, [flowState, startRecording])
 
+    const handleBeatPlayerReady = useCallback((player: YouTubePlayerHandle) => {
+        beatPlayerRef.current = player
+        setIsBeatReady(true)
+    }, [])
+
+    const handlePreRollFailure = useCallback(() => {
+        beatPlayerRef.current?.pauseVideo?.()
+        setIsTranscribing(false)
+        setFlowState(current => transitionFlow(current, 'RESET'))
+        showToast(
+            language === 'he'
+                ? 'הביט לא התחיל בזמן. לחץ Play בנגן YouTube ואז נסה להקליט שוב.'
+                : 'The beat did not start in time. Tap Play in YouTube, then try recording again.',
+            'warning',
+        )
+    }, [language, showToast])
+
     const sessionForModal = {
         id: loadedSessionId || undefined,
         title: loadedSessionId ? "Loaded Session" : "New Session",
@@ -507,6 +548,8 @@ export default function RecordPage() {
                         flowState={flowState}
                         language={language}
                         onPreRollComplete={onPreRollComplete}
+                        onPreRollFailure={handlePreRollFailure}
+                        onBeatPlayerReady={handleBeatPlayerReady}
                         onBeatChange={setCurrentBeatId}
                         segments={segments}
                         interimTranscript={interimTranscript}
@@ -550,6 +593,17 @@ export default function RecordPage() {
                     availableOutputDevices={availableOutputDevices}
                     selectedOutputId={selectedOutputId}
                     onOutputChange={setOutputId}
+                    idleStatus={language === 'he'
+                        ? (!isAudioReady
+                            ? 'לחץ להכנת המיקרופון'
+                            : mode === 'freestyle' && !isBeatReady
+                                ? 'טוען את הביט…'
+                                : mode === 'freestyle' ? 'מוכן לפריסטייל' : 'מוכן להקליט')
+                        : (!isAudioReady
+                            ? 'Tap to prepare the microphone'
+                            : mode === 'freestyle' && !isBeatReady
+                                ? 'Loading the beat…'
+                                : mode === 'freestyle' ? 'Ready to freestyle' : 'Ready to record')}
                 />
             </footer>
 

@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import Dexie from 'dexie'
 import { db, type DbSession } from './db'
 import { CURRENT_SESSION_SCHEMA_VERSION, prepareSessionForCreate, sessionRepo } from './sessionRepo'
+import { beatRepo } from './beatRepo'
 
 const makeSession = (): DbSession => ({
     title: 'Phone Flow',
@@ -86,5 +87,37 @@ describe('session repository', () => {
         expect(migrated?.schemaVersion).toBe(CURRENT_SESSION_SCHEMA_VERSION)
         expect(migrated?.beatStartTime).toBe(2.125)
         expect(migrated?.metadata?.lyrics).toBe('בדיקה אחת שתיים')
+    })
+
+    it('persists a saved YouTube beat across a database reopen', async () => {
+        const result = await beatRepo.saveCustom({
+            videoId: 'abcdefghijk',
+            name: 'My practice beat',
+        })
+
+        expect(result.status).toBe('saved')
+        db.close()
+        await db.open()
+
+        const reopened = await beatRepo.findByVideoId('abcdefghijk')
+        expect(reopened).toMatchObject({
+            videoId: 'abcdefghijk',
+            name: 'My practice beat',
+            category: 'custom',
+        })
+    })
+
+    it('does not duplicate saved or preset beats', async () => {
+        await beatRepo.saveCustom({ videoId: 'abcdefghijk', name: 'First name' })
+        const duplicate = await beatRepo.saveCustom({ videoId: 'abcdefghijk', name: 'Second name' })
+        const preset = await beatRepo.saveCustom({
+            videoId: 'preset12345',
+            name: 'Preset',
+            presetVideoIds: ['preset12345'],
+        })
+
+        expect(duplicate.status).toBe('existing')
+        expect(preset.status).toBe('preset')
+        expect(await db.beats.count()).toBe(1)
     })
 })

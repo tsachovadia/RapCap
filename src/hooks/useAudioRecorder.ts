@@ -4,6 +4,7 @@ import { useToast } from '../contexts/ToastContext';
 export interface RecorderState {
     isRecording: boolean;
     isPaused: boolean;
+    isReady: boolean;
     duration: number; // seconds
     analyser?: AnalyserNode;
 }
@@ -15,6 +16,7 @@ export function useAudioRecorder() {
     const [recorderState, setRecorderState] = useState<RecorderState>({
         isRecording: false,
         isPaused: false,
+        isReady: false,
         duration: 0,
     });
 
@@ -85,6 +87,7 @@ export function useAudioRecorder() {
 
     const initializeStream = useCallback(async (overrideConstraints?: MediaTrackConstraints) => {
         setPermissionError(null);
+        setRecorderState(prev => ({ ...prev, isReady: false }));
         try {
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(t => t.stop());
@@ -194,7 +197,11 @@ export function useAudioRecorder() {
             // Instead, we grab a fresh stream directly from destNode at recording time.
 
             // Force state update to expose analyser
-            setRecorderState(prev => ({ ...prev, analyser: analyserNode.current || undefined }));
+            setRecorderState(prev => ({
+                ...prev,
+                isReady: true,
+                analyser: analyserNode.current || undefined,
+            }));
 
 
         } catch (err) {
@@ -218,6 +225,7 @@ export function useAudioRecorder() {
             const finalError = new Error(err instanceof Error ? err.message : String(err));
             (finalError as any).diagnostic = diagnosticMsg;
             setPermissionError(finalError);
+            setRecorderState(prev => ({ ...prev, isReady: false }));
 
             throw err;
         }
@@ -443,6 +451,7 @@ export function useAudioRecorder() {
         console.log("♻️ Resetting Audio State...");
         setPermissionError(null);
         setSelectedDeviceId('');
+        setRecorderState(prev => ({ ...prev, isReady: false }));
 
         // Stop current stream if exists
         if (streamRef.current) {
