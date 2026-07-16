@@ -1,10 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db/db'
 import SessionPlayer from '../components/library/SessionPlayer'
 import WritingSessionViewer from '../components/library/WritingSessionViewer'
 import { ChevronLeft } from 'lucide-react'
 import { useState } from 'react'
+import { sessionRepo } from '../db/sessionRepo'
 
 export default function SessionDetailsPage() {
     const { id } = useParams<{ id: string }>()
@@ -16,7 +16,7 @@ export default function SessionDetailsPage() {
 
     // Fetch session
     const session = useLiveQuery(
-        () => id ? db.sessions.get(parseInt(id, 10)) : undefined,
+        () => id ? sessionRepo.get(parseInt(id, 10)) : undefined,
         [id]
     )
 

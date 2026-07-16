@@ -20,6 +20,7 @@ import {
     vocalTimeFromBeat,
 } from '../../core/timeline'
 import { createSessionManifest, safeFileStem, vocalFileName } from '../../core/sessionManifest'
+import { sessionRepo } from '../../db/sessionRepo'
 
 interface SessionPlayerProps {
     session: DbSession
@@ -333,9 +334,8 @@ export default function SessionPlayer({
     const handleSyncChange = useCallback((nextOffset: number) => {
         setSyncOffset(nextOffset)
         if (session.id) {
-            void db.sessions.update(session.id, {
+            void sessionRepo.update(session.id, {
                 syncOffset: nextOffset,
-                updatedAt: new Date(),
             })
         }
     }, [session.id])

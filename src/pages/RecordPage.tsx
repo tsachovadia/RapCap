@@ -20,6 +20,7 @@ import { DEFAULT_BEAT_ID } from '../data/beats'
 import { analyzeFreestyleLyrics } from '../services/gemini'
 import { transitionFlow, type FlowState } from '../core/recordingFlow'
 import { captureBeatStartTimeSec } from '../core/sessionTiming'
+import { sessionRepo } from '../db/sessionRepo'
 
 export type RecordingMode = 'freestyle' | 'thoughts'
 export type { FlowState } from '../core/recordingFlow'
@@ -324,10 +325,10 @@ export default function RecordPage() {
             }
 
             if (loadedSessionId) {
-                await db.sessions.update(loadedSessionId, sessionData)
+                await sessionRepo.update(loadedSessionId, sessionData)
                 if (user) syncService.syncSessions(user.uid).catch(console.error);
             } else {
-                await db.sessions.add({
+                await sessionRepo.create({
                     ...sessionData,
                     title: sessionData.title!,
                     createdAt: new Date(),
