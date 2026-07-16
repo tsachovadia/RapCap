@@ -43,6 +43,9 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
     // Unified Zen Mode (Replaces conflicting ViewStates)
     const [isZenMode, setIsZenMode] = useState(false)
+    const [trainingEnabled, setTrainingEnabled] = useState(() =>
+        typeof window !== 'undefined' && localStorage.getItem('rapcap_training_layer') === 'true'
+    )
 
     // Modal States
     const [showNewGroupModal, setShowNewGroupModal] = useState(false)
@@ -80,6 +83,15 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
             setHighlightedWords(new Set())
         }
     }, [flowState])
+
+    useEffect(() => {
+        localStorage.setItem('rapcap_training_layer', String(trainingEnabled))
+    }, [trainingEnabled])
+
+    const handleTrainingToggle = () => {
+        if (trainingEnabled) setIsZenMode(false)
+        setTrainingEnabled(!trainingEnabled)
+    }
 
     useEffect(() => {
         if ((!segments.length && !interimTranscript) || !allWordGroups) return
@@ -518,15 +530,25 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
                 {/* Right Controls (Absolute) */}
                 <div className="absolute right-2 flex items-center gap-2 z-10">
-                    {/* ZEN MODE TOGGLE */}
                     <button
-                        onClick={() => setIsZenMode(!isZenMode)}
-                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 ${isZenMode ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' : 'text-subdued hover:bg-[#282828] border border-transparent'}`}
-                        title="Zen Mode"
+                        onClick={handleTrainingToggle}
+                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 border ${trainingEnabled ? 'bg-[#1DB954]/15 text-[#1DB954] border-[#1DB954]/30' : 'text-subdued hover:bg-[#282828] border-transparent'}`}
+                        title={language === 'he' ? 'שכבת אימון' : 'Training layer'}
                     >
-                        {isZenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                        <span className="text-xs font-bold">ZEN</span>
+                        <Layers size={16} />
+                        <span className="text-xs font-bold">{language === 'he' ? 'אימון' : 'TRAINING'}</span>
                     </button>
+                    {/* ZEN MODE TOGGLE */}
+                    {trainingEnabled && (
+                        <button
+                            onClick={() => setIsZenMode(!isZenMode)}
+                            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 ${isZenMode ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' : 'text-subdued hover:bg-[#282828] border border-transparent'}`}
+                            title="Zen Mode"
+                        >
+                            {isZenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                            <span className="text-xs font-bold">ZEN</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -538,7 +560,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                         {/* Grid was here, BeatPlayer moved below */}
 
                         {/* Rhyme Deck Columns Grid */}
-                        <div
+                        {trainingEnabled && <div
                             className={`flex-1 min-h-0 grid gap-2 transition-all duration-300
                             grid-cols-4
                             ${isZenMode ? 'fixed inset-0 z-50 bg-black/95 p-8 backdrop-blur-sm' : ''}
@@ -728,10 +750,10 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                     </div>
                                 )
                             })}
-                        </div>
+                        </div>}
 
                         {/* Beat Player - Moved Here (Bottom) */}
-                        <div className={`h-20 flex-none bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group transition-all duration-300 ${isZenMode && !showVideoInZen ? 'h-0 opacity-0 border-0 m-0' : ''}`}>
+                        <div className={`${trainingEnabled ? 'h-20 flex-none' : 'flex-1 min-h-48'} bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group transition-all duration-300 ${isZenMode && !showVideoInZen ? 'h-0 opacity-0 border-0 m-0' : ''}`}>
                             <BeatPlayer
                                 videoId={videoId}
                                 isPlaying={flowState !== 'idle' && flowState !== 'paused'}
