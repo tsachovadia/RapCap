@@ -19,6 +19,7 @@ import {
     chooseDriftCorrection,
     vocalTimeFromBeat,
 } from '../../core/timeline'
+import { createSessionManifest, safeFileStem, vocalFileName } from '../../core/sessionManifest'
 
 interface SessionPlayerProps {
     session: DbSession
@@ -362,7 +363,7 @@ export default function SessionPlayer({
             const url = URL.createObjectURL(downloadBlob)
             const a = document.createElement('a')
             a.href = url
-            a.download = `recording-${new Date().toISOString()}.mp3`
+            a.download = vocalFileName(session.title, downloadBlob.type)
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
@@ -370,7 +371,20 @@ export default function SessionPlayer({
         } catch (err) {
             console.error('Download failed:', err)
         }
-    }, [session.blob, session.metadata?.cloudUrl])
+    }, [session.blob, session.metadata?.cloudUrl, session.title])
+
+    const handleDownloadManifest = useCallback(() => {
+        const manifest = createSessionManifest(session)
+        const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `${safeFileStem(session.title)}-session.json`
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
+        URL.revokeObjectURL(url)
+    }, [session])
 
     const handleUpdateLyrics = useCallback(async (
         newLyrics: string,
@@ -438,15 +452,24 @@ export default function SessionPlayer({
                 </div>
             )}
 
-            {/* Download Audio Button */}
+            {/* Session exports */}
             {(session.blob || session.metadata?.cloudUrl) && (
-                <button
-                    onClick={handleDownload}
-                    className="flex items-center justify-center gap-2 w-full py-3 bg-[#1DB954]/20 hover:bg-[#1DB954]/30 text-[#1DB954] rounded-lg transition-colors border border-[#1DB954]/30"
-                >
-                    <Download size={18} />
-                    <span className="font-medium">הורד ערוץ ווקאל</span>
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                        onClick={handleDownload}
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-[#1DB954]/20 hover:bg-[#1DB954]/30 text-[#1DB954] rounded-lg transition-colors border border-[#1DB954]/30"
+                    >
+                        <Download size={18} />
+                        <span className="font-medium">הורד ערוץ ווקאל</span>
+                    </button>
+                    <button
+                        onClick={handleDownloadManifest}
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors border border-white/10"
+                    >
+                        <Download size={18} />
+                        <span className="font-medium">הורד פרטי סשן</span>
+                    </button>
+                </div>
             )}
 
             {/* Volume Controls */}
