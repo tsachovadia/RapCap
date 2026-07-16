@@ -86,18 +86,20 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const [sessionTitle, setSessionTitle] = useState('');
     const [language, setLanguage] = useState<'he' | 'en'>('he');
 
+    // Audio recorder
+    const recorder = useAudioRecorder();
+
     // Transcription state (drives isRecording via flowState)
     // Faster silence threshold (1200ms) for snappier bar creation in Studio
     const [isTranscribing, setIsTranscribing] = useState(false);
-    const transcription = useTranscription(isTranscribing, language, 1200);
-
-    // Audio recorder
-    const recorder = useAudioRecorder();
+    const transcription = useTranscription(isTranscribing, language, 1200, recorder.duration);
 
     // Flow state machine
     const flow = useFlowState({
         onStartRecording: recorder.startRecording,
         onStopRecording: recorder.stopRecording,
+        onPauseRecording: recorder.pauseRecording,
+        onResumeRecording: recorder.resumeRecording,
         youtubePlayer,
         beatVolume,
         resetTranscript: transcription.resetTranscript,

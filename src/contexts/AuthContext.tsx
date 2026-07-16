@@ -10,7 +10,7 @@ import {
     browserLocalPersistence
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, firebaseEnabled } from '../lib/firebase';
 import { syncService } from '../services/dbSync';
 
 interface AuthContextType {
@@ -18,6 +18,7 @@ interface AuthContextType {
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
     logout: () => Promise<void>;
+    cloudEnabled: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -32,6 +33,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         let isMounted = true;
+
+        if (!firebaseEnabled) {
+            console.info('RapCap is running in local-only mode; cloud auth is disabled.');
+            setLoading(false);
+            return () => {
+                isMounted = false;
+            };
+        }
+
+        // Cloud auth must never gate the local recording product. Attach the
+        // state listener immediately, then finish redirect/persistence work in
+        // the background. This keeps a slow or blocked Firebase endpoint from
+        // producing a blank PWA screen.
+        const unsubscribe = onAuthStateChanged(auth, (u) => {
+            if (!isMounted) return;
+            console.log("👤 Auth: State Changed ->", u ? `Member (${u.email})` : "Guest");
+            setUser(u);
+            setLoading(false);
+        }, (error) => {
+            if (!isMounted) return;
+            console.warn('⚠️ Auth: State listener failed; continuing in local mode.', error);
+            setLoading(false);
+        });
+
+        const loadingTimeout = window.setTimeout(() => {
+            if (!isMounted) return;
+            console.warn('⚠️ Auth: Startup timed out; continuing in local mode.');
+            setLoading(false);
+        }, 5000);
 
         const initAuth = async () => {
             console.log("🚀 Auth: Initializing...", {
@@ -71,22 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.error("❌ Auth: Initialization error", error);
             }
 
-            // 3. Setup long-term listener
-            const unsubscribe = onAuthStateChanged(auth, (u) => {
-                if (!isMounted) return;
-                console.log("👤 Auth: State Changed ->", u ? `Member (${u.email})` : "Guest");
-                setUser(u);
-                setLoading(false);
-            });
-
-            return unsubscribe;
         };
 
-        const authPromise = initAuth();
+        void initAuth();
 
         return () => {
             isMounted = false;
-            authPromise.then(unsub => unsub && unsub());
+            window.clearTimeout(loadingTimeout);
+            unsubscribe();
         };
     }, []);
 
@@ -114,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user]);
 
     const signInWithGoogle = async () => {
+        if (!firebaseEnabled) return;
         const provider = new GoogleAuthProvider();
         // Force account selection to help with debug/switching
         provider.setCustomParameters({ prompt: 'select_account' });
@@ -147,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = async () => {
+        if (!firebaseEnabled) return;
         try {
             await signOut(auth);
         } catch (error) {
@@ -158,12 +182,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         signInWithGoogle,
-        logout
+        logout,
+        cloudEnabled: firebaseEnabled,
     };
 
     return (
         <AuthContext.Provider value={value}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 }

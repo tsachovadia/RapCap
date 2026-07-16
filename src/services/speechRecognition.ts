@@ -5,23 +5,54 @@
 
 import type { RecognitionConfig, RecognitionCallbacks } from '../types/transcription'
 
-// Use any for browser-specific SpeechRecognition (not in all TS libs)
-type SpeechRecognitionInstance = any
+interface SpeechRecognitionResultLike {
+    isFinal: boolean
+    0: { transcript: string }
+}
+
+interface SpeechRecognitionEventLike {
+    resultIndex: number
+    results: ArrayLike<SpeechRecognitionResultLike>
+}
+
+interface SpeechRecognitionErrorEventLike {
+    error: string
+    message?: string
+}
+
+export interface SpeechRecognitionInstance {
+    continuous: boolean
+    interimResults: boolean
+    lang: string
+    onstart: (() => void) | null
+    onresult: ((event: SpeechRecognitionEventLike) => void) | null
+    onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null
+    onend: (() => void) | null
+    start: () => void
+    stop: () => void
+    abort: () => void
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance
+
+function getSpeechWindow() {
+    return window as Window & {
+        webkitSpeechRecognition?: SpeechRecognitionConstructor
+        SpeechRecognition?: SpeechRecognitionConstructor
+    }
+}
 
 /** Check if Speech Recognition is supported */
 export function isSpeechRecognitionSupported(): boolean {
-    return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
+    if (typeof window === 'undefined') return false
+    const speechWindow = getSpeechWindow()
+    return Boolean(speechWindow.webkitSpeechRecognition || speechWindow.SpeechRecognition)
 }
 
 /** Get the SpeechRecognition constructor */
-function getSpeechRecognition(): any {
-    if ('webkitSpeechRecognition' in window) {
-        return (window as any).webkitSpeechRecognition
-    }
-    if ('SpeechRecognition' in window) {
-        return (window as any).SpeechRecognition
-    }
-    return null
+function getSpeechRecognition(): SpeechRecognitionConstructor | null {
+    const speechWindow = getSpeechWindow()
+    return speechWindow.webkitSpeechRecognition || speechWindow.SpeechRecognition || null
 }
 
 /**
@@ -50,7 +81,7 @@ export function createRecognition(
         callbacks.onStart()
     }
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event) => {
         // console.log('🎤 [SpeechRecognition] Result event', event.results.length)
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i]
@@ -66,7 +97,7 @@ export function createRecognition(
         }
     }
 
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event) => {
         // Ignore 'no-speech' which is common and not an error
         if (event.error !== 'no-speech') {
             console.error('❌ [SpeechRecognition] Error:', event.error, event.message)

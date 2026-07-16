@@ -1,10 +1,11 @@
 import { useRef, useEffect, useMemo } from 'react';
 import YouTube, { type YouTubeProps } from 'react-youtube';
+import type { YouTubePlayerHandle } from '../../types/youtube';
 
 interface BeatPlayerProps {
     videoId: string;
     isPlaying: boolean;
-    onReady?: (player: any) => void;
+    onReady?: (player: YouTubePlayerHandle) => void;
     onStateChange?: (event: any) => void;
     volume: number; // 0-100
 }

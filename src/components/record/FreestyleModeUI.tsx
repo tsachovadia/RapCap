@@ -9,12 +9,18 @@ import { useAuth } from '../../contexts/AuthContext'
 import type { FlowState } from '../../pages/RecordPage'
 import DictaModal from '../shared/DictaModal'
 import { useToast } from '../../contexts/ToastContext'
+import { extractYouTubeVideoId, youtubeWatchUrl } from '../../core/youtube'
+import { evaluateBeatPreroll, isBeatResetObserved } from '../../core/beatPreroll'
+import type { YouTubePlayerHandle } from '../../types/youtube'
+import { beatRepo } from '../../db/beatRepo'
 
 
 interface Props {
     flowState: FlowState
     language: 'he' | 'en'
-    onPreRollComplete: (beatStartTime: number) => void
+    onPreRollComplete: (getBeatTime: () => number) => Promise<void>
+    onPreRollFailure: () => void
+    onBeatPlayerReady?: (player: YouTubePlayerHandle) => void
     onBeatChange?: (beatId: string) => void
     segments: any[]
     interimTranscript: string
@@ -23,15 +29,18 @@ interface Props {
     onSaveMoment?: () => void
 }
 
-export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onBeatChange, segments, interimTranscript, notes, setNotes, onSaveMoment }: Props) {
+export default function FreestyleModeUI({ flowState, language, onPreRollComplete, onPreRollFailure, onBeatPlayerReady, onBeatChange, segments, interimTranscript, notes, setNotes, onSaveMoment }: Props) {
     const { user } = useAuth()
     const { showToast } = useToast()
     const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)
     const [beatVolume, setBeatVolume] = useState(50)
-    const [youtubePlayer, setYoutubePlayer] = useState<any>(null)
+    const [youtubePlayer, setYoutubePlayer] = useState<YouTubePlayerHandle | null>(null)
     const [showUrlInput, setShowUrlInput] = useState(false)
     const [urlInput, setUrlInput] = useState('')
     const preRollCheckRef = useRef<number | null>(null)
+    const preRollCompletedRef = useRef(false)
+    const preRollStartedAtRef = useRef(0)
+    const beatResetObservedRef = useRef(false)
     const transcriptContainerRef = useRef<HTMLDivElement>(null)
 
 
@@ -41,6 +50,9 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
     // Unified Zen Mode (Replaces conflicting ViewStates)
     const [isZenMode, setIsZenMode] = useState(false)
+    const [trainingEnabled, setTrainingEnabled] = useState(() =>
+        typeof window !== 'undefined' && localStorage.getItem('rapcap_training_layer') === 'true'
+    )
 
     // Modal States
     const [showNewGroupModal, setShowNewGroupModal] = useState(false)
@@ -78,6 +90,15 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
             setHighlightedWords(new Set())
         }
     }, [flowState])
+
+    useEffect(() => {
+        localStorage.setItem('rapcap_training_layer', String(trainingEnabled))
+    }, [trainingEnabled])
+
+    const handleTrainingToggle = () => {
+        if (trainingEnabled) setIsZenMode(false)
+        setTrainingEnabled(!trainingEnabled)
+    }
 
     useEffect(() => {
         if ((!segments.length && !interimTranscript) || !allWordGroups) return
@@ -177,42 +198,60 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
     // Pre-roll Monitoring
     useEffect(() => {
-        if (flowState === 'preroll' && youtubePlayer && typeof youtubePlayer.seekTo === 'function') {
-            // Seek to start and play
+        if (flowState !== 'preroll') {
+            preRollCompletedRef.current = false
+            preRollStartedAtRef.current = 0
+            beatResetObservedRef.current = false
+            if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
+            return
+        }
+
+        if (!preRollStartedAtRef.current) preRollStartedAtRef.current = performance.now()
+
+        if (youtubePlayer && typeof youtubePlayer.seekTo === 'function') {
             try {
-                youtubePlayer.seekTo(0)
+                youtubePlayer.seekTo(0, true)
                 youtubePlayer.playVideo()
-                youtubePlayer.setVolume(beatVolume)
             } catch (e) {
                 console.warn("YouTube Player error:", e)
             }
-
-            // Start polling for 2-second mark
-            preRollCheckRef.current = window.setInterval(() => {
-                const currentTime = youtubePlayer.getCurrentTime()
-                if (currentTime >= 2) { // 2 seconds pre-roll
-                    if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
-                    onPreRollComplete(currentTime)
-                }
-            }, 100)
-        } else {
-            if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
         }
+
+        preRollCheckRef.current = window.setInterval(() => {
+            let currentTime = Number.NaN
+            try {
+                currentTime = youtubePlayer?.getCurrentTime?.() ?? Number.NaN
+            } catch (e) {
+                console.warn('Could not read YouTube beat time', e)
+            }
+
+            if (isBeatResetObserved(currentTime)) beatResetObservedRef.current = true
+
+            const status = evaluateBeatPreroll({
+                beatTimeSec: currentTime,
+                elapsedMs: performance.now() - preRollStartedAtRef.current,
+                resetObserved: beatResetObservedRef.current,
+            })
+
+            if (status === 'ready' && youtubePlayer && !preRollCompletedRef.current) {
+                preRollCompletedRef.current = true
+                if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
+                void onPreRollComplete(() => youtubePlayer.getCurrentTime())
+            } else if (status === 'timed_out' && !preRollCompletedRef.current) {
+                preRollCompletedRef.current = true
+                if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
+                onPreRollFailure()
+            }
+        }, 100)
 
         return () => {
             if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
         }
-    }, [flowState, youtubePlayer])
+    }, [flowState, onPreRollComplete, onPreRollFailure, youtubePlayer])
 
-
-    const extractYoutubeId = (url: string) => {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
-        const match = url.match(regExp)
-        return (match && match[2].length === 11) ? match[2] : null
-    }
 
     const handleUrlSubmit = async () => {
-        const id = extractYoutubeId(urlInput)
+        const id = extractYouTubeVideoId(urlInput)
         if (id) {
             setVideoId(id)
             setShowUrlInput(false)
@@ -220,24 +259,25 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
             // Auto-save beat if new
             try {
-                const existing = await db.beats.where('videoId').equals(id).first()
-                if (!existing) {
+                const isPreset = PRESET_BEATS.some(beat => beat.id === id)
+                const existing = await beatRepo.findByVideoId(id)
+                if (!isPreset && !existing) {
                     let beatTitle = 'Imported Beat'
 
-                    // Fetch title from oEmbed
+                    // Fetch title from oEmbed. Saving still succeeds offline
+                    // with the fallback name so the beat is never lost.
                     try {
-                        const response = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`)
+                        const response = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(youtubeWatchUrl(id)!)}`)
                         const data = await response.json()
                         if (data.title) beatTitle = data.title
                     } catch (err) {
                         console.warn('Failed to fetch YouTube title', err)
                     }
 
-                    await db.beats.add({
+                    await beatRepo.saveCustom({
                         name: beatTitle,
                         videoId: id,
-                        category: 'custom',
-                        createdAt: new Date()
+                        presetVideoIds: PRESET_BEATS.map(beat => beat.id),
                     })
                 }
             } catch (e) {
@@ -518,15 +558,25 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
 
                 {/* Right Controls (Absolute) */}
                 <div className="absolute right-2 flex items-center gap-2 z-10">
-                    {/* ZEN MODE TOGGLE */}
                     <button
-                        onClick={() => setIsZenMode(!isZenMode)}
-                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 ${isZenMode ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' : 'text-subdued hover:bg-[#282828] border border-transparent'}`}
-                        title="Zen Mode"
+                        onClick={handleTrainingToggle}
+                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 border ${trainingEnabled ? 'bg-[#1DB954]/15 text-[#1DB954] border-[#1DB954]/30' : 'text-subdued hover:bg-[#282828] border-transparent'}`}
+                        title={language === 'he' ? 'שכבת אימון' : 'Training layer'}
                     >
-                        {isZenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                        <span className="text-xs font-bold">ZEN</span>
+                        <Layers size={16} />
+                        <span className="text-xs font-bold">{language === 'he' ? 'אימון' : 'TRAINING'}</span>
                     </button>
+                    {/* ZEN MODE TOGGLE */}
+                    {trainingEnabled && (
+                        <button
+                            onClick={() => setIsZenMode(!isZenMode)}
+                            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 ${isZenMode ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' : 'text-subdued hover:bg-[#282828] border border-transparent'}`}
+                            title="Zen Mode"
+                        >
+                            {isZenMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                            <span className="text-xs font-bold">ZEN</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -538,7 +588,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                         {/* Grid was here, BeatPlayer moved below */}
 
                         {/* Rhyme Deck Columns Grid */}
-                        <div
+                        {trainingEnabled && <div
                             className={`flex-1 min-h-0 grid gap-2 transition-all duration-300
                             grid-cols-4
                             ${isZenMode ? 'fixed inset-0 z-50 bg-black/95 p-8 backdrop-blur-sm' : ''}
@@ -728,15 +778,18 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
                                     </div>
                                 )
                             })}
-                        </div>
+                        </div>}
 
                         {/* Beat Player - Moved Here (Bottom) */}
-                        <div className={`h-20 flex-none bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group transition-all duration-300 ${isZenMode && !showVideoInZen ? 'h-0 opacity-0 border-0 m-0' : ''}`}>
+                        <div className={`${trainingEnabled ? 'h-20 flex-none' : 'flex-1 min-h-48'} bg-[#181818] rounded-xl overflow-hidden relative border border-[#282828] group transition-all duration-300 ${isZenMode && !showVideoInZen ? 'h-0 opacity-0 border-0 m-0' : ''}`}>
                             <BeatPlayer
                                 videoId={videoId}
                                 isPlaying={flowState !== 'idle' && flowState !== 'paused'}
                                 volume={beatVolume}
-                                onReady={(player) => setYoutubePlayer(player)}
+                                onReady={(player) => {
+                                    setYoutubePlayer(player)
+                                    onBeatPlayerReady?.(player)
+                                }}
                             />
                         </div>
                     </div>

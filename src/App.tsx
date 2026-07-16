@@ -16,6 +16,7 @@ import { seedDatabase } from './db/db'
 const HomePage = lazy(() => import('./pages/HomePage'))
 const RecordPage = lazy(() => import('./pages/RecordPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
+const LabPage = lazy(() => import('./pages/LabPage'))
 const DrillsPage = lazy(() => import('./pages/DrillsPage'))
 const ObjectWritingPage = lazy(() => import('./pages/ObjectWritingPage'))
 const RhymeChainsPage = lazy(() => import('./pages/RhymeChainsPage'))
@@ -55,11 +56,13 @@ export default function App() {
                 <Route path="/studio/:id?" element={<StudioPage />} />
                 <Route path="/rhyme-library/session/:id?" element={<WritingSessionPage />} />
                 <Route element={<AppLayout />}>
-                  <Route path="/" element={<HomePage />} />
+                  <Route path="/" element={<Navigate to="/record?mode=freestyle" replace />} />
                   <Route path="/login" element={<AuthPage />} />
                   <Route path="/record" element={<RecordPage />} />
                   <Route path="/freestyle" element={<Navigate to="/record?mode=freestyle" replace />} />
                   <Route path="/library" element={<LibraryPage />} />
+                  <Route path="/lab" element={<LabPage />} />
+                  <Route path="/lab/dashboard" element={<HomePage />} />
                   <Route path="/drills" element={<DrillsPage />} />
                   <Route path="/drills/object-writing" element={<ObjectWritingPage />} />
                   <Route path="/drills/rhyme-chains" element={<RhymeChainsPage />} />
@@ -72,7 +75,7 @@ export default function App() {
                   <Route path="/verse-editor/:id?" element={<VerseEditorPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Route>
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<Navigate to="/record?mode=freestyle" replace />} />
               </Routes>
             </Suspense>
           </AuthProvider>

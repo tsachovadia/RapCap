@@ -8,8 +8,10 @@ import { useToast } from '../contexts/ToastContext'
 export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
 
 interface UseFlowStateOptions {
-    onStartRecording: () => Promise<void>
+    onStartRecording: () => Promise<boolean>
     onStopRecording: () => Promise<Blob | undefined>
+    onPauseRecording: () => boolean
+    onResumeRecording: () => boolean
     youtubePlayer: any
     beatVolume: number
     resetTranscript: () => void
@@ -20,6 +22,8 @@ interface UseFlowStateOptions {
 export function useFlowState({
     onStartRecording,
     onStopRecording,
+    onPauseRecording,
+    onResumeRecording,
     youtubePlayer,
     beatVolume,
     resetTranscript,
@@ -52,20 +56,22 @@ export function useFlowState({
     }, [flowState])
 
     const handlePauseFlow = useCallback(() => {
+        if (!onPauseRecording()) return
         console.log('⏸️ Pausing Flow...')
         setFlowState('paused')
         setIsTranscribing(false)
         if (youtubePlayer && typeof youtubePlayer.pauseVideo === 'function') {
             youtubePlayer.pauseVideo()
         }
-    }, [youtubePlayer, setIsTranscribing])
+    }, [youtubePlayer, setIsTranscribing, onPauseRecording])
 
     const handleResumeFlow = useCallback(() => {
+        if (!onResumeRecording()) return
         console.log('▶️ Resuming Flow...')
         setFlowState('recording')
         setIsTranscribing(true)
         if (youtubePlayer) youtubePlayer.playVideo()
-    }, [youtubePlayer, setIsTranscribing])
+    }, [youtubePlayer, setIsTranscribing, onResumeRecording])
 
     const handleFinishFlow = useCallback(async () => {
         console.log('🛑 Finishing Flow...')
@@ -91,7 +97,8 @@ export function useFlowState({
             if (preRollCheckRef.current) {
                 console.warn("⚠️ Pre-roll timed out, forcing start...")
                 cancelAnimationFrame(preRollCheckRef.current)
-                onStartRecording().then(() => {
+                onStartRecording().then((started) => {
+                    if (!started) return
                     recordingStartTimeRef.current = Date.now()
                     setFlowState('recording')
                 })
@@ -105,7 +112,8 @@ export function useFlowState({
             if (currentTime >= 2.0) {
                 console.log('✅ Pre-Roll Complete! Recording...')
                 clearTimeout(safetyTimeout)
-                onStartRecording().then(() => {
+                onStartRecording().then((started) => {
+                    if (!started) return
                     recordingStartTimeRef.current = Date.now()
                     setFlowState('recording')
                 })

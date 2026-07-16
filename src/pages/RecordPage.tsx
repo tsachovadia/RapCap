@@ -9,24 +9,33 @@ import { syncService } from '../services/dbSync'
 import { getCalibratedLatency } from '../services/latencyCalibration'
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
-import type { SessionAnalysis } from '../db/db';
+import type { DbSession, SessionAnalysis } from '../db/db'
+import type { TranscriptSegment, WordSegment } from '../types/transcription'
 import FreestyleModeUI from '../components/record/FreestyleModeUI'
 import ThoughtsModeUI from '../components/record/ThoughtsModeUI'
 import RecordingHeader from '../components/record/RecordingHeader'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import { useAuth } from '../contexts/AuthContext'
-import { Music, Mic, Upload, Clock } from 'lucide-react'
+import { Upload, Clock } from 'lucide-react'
 import { DEFAULT_BEAT_ID } from '../data/beats'
 import { analyzeFreestyleLyrics } from '../services/gemini'
+import { transitionFlow, type FlowState } from '../core/recordingFlow'
+import { captureBeatStartTimeSec } from '../core/sessionTiming'
+import { sessionRepo } from '../db/sessionRepo'
+import { useToast } from '../contexts/ToastContext'
+import type { YouTubePlayerHandle } from '../types/youtube'
+import { resolveRecordingMode, type RecordingMode } from '../core/recordingMode'
 
-export type RecordingMode = 'freestyle' | 'thoughts'
-export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
+export type { RecordingMode } from '../core/recordingMode'
+export type { FlowState } from '../core/recordingFlow'
 
 export default function RecordPage() {
     const [searchParams] = useSearchParams()
-    const mode = (searchParams.get('mode') as RecordingMode) || 'freestyle'
+    const mode: RecordingMode = resolveRecordingMode(searchParams.get('mode'))
+    const showDeveloperTools = import.meta.env.DEV && searchParams.get('debug') === '1'
     const navigate = useNavigate()
     const { user } = useAuth()
+    const { showToast } = useToast()
 
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -36,7 +45,10 @@ export default function RecordPage() {
         permissionError,
         startRecording,
         stopRecording,
+        pauseRecording,
+        resumeRecording,
         isRecording,
+        isReady: isAudioReady,
         duration,
         analyser,
         availableDevices,
@@ -52,7 +64,16 @@ export default function RecordPage() {
 
     const [language, setLanguage] = useState<'he' | 'en'>('he')
     const [isTranscribing, setIsTranscribing] = useState(false)
-    const { transcript, interimTranscript, segments, wordSegments, resetTranscript, transcriptRef } = useTranscription(isTranscribing, language)
+    const {
+        transcript,
+        interimTranscript,
+        segments,
+        wordSegments,
+        resetTranscript,
+        transcriptRef,
+        isSupported: isLiveTranscriptionSupported,
+        status: transcriptionStatus,
+    } = useTranscription(isTranscribing, language, undefined, duration)
 
     // --- Flow State ---
     const [flowState, setFlowState] = useState<FlowState>('idle')
@@ -60,9 +81,15 @@ export default function RecordPage() {
     const [showReviewModal, setShowReviewModal] = useState(false)
     const [pendingSessionBlob, setPendingSessionBlob] = useState<Blob | null>(null)
     const [showMicSetup, setShowMicSetup] = useState(false)
-    const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{ text: string, segments: any[], wordSegments: any[] } | null>(null)
+    const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{
+        text: string
+        segments: TranscriptSegment[]
+        wordSegments: WordSegment[]
+    } | null>(null)
     const [currentBeatId, setCurrentBeatId] = useState(DEFAULT_BEAT_ID)
     const [capturedBeatStartTime, setCapturedBeatStartTime] = useState<number>(0)
+    const [isBeatReady, setIsBeatReady] = useState(false)
+    const beatPlayerRef = useRef<YouTubePlayerHandle | null>(null)
 
     // NEW: Notes & AI State
     const [notes, setNotes] = useState('')
@@ -106,11 +133,11 @@ export default function RecordPage() {
     const [loadedSessionId, setLoadedSessionId] = useState<number | null>(null)
     const [loadedSessionDuration, setLoadedSessionDuration] = useState(0)
 
-    const handleLoadSession = (session: any) => {
-        setPendingSessionBlob(session.blob)
-        setSessionAnalysis(session.analysis || null)
+    const handleLoadSession = (session: DbSession) => {
+        setPendingSessionBlob(session.blob ?? null)
+        setSessionAnalysis(session.metadata?.analysis ?? null)
         setAiKeywords(session.metadata?.aiKeywords || [])
-        setLoadedSessionId(session.id)
+        setLoadedSessionId(session.id ?? null)
         setLoadedSessionDuration(session.duration || 0)
         setCurrentBeatId(session.beatId || DEFAULT_BEAT_ID)
 
@@ -125,13 +152,6 @@ export default function RecordPage() {
         setShowHistory(false)
     }
 
-    // Ensure stream is initialized
-    useEffect(() => {
-        if (flowState === 'idle' && !isRecording) {
-            initializeStream().catch(err => console.error("Stream init failed", err))
-        }
-    }, [initializeStream, flowState, isRecording])
-
     // Trigger mic setup on error
     useEffect(() => {
         if (permissionError) setShowMicSetup(true)
@@ -145,28 +165,51 @@ export default function RecordPage() {
             return
         }
 
-        transcriptionStartTimeRef.current = Date.now()
-
         try {
-            await initializeStream()
-
-            // Start transcription only after stream is initialized
-            setIsTranscribing(true)
-
-            // different modes might have different pre-roll needs
-            if (mode === 'freestyle') {
-                setFlowState('preroll')
-            } else {
-                await startRecording()
-                recordingStartTimeRef.current = Date.now()
-                setFlowState('recording')
+            if (!isAudioReady) {
+                await initializeStream()
+                showToast(
+                    language === 'he'
+                        ? 'המיקרופון מוכן. לחץ שוב כדי להתחיל את הפריסטייל.'
+                        : 'Microphone ready. Tap again to start the freestyle.',
+                    'success',
+                )
+                return
             }
+
             resetTranscript()
             setMoments([])
-            setAiKeywords([]) // Reset keywords
-            setLoadedSessionId(null) // Clear any loaded session
+            setAiKeywords([])
+            setLoadedSessionId(null)
             setLoadedSessionDuration(0)
-            setEnhancedTranscriptData(null) // Clear enhanced data too
+            setEnhancedTranscriptData(null)
+
+            if (mode === 'freestyle') {
+                const player = beatPlayerRef.current
+                if (!player || !isBeatReady) {
+                    showToast(
+                        language === 'he' ? 'הביט עדיין נטען. נסה שוב בעוד רגע.' : 'The beat is still loading. Try again in a moment.',
+                        'warning',
+                    )
+                    return
+                }
+
+                // Keep this call inside the user's tap. Mobile Safari is much
+                // more reliable when YouTube playback begins from a gesture.
+                player.seekTo(0, true)
+                player.playVideo()
+                setIsTranscribing(false)
+                setFlowState(current => transitionFlow(current, 'START_PREROLL'))
+            } else {
+                const started = await startRecording()
+                if (!started) throw new Error('Recorder did not start')
+
+                const startedAt = Date.now()
+                recordingStartTimeRef.current = startedAt
+                transcriptionStartTimeRef.current = startedAt
+                setIsTranscribing(true)
+                setFlowState(current => transitionFlow(current, 'START_RECORDING'))
+            }
         } catch (e) {
             console.error('Failed to start flow:', e)
             setFlowState('idle')
@@ -175,17 +218,20 @@ export default function RecordPage() {
     }
 
     const handlePauseFlow = () => {
-        setFlowState('paused')
+        if (!pauseRecording()) return
+        if (mode === 'freestyle') beatPlayerRef.current?.pauseVideo?.()
+        setFlowState(current => transitionFlow(current, 'PAUSE'))
         setIsTranscribing(false)
     }
 
     const handleResumeFlow = () => {
-        setFlowState('recording')
+        if (!resumeRecording()) return
+        if (mode === 'freestyle') beatPlayerRef.current?.playVideo?.()
+        setFlowState(current => transitionFlow(current, 'RESUME'))
         setIsTranscribing(true)
     }
 
     const handleFinishFlow = async () => {
-        setFlowState('idle')
         setIsTranscribing(false)
         if (isRecording) {
             const blob = await stopRecording()
@@ -207,17 +253,14 @@ export default function RecordPage() {
                 }
             }
         }
+        setFlowState(current => transitionFlow(current, 'FINISH'))
     }
 
     const handleSaveMoment = () => {
         if (flowState !== 'recording') return // Prevent saving moments during pre-roll
-        const now = Date.now()
-        const preciseTime = recordingStartTimeRef.current > 0
-            ? (now - recordingStartTimeRef.current) / 1000
-            : duration
-
-        // Ensure we don't save 0 or negative values if the clock is weird
-        const finalTime = Math.max(0.01, preciseTime)
+        // Recorder duration excludes paused time, so markers stay aligned after
+        // any number of pause/resume cycles.
+        const finalTime = Math.max(0.01, duration)
         setMoments(prev => [...prev, finalTime])
     }
 
@@ -241,7 +284,7 @@ export default function RecordPage() {
         const offset = Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000
 
         // Correct segments if needed (shared logic)
-        const processSegments = (segs: any[]) => segs
+        const processSegments = <T extends { timestamp: number },>(segs: T[]): T[] => segs
             .map(s => ({ ...s, timestamp: s.timestamp - offset }))
             .filter(s => s.timestamp >= 0)
 
@@ -292,7 +335,7 @@ export default function RecordPage() {
                     date: new Date(),
                     type: mode,
                     beatId: currentBeatId,
-                    beatStartTime: capturedBeatStartTime + (getCalibratedLatency() / 1000),
+                    beatStartTime: captureBeatStartTimeSec(capturedBeatStartTime, getCalibratedLatency()),
                 }),
                 ...overrides,
                 metadata: {
@@ -303,22 +346,37 @@ export default function RecordPage() {
                     language,
                     notes,
                     aiKeywords: finalKeywords,
+                    analysis: overrides?.metadata?.analysis ?? sessionAnalysis ?? undefined,
                     ...(overrides ? overrides.metadata : {})
                 },
-                analysis: (overrides && overrides.metadata && overrides.metadata.analysis) ? overrides.metadata.analysis : sessionAnalysis
             }
 
             if (loadedSessionId) {
-                await db.sessions.update(loadedSessionId, sessionData)
+                await sessionRepo.update(loadedSessionId, sessionData)
                 if (user) syncService.syncSessions(user.uid).catch(console.error);
             } else {
-                await db.sessions.add({ ...sessionData, title: sessionData.title!, createdAt: new Date(), date: new Date(), type: mode, beatId: currentBeatId, beatStartTime: 0 } as any)
+                const newSession: DbSession = {
+                    ...sessionData,
+                    title: sessionData.title ?? `Freestyle ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
+                    createdAt: new Date(),
+                    date: new Date(),
+                    type: mode,
+                    beatId: currentBeatId,
+                }
+                await sessionRepo.create(newSession)
                 if (user) syncService.syncSessions(user.uid).catch(console.error);
             }
 
             navigate('/library')
         } catch (e) {
             console.error('Failed to save session', e)
+            showToast(
+                language === 'he'
+                    ? 'השמירה נכשלה. ההקלטה עדיין פתוחה — אפשר לנסות שוב.'
+                    : 'Save failed. Your recording is still open, so you can try again.',
+                'error',
+            )
+            throw e
         }
     }
 
@@ -337,13 +395,39 @@ export default function RecordPage() {
     }
 
     // Modal Callback for Pre-roll complete (Used by FreestyleModeUI)
-    const onPreRollComplete = async (beatTime: number) => {
+    const onPreRollComplete = useCallback(async (getBeatTime: () => number) => {
         if (flowState !== 'preroll') return
-        await startRecording()
-        setCapturedBeatStartTime(beatTime) // Capture the exact time
-        recordingStartTimeRef.current = Date.now()
-        setFlowState('recording')
-    }
+        const started = await startRecording()
+        if (!started) {
+            setIsTranscribing(false)
+            setFlowState('idle')
+            return
+        }
+
+        const startedAt = Date.now()
+        setCapturedBeatStartTime(getBeatTime())
+        recordingStartTimeRef.current = startedAt
+        transcriptionStartTimeRef.current = startedAt
+        setIsTranscribing(true)
+        setFlowState(current => transitionFlow(current, 'START_RECORDING'))
+    }, [flowState, startRecording])
+
+    const handleBeatPlayerReady = useCallback((player: YouTubePlayerHandle) => {
+        beatPlayerRef.current = player
+        setIsBeatReady(true)
+    }, [])
+
+    const handlePreRollFailure = useCallback(() => {
+        beatPlayerRef.current?.pauseVideo?.()
+        setIsTranscribing(false)
+        setFlowState(current => transitionFlow(current, 'RESET'))
+        showToast(
+            language === 'he'
+                ? 'הביט לא התחיל בזמן. לחץ Play בנגן YouTube ואז נסה להקליט שוב.'
+                : 'The beat did not start in time. Tap Play in YouTube, then try recording again.',
+            'warning',
+        )
+    }, [language, showToast])
 
     const sessionForModal = {
         id: loadedSessionId || undefined,
@@ -361,7 +445,7 @@ export default function RecordPage() {
             analysis: sessionAnalysis || undefined,
             moments: moments
         }
-    } as any as import('../db/db').DbSession;
+    } satisfies DbSession
 
     return (
         <div className="h-[100dvh] flex flex-col relative overflow-hidden bg-black text-white px-4" dir={language === 'he' ? 'rtl' : 'ltr'}>
@@ -383,7 +467,7 @@ export default function RecordPage() {
             />
 
             {/* Test/Debug Controls (Only in Freestyle Mode) */}
-            {mode === 'freestyle' && flowState === 'idle' && (
+            {showDeveloperTools && mode === 'freestyle' && flowState === 'idle' && (
                 <div className="flex justify-center -mt-2 mb-2 gap-2 relative z-50">
                     <button
                         onClick={() => fileInputRef.current?.click()}
@@ -425,42 +509,28 @@ export default function RecordPage() {
                 </div>
             )}
 
-            {/* Mode Switcher */}
-            <div className="flex-none flex justify-center py-2">
-                <div className="bg-[#1a1a1a] p-1 rounded-2xl flex items-center gap-1 border border-white/5 shadow-xl">
-                    <button
-                        onClick={() => navigate('/record?mode=freestyle')}
-                        disabled={flowState !== 'idle'}
-                        className={`
-                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
-                            ${mode === 'freestyle' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
-                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        <Music size={14} />
-                        <span>{language === 'he' ? 'פריסטייל' : 'Freestyle'}</span>
-                    </button>
-                    <button
-                        onClick={() => navigate('/record?mode=thoughts')}
-                        disabled={flowState !== 'idle'}
-                        className={`
-                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
-                            ${mode === 'thoughts' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
-                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        <Mic size={14} />
-                        <span>{language === 'he' ? 'מחשבות' : 'Thoughts'}</span>
-                    </button>
+            {flowState === 'idle' && !isLiveTranscriptionSupported && (
+                <div className="mx-auto my-1 max-w-xl rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-center text-xs text-amber-100">
+                    {language === 'he'
+                        ? 'תמלול חי לא זמין בדפדפן הזה. האודיו עדיין יוקלט ויישמר.'
+                        : 'Live transcription is unavailable in this browser. Audio will still be recorded and saved.'}
                 </div>
-            </div>
-
+            )}
+            {(transcriptionStatus === 'blocked' || transcriptionStatus === 'error') && (
+                <div className="mx-auto my-1 max-w-xl rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-center text-xs text-red-100">
+                    {language === 'he'
+                        ? 'התמלול נעצר, אבל ההקלטה ממשיכה. אפשר לתקן את הטקסט אחר כך.'
+                        : 'Transcription stopped, but recording continues. You can edit the text later.'}
+                </div>
+            )}
             <main className="flex-1 flex flex-col gap-2 min-h-0 pb-4">
                 {mode === 'freestyle' && (
                     <FreestyleModeUI
                         flowState={flowState}
                         language={language}
                         onPreRollComplete={onPreRollComplete}
+                        onPreRollFailure={handlePreRollFailure}
+                        onBeatPlayerReady={handleBeatPlayerReady}
                         onBeatChange={setCurrentBeatId}
                         segments={segments}
                         interimTranscript={interimTranscript}
@@ -504,6 +574,17 @@ export default function RecordPage() {
                     availableOutputDevices={availableOutputDevices}
                     selectedOutputId={selectedOutputId}
                     onOutputChange={setOutputId}
+                    idleStatus={language === 'he'
+                        ? (!isAudioReady
+                            ? 'לחץ להכנת המיקרופון'
+                            : mode === 'freestyle' && !isBeatReady
+                                ? 'טוען את הביט…'
+                                : mode === 'freestyle' ? 'מוכן לפריסטייל' : 'מוכן להקליט')
+                        : (!isAudioReady
+                            ? 'Tap to prepare the microphone'
+                            : mode === 'freestyle' && !isBeatReady
+                                ? 'Loading the beat…'
+                                : mode === 'freestyle' ? 'Ready to freestyle' : 'Ready to record')}
                 />
             </footer>
 

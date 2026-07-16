@@ -1,5 +1,6 @@
 
 import Dexie, { type Table } from 'dexie';
+import { v4 as uuidv4 } from 'uuid';
 
 console.log('[RapCap] 💽 db.ts module evaluating...');
 
@@ -151,6 +152,8 @@ export interface WordGroup {
 
 export interface DbSession {
     id?: number;
+    localId?: string;
+    schemaVersion?: number;
     cloudId?: string;
     syncedAt?: Date;
     updatedAt?: Date;
@@ -240,6 +243,19 @@ export class RapCapDatabase extends Dexie {
             verses: '++id, title, createdAt, updatedAt',
             vocalizationCache: '&word'
         });
+
+        this.version(7).stores({
+            wordGroups: '++id, name, lastUsedAt, isSystem, cloudId',
+            sessions: '++id, &localId, title, type, createdAt, updatedAt, cloudId',
+            beats: '++id, videoId, name, createdAt',
+            vault: '++id, type, createdAt, sessionId',
+            barRecordings: 'id, sessionId, barId, createdAt',
+            verses: '++id, title, createdAt, updatedAt',
+            vocalizationCache: '&word'
+        }).upgrade(transaction => transaction.table('sessions').toCollection().modify((session: DbSession) => {
+            if (!session.localId) session.localId = uuidv4();
+            if (!session.schemaVersion) session.schemaVersion = 1;
+        }));
     }
 }
 

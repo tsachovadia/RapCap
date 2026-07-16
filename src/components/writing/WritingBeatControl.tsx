@@ -3,6 +3,7 @@ import { Play, Pause, Volume2, Music, X, Link as LinkIcon } from 'lucide-react'
 import BeatPlayer from '../freestyle/BeatPlayer'
 import { PRESET_BEATS } from '../../data/beats'
 import { useToast } from '../../contexts/ToastContext'
+import { extractYouTubeVideoId } from '../../core/youtube'
 
 interface WritingBeatControlProps {
     videoId: string | null
@@ -30,14 +31,8 @@ export function WritingBeatControl({
     const currentBeat = PRESET_BEATS.find(b => b.id === videoId)
     const beatName = currentBeat ? currentBeat.name : (videoId ? 'Custom Beat' : 'No Beat Selected')
 
-    const extractYoutubeId = (url: string) => {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
-        const match = url.match(regExp)
-        return (match && match[2].length === 11) ? match[2] : null
-    }
-
     const handleUrlSubmit = () => {
-        const id = extractYoutubeId(urlInput)
+        const id = extractYouTubeVideoId(urlInput)
         if (id) {
             setVideoId(id)
             setShowSelector(false)

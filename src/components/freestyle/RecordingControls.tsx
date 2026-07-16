@@ -24,6 +24,7 @@ interface RecordingControlsProps {
     availableOutputDevices?: MediaDeviceInfo[];
     selectedOutputId?: string;
     onOutputChange?: (id: string) => void;
+    idleStatus?: string;
 }
 
 export default function RecordingControls({
@@ -43,7 +44,8 @@ export default function RecordingControls({
 
     availableOutputDevices = [],
     selectedOutputId = '',
-    onOutputChange = () => { }
+    onOutputChange = () => { },
+    idleStatus = 'מוכן'
 
 }: RecordingControlsProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -187,7 +189,7 @@ export default function RecordingControls({
                 style={{ fontFamily: 'ui-monospace, monospace' }}>
                 {formatTime(duration)}
             </div>
-            <p className="text-2xs text-subdued animate-pulse">{isPaused ? 'מושהה' : isPreRolling ? 'מתכונן...' : isRecording ? 'מקליט' : 'מוכן'}</p>
+            <p className="text-2xs text-subdued animate-pulse">{isPaused ? 'מושהה' : isPreRolling ? 'מסנכרן את הביט...' : isRecording ? 'מקליט' : idleStatus}</p>
 
             {/* Settings Modal */}
             {showSettings && (

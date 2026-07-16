@@ -7,6 +7,7 @@ import BeatPlayer from './BeatPlayer'
 import type { FlowState } from '../../hooks/useFlowState'
 import { PRESET_BEATS } from '../../data/beats'
 import { useToast } from '../../contexts/ToastContext'
+import { extractYouTubeVideoId } from '../../core/youtube'
 
 interface BeatSectionProps {
     videoId: string
@@ -39,14 +40,8 @@ export function BeatSection({
     const currentBeat = PRESET_BEATS.find(b => b.id === videoId);
     const beatTitle = currentBeat ? currentBeat.name : (language === 'he' ? 'ביט מותאם אישית' : 'Custom Beat');
 
-    const extractYoutubeId = (url: string) => {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
-        const match = url.match(regExp)
-        return (match && match[2].length === 11) ? match[2] : null
-    }
-
     const handleUrlSubmit = () => {
-        const id = extractYoutubeId(urlInput)
+        const id = extractYouTubeVideoId(urlInput)
         if (id) {
             setVideoId(id)
             setShowUrlInput(false)

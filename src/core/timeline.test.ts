@@ -3,6 +3,8 @@ import {
     beatTimeFromVocal,
     chooseDriftCorrection,
     getVocalDriftSec,
+    hasPlaybackReachedEnd,
+    normalizePlaybackStart,
     vocalTimeFromBeat,
 } from './timeline'
 
@@ -42,5 +44,15 @@ describe('RapCap timeline', () => {
             playbackRate: 1,
             targetTimeSec: 10,
         })
+    })
+
+    it('ends both channels at the vocal duration', () => {
+        expect(hasPlaybackReachedEnd(9.99, 10)).toBe(true)
+        expect(hasPlaybackReachedEnd(9.5, 10)).toBe(false)
+    })
+
+    it('restarts from zero after a completed session', () => {
+        expect(normalizePlaybackStart(10, 10)).toBe(0)
+        expect(normalizePlaybackStart(4.2, 10)).toBe(4.2)
     })
 })

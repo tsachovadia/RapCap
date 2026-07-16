@@ -40,6 +40,8 @@ export default function FreestylePage() {
         permissionError,
         startRecording,
         stopRecording,
+        pauseRecording,
+        resumeRecording,
         isRecording: _isRecording,
         duration,
         analyser,
@@ -60,7 +62,7 @@ export default function FreestylePage() {
 
     // Transcription
     const [isTranscribing, setIsTranscribing] = useState(false)
-    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isTranscribing, language)
+    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isTranscribing, language, undefined, duration)
 
     // Beat State
     const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)
@@ -98,6 +100,8 @@ export default function FreestylePage() {
     } = useFlowState({
         onStartRecording: startRecording,
         onStopRecording: stopRecording,
+        onPauseRecording: pauseRecording,
+        onResumeRecording: resumeRecording,
         youtubePlayer,
         beatVolume,
         resetTranscript,

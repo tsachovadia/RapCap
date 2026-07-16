@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getNextOnboardingStep, type LeanOnboardingStep } from '../core/onboardingFlow';
 
 export type OnboardingStep = 'welcome' | 'auth' | 'install' | 'microphone' | 'notifications' | 'completed';
 
@@ -73,42 +74,14 @@ export const useOnboarding = (): OnboardingState => {
     };
 
     const nextStep = () => {
-        switch (step) {
-            case 'welcome':
-                setStep('auth');
-                break;
+        const next = getNextOnboardingStep({
+            step: step as LeanOnboardingStep,
+            isMobile: isIOS || isAndroid,
+            isStandalone,
+        });
 
-            case 'auth':
-                // Check standalone/mobile logic for install step
-                if (!isStandalone && (isIOS || isAndroid)) {
-                    setStep('install');
-                } else {
-                    setStep('microphone');
-                }
-                break;
-
-            case 'install':
-                // If they are in the browser, they might be stuck here until they install.
-                // But we allow them to 'Continue' to try the app in browser if they really want,
-                // OR the 'Next' button typically moves to Mic if they say "I'll do it later".
-                setStep('microphone');
-                break;
-
-            case 'microphone':
-                // iOS only supports Notifications in Standalone.
-                // Android supports them generally.
-                // If iOS browser (not standalone), skip notifications as they won't work.
-                if (isIOS && !isStandalone) {
-                    completeOnboarding();
-                } else {
-                    setStep('notifications');
-                }
-                break;
-
-            case 'notifications':
-                completeOnboarding();
-                break;
-        }
+        if (next === 'completed') completeOnboarding();
+        else setStep(next);
     };
 
     const completeOnboarding = () => {
