@@ -9,13 +9,14 @@ import { syncService } from '../services/dbSync'
 import { getCalibratedLatency } from '../services/latencyCalibration'
 import ReviewSessionModal from '../components/freestyle/ReviewSessionModal'
 import { MicrophoneSetupModal } from '../components/shared/MicrophoneSetupModal'
-import type { SessionAnalysis } from '../db/db';
+import type { DbSession, SessionAnalysis } from '../db/db'
+import type { TranscriptSegment, WordSegment } from '../types/transcription'
 import FreestyleModeUI from '../components/record/FreestyleModeUI'
 import ThoughtsModeUI from '../components/record/ThoughtsModeUI'
 import RecordingHeader from '../components/record/RecordingHeader'
 import RecordingControls from '../components/freestyle/RecordingControls'
 import { useAuth } from '../contexts/AuthContext'
-import { Music, Mic, Upload, Clock } from 'lucide-react'
+import { Upload, Clock } from 'lucide-react'
 import { DEFAULT_BEAT_ID } from '../data/beats'
 import { analyzeFreestyleLyrics } from '../services/gemini'
 import { transitionFlow, type FlowState } from '../core/recordingFlow'
@@ -31,6 +32,7 @@ export type { FlowState } from '../core/recordingFlow'
 export default function RecordPage() {
     const [searchParams] = useSearchParams()
     const mode: RecordingMode = resolveRecordingMode(searchParams.get('mode'))
+    const showDeveloperTools = import.meta.env.DEV && searchParams.get('debug') === '1'
     const navigate = useNavigate()
     const { user } = useAuth()
     const { showToast } = useToast()
@@ -79,7 +81,11 @@ export default function RecordPage() {
     const [showReviewModal, setShowReviewModal] = useState(false)
     const [pendingSessionBlob, setPendingSessionBlob] = useState<Blob | null>(null)
     const [showMicSetup, setShowMicSetup] = useState(false)
-    const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{ text: string, segments: any[], wordSegments: any[] } | null>(null)
+    const [enhancedTranscriptData, setEnhancedTranscriptData] = useState<{
+        text: string
+        segments: TranscriptSegment[]
+        wordSegments: WordSegment[]
+    } | null>(null)
     const [currentBeatId, setCurrentBeatId] = useState(DEFAULT_BEAT_ID)
     const [capturedBeatStartTime, setCapturedBeatStartTime] = useState<number>(0)
     const [isBeatReady, setIsBeatReady] = useState(false)
@@ -127,11 +133,11 @@ export default function RecordPage() {
     const [loadedSessionId, setLoadedSessionId] = useState<number | null>(null)
     const [loadedSessionDuration, setLoadedSessionDuration] = useState(0)
 
-    const handleLoadSession = (session: any) => {
-        setPendingSessionBlob(session.blob)
-        setSessionAnalysis(session.analysis || null)
+    const handleLoadSession = (session: DbSession) => {
+        setPendingSessionBlob(session.blob ?? null)
+        setSessionAnalysis(session.metadata?.analysis ?? null)
         setAiKeywords(session.metadata?.aiKeywords || [])
-        setLoadedSessionId(session.id)
+        setLoadedSessionId(session.id ?? null)
         setLoadedSessionDuration(session.duration || 0)
         setCurrentBeatId(session.beatId || DEFAULT_BEAT_ID)
 
@@ -278,7 +284,7 @@ export default function RecordPage() {
         const offset = Math.max(0, recordingStartTimeRef.current - transcriptionStartTimeRef.current) / 1000
 
         // Correct segments if needed (shared logic)
-        const processSegments = (segs: any[]) => segs
+        const processSegments = <T extends { timestamp: number },>(segs: T[]): T[] => segs
             .map(s => ({ ...s, timestamp: s.timestamp - offset }))
             .filter(s => s.timestamp >= 0)
 
@@ -340,23 +346,24 @@ export default function RecordPage() {
                     language,
                     notes,
                     aiKeywords: finalKeywords,
+                    analysis: overrides?.metadata?.analysis ?? sessionAnalysis ?? undefined,
                     ...(overrides ? overrides.metadata : {})
                 },
-                analysis: (overrides && overrides.metadata && overrides.metadata.analysis) ? overrides.metadata.analysis : sessionAnalysis
             }
 
             if (loadedSessionId) {
                 await sessionRepo.update(loadedSessionId, sessionData)
                 if (user) syncService.syncSessions(user.uid).catch(console.error);
             } else {
-                await sessionRepo.create({
+                const newSession: DbSession = {
                     ...sessionData,
-                    title: sessionData.title!,
+                    title: sessionData.title ?? `Freestyle ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`,
                     createdAt: new Date(),
                     date: new Date(),
                     type: mode,
                     beatId: currentBeatId,
-                } as any)
+                }
+                await sessionRepo.create(newSession)
                 if (user) syncService.syncSessions(user.uid).catch(console.error);
             }
 
@@ -438,7 +445,7 @@ export default function RecordPage() {
             analysis: sessionAnalysis || undefined,
             moments: moments
         }
-    } as any as import('../db/db').DbSession;
+    } satisfies DbSession
 
     return (
         <div className="h-[100dvh] flex flex-col relative overflow-hidden bg-black text-white px-4" dir={language === 'he' ? 'rtl' : 'ltr'}>
@@ -460,7 +467,7 @@ export default function RecordPage() {
             />
 
             {/* Test/Debug Controls (Only in Freestyle Mode) */}
-            {mode === 'freestyle' && flowState === 'idle' && (
+            {showDeveloperTools && mode === 'freestyle' && flowState === 'idle' && (
                 <div className="flex justify-center -mt-2 mb-2 gap-2 relative z-50">
                     <button
                         onClick={() => fileInputRef.current?.click()}
@@ -502,7 +509,6 @@ export default function RecordPage() {
                 </div>
             )}
 
-            {/* Mode Switcher */}
             {flowState === 'idle' && !isLiveTranscriptionSupported && (
                 <div className="mx-auto my-1 max-w-xl rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-center text-xs text-amber-100">
                     {language === 'he'
@@ -517,35 +523,6 @@ export default function RecordPage() {
                         : 'Transcription stopped, but recording continues. You can edit the text later.'}
                 </div>
             )}
-            <div className="flex-none flex justify-center py-2">
-                <div className="bg-[#1a1a1a] p-1 rounded-2xl flex items-center gap-1 border border-white/5 shadow-xl">
-                    <button
-                        onClick={() => navigate('/record?mode=freestyle')}
-                        disabled={flowState !== 'idle'}
-                        className={`
-                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
-                            ${mode === 'freestyle' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
-                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        <Music size={14} />
-                        <span>{language === 'he' ? 'פריסטייל' : 'Freestyle'}</span>
-                    </button>
-                    <button
-                        onClick={() => navigate('/record?mode=thoughts')}
-                        disabled={flowState !== 'idle'}
-                        className={`
-                            flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all relative
-                            ${mode === 'thoughts' ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/20' : 'text-white/40 hover:text-white/60'}
-                            ${flowState !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        <Mic size={14} />
-                        <span>{language === 'he' ? 'מחשבות' : 'Thoughts'}</span>
-                    </button>
-                </div>
-            </div>
-
             <main className="flex-1 flex flex-col gap-2 min-h-0 pb-4">
                 {mode === 'freestyle' && (
                     <FreestyleModeUI
