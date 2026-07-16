@@ -8,7 +8,7 @@ interface AuthStepProps {
 }
 
 export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
-    const { signInWithGoogle, user } = useAuth();
+    const { signInWithGoogle, user, cloudEnabled } = useAuth();
     const [isLoggingIn, setIsLoggingIn] = React.useState(false);
     const { updateProfile } = useProfile();
 
@@ -17,10 +17,13 @@ export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
         setIsLoggingIn(true);
         try {
             await signInWithGoogle();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Login failed in onboarding", error);
+            const code = typeof error === 'object' && error !== null && 'code' in error
+                ? String((error as { code?: unknown }).code)
+                : '';
             // reset loading if it was a cancel or close
-            if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
+            if (code === 'auth/cancelled-popup-request' || code === 'auth/popup-closed-by-user') {
                 setIsLoggingIn(false);
             }
         } finally {
@@ -57,6 +60,14 @@ export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
                 </div>
 
                 <div className="w-full max-w-sm space-y-4">
+                    {!cloudEnabled ? (
+                        <button
+                            onClick={onNext}
+                            className="w-full py-4 px-6 bg-[#1DB954] text-black font-bold rounded-xl hover:bg-[#1ed760] transition-transform active:scale-95"
+                        >
+                            המשך במצב מקומי
+                        </button>
+                    ) : (
                     <button
                         onClick={handleLogin}
                         disabled={isLoggingIn}
@@ -69,9 +80,12 @@ export const AuthStep: React.FC<AuthStepProps> = ({ onNext }) => {
                         )}
                         <span className="text-lg">התחבר עם Google</span>
                     </button>
+                    )}
 
                     <p className="text-xs text-zinc-600">
-                        אנחנו שומרים רק את מה שאתה יוצר. בלי שטויות.
+                        {cloudEnabled
+                            ? 'אנחנו שומרים רק את מה שאתה יוצר. בלי שטויות.'
+                            : 'הסשנים נשמרים במכשיר. אפשר לחבר גיבוי ענן בהמשך.'}
                     </p>
                 </div>
             </div>

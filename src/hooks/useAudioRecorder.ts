@@ -44,8 +44,8 @@ export function useAudioRecorder() {
     const [selectedOutputId, setSelectedOutputId] = useState<string>('');
     const [availableOutputDevices, setAvailableOutputDevices] = useState<MediaDeviceInfo[]>([]);
 
-    // Prevent double-starts
-    const [isInitializing, setIsInitializing] = useState(false);
+    // Prevent double-starts without making the callback identity change mid pre-roll.
+    const isInitializingRef = useRef(false);
 
     // Effects for persistence
     useEffect(() => {
@@ -254,12 +254,12 @@ export function useAudioRecorder() {
     };
 
     const startRecording = useCallback(async () => {
-        if (recorderState.isRecording || isInitializing) {
+        if (isInitializingRef.current || (mediaRecorder.current && mediaRecorder.current.state !== 'inactive')) {
             console.warn("⚠️ Start recording called while already active or initializing. Ignoring.")
-            return
+            return false
         }
 
-        setIsInitializing(true)
+        isInitializingRef.current = true
         console.log("🎙️ Requesting Microphone Access...")
 
         try {
@@ -310,18 +310,23 @@ export function useAudioRecorder() {
                 }
             };
 
-            recorder.onstart = () => {
-                console.log("🔴 MediaRecorder Started Event")
-                setIsInitializing(false)
-            }
+            await new Promise<void>((resolve, reject) => {
+                recorder.onstart = () => {
+                    console.log("🔴 MediaRecorder Started Event")
+                    isInitializingRef.current = false
+                    resolve()
+                }
 
-            recorder.onerror = (e) => {
-                console.error("❌ MediaRecorder Error:", e)
-                setPermissionError(new Error("Recording error occurred"))
-                setIsInitializing(false)
-            }
+                recorder.onerror = (event) => {
+                    console.error("❌ MediaRecorder Error:", event)
+                    const error = new Error("Recording error occurred")
+                    setPermissionError(error)
+                    isInitializingRef.current = false
+                    reject(error)
+                }
 
-            recorder.start();
+                recorder.start()
+            })
             console.log("🔴 Recording started");
 
             startTimeRef.current = Date.now();
@@ -342,12 +347,15 @@ export function useAudioRecorder() {
                 setRecorderState(prev => ({ ...prev, duration: rawElapsed / 1000 }));
             }, 100);
 
+            return true;
+
         } catch (err) {
             console.error("❌ Failed to start recording:", err);
             showToast('שגיאה בהתחלת ההקלטה', 'error');
-            setIsInitializing(false)
+            isInitializingRef.current = false
+            return false;
         }
-    }, [initializeStream]);
+    }, [initializeStream, showToast]);
 
     const stopRecording = useCallback((): Promise<Blob> => {
         return new Promise((resolve) => {
@@ -381,25 +389,35 @@ export function useAudioRecorder() {
         });
     }, []);
 
-    const togglePause = useCallback(() => {
-        if (!mediaRecorder.current) return;
-        if (recorderState.isPaused) {
-            mediaRecorder.current.resume();
-            const now = Date.now();
-            pausedTimeRef.current += (now - pauseStartRef.current);
-            timerRef.current = window.setInterval(() => {
-                const currentNow = Date.now();
-                const rawElapsed = currentNow - startTimeRef.current - pausedTimeRef.current;
-                setRecorderState(prev => ({ ...prev, duration: rawElapsed / 1000 }));
-            }, 100);
-            setRecorderState(prev => ({ ...prev, isPaused: false }));
-        } else {
-            mediaRecorder.current.pause();
-            pauseStartRef.current = Date.now();
-            if (timerRef.current) clearInterval(timerRef.current);
-            setRecorderState(prev => ({ ...prev, isPaused: true }));
+    const pauseRecording = useCallback(() => {
+        const recorder = mediaRecorder.current;
+        if (!recorder || recorder.state !== 'recording') return false;
+
+        recorder.pause();
+        pauseStartRef.current = Date.now();
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
         }
-    }, [recorderState.isPaused]);
+        setRecorderState(prev => ({ ...prev, isPaused: true }));
+        return true;
+    }, []);
+
+    const resumeRecording = useCallback(() => {
+        const recorder = mediaRecorder.current;
+        if (!recorder || recorder.state !== 'paused') return false;
+
+        recorder.resume();
+        const now = Date.now();
+        pausedTimeRef.current += now - pauseStartRef.current;
+        timerRef.current = window.setInterval(() => {
+            const currentNow = Date.now();
+            const rawElapsed = currentNow - startTimeRef.current - pausedTimeRef.current;
+            setRecorderState(prev => ({ ...prev, duration: rawElapsed / 1000 }));
+        }, 100);
+        setRecorderState(prev => ({ ...prev, isPaused: false }));
+        return true;
+    }, []);
 
     // Cleanup
     useEffect(() => {
@@ -452,7 +470,8 @@ export function useAudioRecorder() {
         permissionError,
         startRecording,
         stopRecording,
-        togglePause,
+        pauseRecording,
+        resumeRecording,
         deviceLabel,
         availableDevices,
         selectedDeviceId,

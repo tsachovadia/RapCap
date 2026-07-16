@@ -14,6 +14,11 @@ import { db, type DbSession } from '../../db/db'
 import { syncService } from '../../services/dbSync'
 import { useAuth } from '../../contexts/AuthContext'
 import { Music, Download } from 'lucide-react'
+import {
+    beatTimeFromVocal,
+    chooseDriftCorrection,
+    vocalTimeFromBeat,
+} from '../../core/timeline'
 
 interface SessionPlayerProps {
     session: DbSession
@@ -44,14 +49,12 @@ export default function SessionPlayer({
     const trackRef = useRef<HTMLDivElement>(null)
     const lastSourceKeyRef = useRef<string>('')
     const bufferingTimeoutRef = useRef<any>(null)
-    const playbackStartTimeRef = useRef<number>(0)
-    const hasStartedPlaybackRef = useRef<boolean>(false)
     const isTransitioningRef = useRef<boolean>(false)
 
     // State
     const [currentTime, setCurrentTime] = useState(0)
     const [vocalVolume, setVocalVolume] = useState(1.0)
-    const [beatVolume, setBeatVolume] = useState(0) // Default to muted per user request
+    const [beatVolume, setBeatVolume] = useState(50)
     const [syncOffset, setSyncOffset] = useState(session.syncOffset || 0)
     const [audioPeaks, setAudioPeaks] = useState<number[]>([])
     const [isProcessingAudio, setIsProcessingAudio] = useState(false)
@@ -238,67 +241,26 @@ export default function SessionPlayer({
     // Master Clock & Sync
     useEffect(() => {
         let animationFrame: number
+        const beatStartTimeSec = session.beatStartTime || 0
+        const syncOffsetSec = syncOffset / 1000
 
         const loop = () => {
             animationFrame = requestAnimationFrame(loop)
 
             if (isPlaying && youtubeRef.current?.getCurrentTime) {
-                const ytTime = youtubeRef.current.getCurrentTime()
-
-                // Final Fix: Jump over the "jitter zone".
-                // User suggested 2.5s as a stable start point.
-                if (ytTime < 1.0 && !hasJumpedRef.current) {
-                    hasJumpedRef.current = true
-                    const segments = session.metadata?.lyricsSegments
-                    // Jump to first segment or 2.5s, whichever is later to ensure stability
-                    const firstSegmentTime = (segments && segments.length > 0) ? segments[0].timestamp : 0
-
-                    // NEW: Use specific beat start time if available, otherwise fallback to heuristic
-                    const beatStartTime = session.beatStartTime || 0
-                    const jumpTarget = Math.max(2.5, firstSegmentTime, beatStartTime)
-
-
-                    try {
-                        youtubeRef.current.seekTo(jumpTarget, true)
-
-                        // Calculate audio start time based on beat start time logic
-                        let audioStart = 0
-                        if (beatStartTime > 0) {
-                            // If we have exact start time, we just play from 0 (start of recording)
-                            // because jumpTarget is where the beat SHOULD be.
-                            // The sync formula is: AudioTime = BeatTime - BeatStartTime - Offset
-                            audioStart = Math.max(0, jumpTarget - beatStartTime - (syncOffset / 1000))
-                        } else {
-                            // Legacy fallback
-                            audioStart = Math.max(0, jumpTarget - (syncOffset / 1000))
-                        }
-
-                        if (audioRef.current) audioRef.current.currentTime = audioStart
-                    } catch (err) {
-                        console.warn("⚠️ YouTube jump failed:", err)
-                    }
-                    return
-                }
-
-                setCurrentTime(ytTime)
-                onTimeUpdate?.(ytTime)
-
-                const offsetSeconds = syncOffset / 1000
-                const beatStartTime = session.beatStartTime || 0
-                const targetAudioTime = ytTime - beatStartTime - offsetSeconds
+                const beatTimeSec = youtubeRef.current.getCurrentTime()
+                const targetAudioTime = vocalTimeFromBeat({
+                    beatTimeSec,
+                    beatStartTimeSec,
+                    syncOffsetSec,
+                })
                 const audio = audioRef.current
 
-                if (audio) {
-                    // Grace period: don't aggressively correct in first 500ms of playback
-                    const timeSinceStart = Date.now() - playbackStartTimeRef.current
-                    const isInGracePeriod = timeSinceStart < 500
+                setCurrentTime(targetAudioTime)
+                onTimeUpdate?.(targetAudioTime)
 
-                    if (targetAudioTime < 0) {
-                        if (!audio.paused && !isInGracePeriod) {
-                            audio.pause()
-                            isTransitioningRef.current = false
-                        }
-                    } else if (targetAudioTime >= audio.duration) {
+                if (audio) {
+                    if (targetAudioTime >= audio.duration) {
                         if (!audio.paused) {
                             audio.pause()
                             isTransitioningRef.current = false
@@ -306,25 +268,21 @@ export default function SessionPlayer({
                     } else {
                         if (audio.readyState < 2) return
 
-                        // Avoid rapid-fire play/seek calls while transitioning
-                        if (isTransitioningRef.current && (audio.seeking || !audio.paused)) {
-                            // If we were transitioning and it finally started or is seeking, we can stop the "waiting" phase
-                            if (!audio.paused || audio.seeking) {
-                                // still transitioning but progress made
-                            }
-                        }
-
                         if (audio.paused && !audio.seeking && !isTransitioningRef.current) {
                             audio.currentTime = targetAudioTime
+                            audio.playbackRate = 1
                             isTransitioningRef.current = true
                             audio.play().then(() => {
                                 isTransitioningRef.current = false
                             }).catch(() => {
                                 isTransitioningRef.current = false
                             })
-                        } else if (!isInGracePeriod && !audio.seeking && Math.abs(audio.currentTime - targetAudioTime) > 0.1) {
-                            // Tighter sync threshold (100ms) vs previous 250ms
-                            audio.currentTime = targetAudioTime
+                        } else if (!audio.seeking) {
+                            const correction = chooseDriftCorrection(targetAudioTime, audio.currentTime)
+                            audio.playbackRate = correction.playbackRate
+                            if (correction.kind === 'seek' && correction.targetTimeSec !== undefined) {
+                                audio.currentTime = correction.targetTimeSec
+                            }
                         }
                     }
                 }
@@ -336,41 +294,50 @@ export default function SessionPlayer({
         }
 
         if (isPlaying) {
-            playbackStartTimeRef.current = Date.now()
-            hasStartedPlaybackRef.current = false
-
             if (session.beatId && youtubeRef.current) {
-                youtubeRef.current.setVolume(beatVolume) // Re-ensure volume on play
+                const vocalStartSec = audioRef.current?.currentTime || 0
+                const beatStartSec = beatTimeFromVocal(vocalStartSec, beatStartTimeSec, syncOffsetSec)
+                youtubeRef.current.seekTo(beatStartSec, true)
+                youtubeRef.current.setVolume(beatVolume)
                 youtubeRef.current.playVideo()
             } else if (!session.beatId && audioRef.current) {
                 // Reset to beginning on first play if near start
                 if (audioRef.current.currentTime < 0.5) {
                     audioRef.current.currentTime = 0
                 }
-                hasStartedPlaybackRef.current = true
                 audioRef.current.play().catch(() => { })
             }
             loop()
         } else {
-            hasStartedPlaybackRef.current = false
-            audioRef.current?.pause()
+            if (audioRef.current) {
+                audioRef.current.pause()
+                audioRef.current.playbackRate = 1
+            }
             youtubeRef.current?.pauseVideo()
         }
 
         return () => cancelAnimationFrame(animationFrame)
-    }, [isPlaying, syncOffset, session.beatId, onTimeUpdate])
-
-    // Simplified initial jump to facilitate the loop fix
-    const hasJumpedRef = useRef(false)
-    useEffect(() => {
-        if (!isPlaying) hasJumpedRef.current = false
-    }, [isPlaying])
+    }, [beatVolume, isPlaying, onTimeUpdate, session.beatId, session.beatStartTime, syncOffset])
 
     const handleSeek = useCallback((time: number) => {
-        if (youtubeRef.current) youtubeRef.current.seekTo(time)
-        if (audioRef.current) audioRef.current.currentTime = Math.max(0, time - syncOffset / 1000)
+        const beatTimeSec = beatTimeFromVocal(time, session.beatStartTime || 0, syncOffset / 1000)
+        if (youtubeRef.current) youtubeRef.current.seekTo(beatTimeSec, true)
+        if (audioRef.current) {
+            audioRef.current.currentTime = Math.max(0, time)
+            audioRef.current.playbackRate = 1
+        }
         setCurrentTime(time)
-    }, [syncOffset])
+    }, [session.beatStartTime, syncOffset])
+
+    const handleSyncChange = useCallback((nextOffset: number) => {
+        setSyncOffset(nextOffset)
+        if (session.id) {
+            void db.sessions.update(session.id, {
+                syncOffset: nextOffset,
+                updatedAt: new Date(),
+            })
+        }
+    }, [session.id])
 
     const handleDownload = useCallback(async () => {
         const cloudUrl = session.metadata?.cloudUrl
@@ -478,7 +445,7 @@ export default function SessionPlayer({
                     className="flex items-center justify-center gap-2 w-full py-3 bg-[#1DB954]/20 hover:bg-[#1DB954]/30 text-[#1DB954] rounded-lg transition-colors border border-[#1DB954]/30"
                 >
                     <Download size={18} />
-                    <span className="font-medium">הורד הקלטה (MP3)</span>
+                    <span className="font-medium">הורד ערוץ ווקאל</span>
                 </button>
             )}
 
@@ -540,7 +507,7 @@ export default function SessionPlayer({
             {session.beatId && (
                 <SyncControls
                     syncOffset={syncOffset}
-                    onSyncChange={setSyncOffset}
+                    onSyncChange={handleSyncChange}
                 />
             )}
 
@@ -560,16 +527,17 @@ export default function SessionPlayer({
                 <MomentsList moments={moments} onSeek={handleSeek} />
             )}
 
-            {/* Hidden YouTube Player */}
+            {/* Visible beat player keeps the source understandable and debuggable. */}
             {session.beatId && (
-                <div className="hidden">
+                <div className="w-full aspect-video max-h-52 overflow-hidden rounded-lg border border-[#282828] bg-black">
                     <YouTube
                         videoId={session.beatId}
                         onReady={(e) => {
                             youtubeRef.current = e.target;
                             e.target.setVolume(beatVolume);
                         }}
-                        opts={{ height: '0', width: '0', playerVars: { playsinline: 1, controls: 0 } }}
+                        className="w-full h-full"
+                        opts={{ height: '100%', width: '100%', playerVars: { playsinline: 1, controls: 1 } }}
                     />
                 </div>
             )}

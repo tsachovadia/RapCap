@@ -18,9 +18,11 @@ import { useAuth } from '../contexts/AuthContext'
 import { Music, Mic, Upload, Clock } from 'lucide-react'
 import { DEFAULT_BEAT_ID } from '../data/beats'
 import { analyzeFreestyleLyrics } from '../services/gemini'
+import { transitionFlow, type FlowState } from '../core/recordingFlow'
+import { captureBeatStartTimeSec } from '../core/sessionTiming'
 
 export type RecordingMode = 'freestyle' | 'thoughts'
-export type FlowState = 'idle' | 'preroll' | 'recording' | 'paused'
+export type { FlowState } from '../core/recordingFlow'
 
 export default function RecordPage() {
     const [searchParams] = useSearchParams()
@@ -36,6 +38,8 @@ export default function RecordPage() {
         permissionError,
         startRecording,
         stopRecording,
+        pauseRecording,
+        resumeRecording,
         isRecording,
         duration,
         analyser,
@@ -52,7 +56,16 @@ export default function RecordPage() {
 
     const [language, setLanguage] = useState<'he' | 'en'>('he')
     const [isTranscribing, setIsTranscribing] = useState(false)
-    const { transcript, interimTranscript, segments, wordSegments, resetTranscript, transcriptRef } = useTranscription(isTranscribing, language)
+    const {
+        transcript,
+        interimTranscript,
+        segments,
+        wordSegments,
+        resetTranscript,
+        transcriptRef,
+        isSupported: isLiveTranscriptionSupported,
+        status: transcriptionStatus,
+    } = useTranscription(isTranscribing, language)
 
     // --- Flow State ---
     const [flowState, setFlowState] = useState<FlowState>('idle')
@@ -145,28 +158,28 @@ export default function RecordPage() {
             return
         }
 
-        transcriptionStartTimeRef.current = Date.now()
-
         try {
             await initializeStream()
-
-            // Start transcription only after stream is initialized
-            setIsTranscribing(true)
-
-            // different modes might have different pre-roll needs
-            if (mode === 'freestyle') {
-                setFlowState('preroll')
-            } else {
-                await startRecording()
-                recordingStartTimeRef.current = Date.now()
-                setFlowState('recording')
-            }
             resetTranscript()
             setMoments([])
-            setAiKeywords([]) // Reset keywords
-            setLoadedSessionId(null) // Clear any loaded session
+            setAiKeywords([])
+            setLoadedSessionId(null)
             setLoadedSessionDuration(0)
-            setEnhancedTranscriptData(null) // Clear enhanced data too
+            setEnhancedTranscriptData(null)
+
+            if (mode === 'freestyle') {
+                setIsTranscribing(false)
+                setFlowState(current => transitionFlow(current, 'START_PREROLL'))
+            } else {
+                const started = await startRecording()
+                if (!started) throw new Error('Recorder did not start')
+
+                const startedAt = Date.now()
+                recordingStartTimeRef.current = startedAt
+                transcriptionStartTimeRef.current = startedAt
+                setIsTranscribing(true)
+                setFlowState(current => transitionFlow(current, 'START_RECORDING'))
+            }
         } catch (e) {
             console.error('Failed to start flow:', e)
             setFlowState('idle')
@@ -175,17 +188,18 @@ export default function RecordPage() {
     }
 
     const handlePauseFlow = () => {
-        setFlowState('paused')
+        if (!pauseRecording()) return
+        setFlowState(current => transitionFlow(current, 'PAUSE'))
         setIsTranscribing(false)
     }
 
     const handleResumeFlow = () => {
-        setFlowState('recording')
+        if (!resumeRecording()) return
+        setFlowState(current => transitionFlow(current, 'RESUME'))
         setIsTranscribing(true)
     }
 
     const handleFinishFlow = async () => {
-        setFlowState('idle')
         setIsTranscribing(false)
         if (isRecording) {
             const blob = await stopRecording()
@@ -207,6 +221,7 @@ export default function RecordPage() {
                 }
             }
         }
+        setFlowState(current => transitionFlow(current, 'FINISH'))
     }
 
     const handleSaveMoment = () => {
@@ -292,7 +307,7 @@ export default function RecordPage() {
                     date: new Date(),
                     type: mode,
                     beatId: currentBeatId,
-                    beatStartTime: capturedBeatStartTime + (getCalibratedLatency() / 1000),
+                    beatStartTime: captureBeatStartTimeSec(capturedBeatStartTime, getCalibratedLatency()),
                 }),
                 ...overrides,
                 metadata: {
@@ -312,7 +327,14 @@ export default function RecordPage() {
                 await db.sessions.update(loadedSessionId, sessionData)
                 if (user) syncService.syncSessions(user.uid).catch(console.error);
             } else {
-                await db.sessions.add({ ...sessionData, title: sessionData.title!, createdAt: new Date(), date: new Date(), type: mode, beatId: currentBeatId, beatStartTime: 0 } as any)
+                await db.sessions.add({
+                    ...sessionData,
+                    title: sessionData.title!,
+                    createdAt: new Date(),
+                    date: new Date(),
+                    type: mode,
+                    beatId: currentBeatId,
+                } as any)
                 if (user) syncService.syncSessions(user.uid).catch(console.error);
             }
 
@@ -337,13 +359,22 @@ export default function RecordPage() {
     }
 
     // Modal Callback for Pre-roll complete (Used by FreestyleModeUI)
-    const onPreRollComplete = async (beatTime: number) => {
+    const onPreRollComplete = useCallback(async (getBeatTime: () => number) => {
         if (flowState !== 'preroll') return
-        await startRecording()
-        setCapturedBeatStartTime(beatTime) // Capture the exact time
-        recordingStartTimeRef.current = Date.now()
-        setFlowState('recording')
-    }
+        const started = await startRecording()
+        if (!started) {
+            setIsTranscribing(false)
+            setFlowState('idle')
+            return
+        }
+
+        const startedAt = Date.now()
+        setCapturedBeatStartTime(getBeatTime())
+        recordingStartTimeRef.current = startedAt
+        transcriptionStartTimeRef.current = startedAt
+        setIsTranscribing(true)
+        setFlowState(current => transitionFlow(current, 'START_RECORDING'))
+    }, [flowState, startRecording])
 
     const sessionForModal = {
         id: loadedSessionId || undefined,
@@ -426,6 +457,20 @@ export default function RecordPage() {
             )}
 
             {/* Mode Switcher */}
+            {flowState === 'idle' && !isLiveTranscriptionSupported && (
+                <div className="mx-auto my-1 max-w-xl rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-center text-xs text-amber-100">
+                    {language === 'he'
+                        ? 'תמלול חי לא זמין בדפדפן הזה. האודיו עדיין יוקלט ויישמר.'
+                        : 'Live transcription is unavailable in this browser. Audio will still be recorded and saved.'}
+                </div>
+            )}
+            {(transcriptionStatus === 'blocked' || transcriptionStatus === 'error') && (
+                <div className="mx-auto my-1 max-w-xl rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-center text-xs text-red-100">
+                    {language === 'he'
+                        ? 'התמלול נעצר, אבל ההקלטה ממשיכה. אפשר לתקן את הטקסט אחר כך.'
+                        : 'Transcription stopped, but recording continues. You can edit the text later.'}
+                </div>
+            )}
             <div className="flex-none flex justify-center py-2">
                 <div className="bg-[#1a1a1a] p-1 rounded-2xl flex items-center gap-1 border border-white/5 shadow-xl">
                     <button

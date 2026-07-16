@@ -14,7 +14,7 @@ import { useToast } from '../../contexts/ToastContext'
 interface Props {
     flowState: FlowState
     language: 'he' | 'en'
-    onPreRollComplete: (beatStartTime: number) => void
+    onPreRollComplete: (getBeatTime: () => number) => Promise<void>
     onBeatChange?: (beatId: string) => void
     segments: any[]
     interimTranscript: string
@@ -32,6 +32,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     const [showUrlInput, setShowUrlInput] = useState(false)
     const [urlInput, setUrlInput] = useState('')
     const preRollCheckRef = useRef<number | null>(null)
+    const preRollCompletedRef = useRef(false)
     const transcriptContainerRef = useRef<HTMLDivElement>(null)
 
 
@@ -178,6 +179,7 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
     // Pre-roll Monitoring
     useEffect(() => {
         if (flowState === 'preroll' && youtubePlayer && typeof youtubePlayer.seekTo === 'function') {
+            preRollCompletedRef.current = false
             // Seek to start and play
             try {
                 youtubePlayer.seekTo(0)
@@ -190,19 +192,21 @@ export default function FreestyleModeUI({ flowState, language, onPreRollComplete
             // Start polling for 2-second mark
             preRollCheckRef.current = window.setInterval(() => {
                 const currentTime = youtubePlayer.getCurrentTime()
-                if (currentTime >= 2) { // 2 seconds pre-roll
+                if (currentTime >= 2 && !preRollCompletedRef.current) { // 2 seconds pre-roll
+                    preRollCompletedRef.current = true
                     if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
-                    onPreRollComplete(currentTime)
+                    void onPreRollComplete(() => youtubePlayer.getCurrentTime())
                 }
             }, 100)
         } else {
+            preRollCompletedRef.current = false
             if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
         }
 
         return () => {
             if (preRollCheckRef.current) clearInterval(preRollCheckRef.current)
         }
-    }, [flowState, youtubePlayer])
+    }, [flowState, onPreRollComplete, youtubePlayer])
 
 
     const extractYoutubeId = (url: string) => {

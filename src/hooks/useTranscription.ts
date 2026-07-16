@@ -9,7 +9,8 @@ import {
     createRecognition,
     isSpeechRecognitionSupported,
     getRestartDelay,
-    MAX_CONSECUTIVE_ERRORS
+    MAX_CONSECUTIVE_ERRORS,
+    type SpeechRecognitionInstance,
 } from '../services/speechRecognition'
 import {
     interpolateWordTimestamps,
@@ -20,16 +21,20 @@ import {
 /** Default silence threshold in ms - commit interim if no change */
 const DEFAULT_SILENCE_THRESHOLD_MS = 2500
 
+export type TranscriptionStatus = 'unsupported' | 'idle' | 'starting' | 'listening' | 'blocked' | 'error'
+
 export function useTranscription(isRecording: boolean, language: 'he' | 'en' = 'he', silenceThresholdMs: number = DEFAULT_SILENCE_THRESHOLD_MS) {
+    const isSupported = isSpeechRecognitionSupported()
     // State
     const [transcript, setTranscript] = useState('')
     const [interimTranscript, setInterimTranscript] = useState('')
     const [wordSegments, setWordSegments] = useState<WordSegment[]>([])
     const [segments, setSegments] = useState<TranscriptSegment[]>([])
     const [isListening, setIsListening] = useState(false)
+    const [status, setStatus] = useState<TranscriptionStatus>(isSupported ? 'idle' : 'unsupported')
 
     // Refs for callbacks (avoid stale closures)
-    const recognitionRef = useRef<any>(null)
+    const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
     const startTimeRef = useRef<number>(0)
     const phraseStartRef = useRef<number>(0)
     const isRecordingRef = useRef(isRecording)
@@ -112,6 +117,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
         if (!isSpeechRecognitionSupported()) {
             console.warn('Speech Recognition not supported')
+            setStatus('unsupported')
             return
         }
 
@@ -128,6 +134,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 onStart: () => {
                     if (!isActive) return
                     setIsListening(true)
+                    setStatus('listening')
                     errorCountRef.current = 0
                     isRestartingRef.current = false
                 },
@@ -198,6 +205,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                     if (errorCountRef.current > MAX_CONSECUTIVE_ERRORS) {
                         console.warn('Too many errors, stopping auto-restart')
                         setIsListening(false)
+                        setStatus('error')
                         return
                     }
 
@@ -214,6 +222,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                         }, delay)
                     } else {
                         setIsListening(false)
+                        setStatus(current => current === 'blocked' || current === 'error' ? current : 'idle')
                     }
                     isRestartingRef.current = false
                 },
@@ -222,6 +231,9 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                     if (!isActive) return
                     if (error === 'not-allowed' || error === 'service-not-allowed') {
                         isRecordingRef.current = false
+                        setStatus('blocked')
+                    } else {
+                        setStatus('error')
                     }
                     errorCountRef.current++
                 }
@@ -232,6 +244,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
         // Start if recording
         if (isRecording && recognition) {
+            setStatus('starting')
             startTimeRef.current = Date.now()
             try {
                 recognition.start()
@@ -247,6 +260,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                 recognition?.stop()
             } catch (e) { /* ignore */ }
             setIsListening(false)
+            setStatus('idle')
         }
     }, [language, isRecording])
 
@@ -272,6 +286,8 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         segments,
         wordSegments,
         isListening,
+        isSupported,
+        status,
         resetTranscript,
         transcriptRef // Expose Ref for reading inside closures (handleFinishFlow)
     }

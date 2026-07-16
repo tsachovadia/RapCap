@@ -10,7 +10,7 @@ import {
     browserLocalPersistence
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, firebaseEnabled } from '../lib/firebase';
 import { syncService } from '../services/dbSync';
 
 interface AuthContextType {
@@ -18,6 +18,7 @@ interface AuthContextType {
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
     logout: () => Promise<void>;
+    cloudEnabled: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -32,6 +33,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         let isMounted = true;
+
+        if (!firebaseEnabled) {
+            console.info('RapCap is running in local-only mode; cloud auth is disabled.');
+            setLoading(false);
+            return () => {
+                isMounted = false;
+            };
+        }
 
         const initAuth = async () => {
             console.log("🚀 Auth: Initializing...", {
@@ -114,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user]);
 
     const signInWithGoogle = async () => {
+        if (!firebaseEnabled) return;
         const provider = new GoogleAuthProvider();
         // Force account selection to help with debug/switching
         provider.setCustomParameters({ prompt: 'select_account' });
@@ -147,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = async () => {
+        if (!firebaseEnabled) return;
         try {
             await signOut(auth);
         } catch (error) {
@@ -158,7 +169,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         signInWithGoogle,
-        logout
+        logout,
+        cloudEnabled: firebaseEnabled,
     };
 
     return (

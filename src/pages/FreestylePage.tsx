@@ -40,6 +40,8 @@ export default function FreestylePage() {
         permissionError,
         startRecording,
         stopRecording,
+        pauseRecording,
+        resumeRecording,
         isRecording: _isRecording,
         duration,
         analyser,
@@ -98,6 +100,8 @@ export default function FreestylePage() {
     } = useFlowState({
         onStartRecording: startRecording,
         onStopRecording: stopRecording,
+        onPauseRecording: pauseRecording,
+        onResumeRecording: resumeRecording,
         youtubePlayer,
         beatVolume,
         resetTranscript,

@@ -98,6 +98,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const flow = useFlowState({
         onStartRecording: recorder.startRecording,
         onStopRecording: recorder.stopRecording,
+        onPauseRecording: recorder.pauseRecording,
+        onResumeRecording: recorder.resumeRecording,
         youtubePlayer,
         beatVolume,
         resetTranscript: transcription.resetTranscript,
