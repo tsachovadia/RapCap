@@ -42,6 +42,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
         }
 
+        // Cloud auth must never gate the local recording product. Attach the
+        // state listener immediately, then finish redirect/persistence work in
+        // the background. This keeps a slow or blocked Firebase endpoint from
+        // producing a blank PWA screen.
+        const unsubscribe = onAuthStateChanged(auth, (u) => {
+            if (!isMounted) return;
+            console.log("👤 Auth: State Changed ->", u ? `Member (${u.email})` : "Guest");
+            setUser(u);
+            setLoading(false);
+        }, (error) => {
+            if (!isMounted) return;
+            console.warn('⚠️ Auth: State listener failed; continuing in local mode.', error);
+            setLoading(false);
+        });
+
+        const loadingTimeout = window.setTimeout(() => {
+            if (!isMounted) return;
+            console.warn('⚠️ Auth: Startup timed out; continuing in local mode.');
+            setLoading(false);
+        }, 5000);
+
         const initAuth = async () => {
             console.log("🚀 Auth: Initializing...", {
                 domain: auth.config.authDomain,
@@ -80,22 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.error("❌ Auth: Initialization error", error);
             }
 
-            // 3. Setup long-term listener
-            const unsubscribe = onAuthStateChanged(auth, (u) => {
-                if (!isMounted) return;
-                console.log("👤 Auth: State Changed ->", u ? `Member (${u.email})` : "Guest");
-                setUser(u);
-                setLoading(false);
-            });
-
-            return unsubscribe;
         };
 
-        const authPromise = initAuth();
+        void initAuth();
 
         return () => {
             isMounted = false;
-            authPromise.then(unsub => unsub && unsub());
+            window.clearTimeout(loadingTimeout);
+            unsubscribe();
         };
     }, []);
 
@@ -175,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <AuthContext.Provider value={value}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 }
