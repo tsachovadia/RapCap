@@ -33,6 +33,23 @@ export function beatTimeFromVocal(
     return Math.max(0, vocalTimeSec + beatStartTimeSec + syncOffsetSec)
 }
 
+export function hasPlaybackReachedEnd(
+    vocalTimeSec: number,
+    durationSec: number,
+    toleranceSec = 0.02,
+): boolean {
+    if (!Number.isFinite(vocalTimeSec) || !Number.isFinite(durationSec) || durationSec <= 0) {
+        return false
+    }
+
+    return vocalTimeSec >= Math.max(0, durationSec - Math.max(0, toleranceSec))
+}
+
+export function normalizePlaybackStart(vocalTimeSec: number, durationSec: number): number {
+    if (!Number.isFinite(vocalTimeSec) || vocalTimeSec < 0) return 0
+    return hasPlaybackReachedEnd(vocalTimeSec, durationSec) ? 0 : vocalTimeSec
+}
+
 /** Positive drift means the vocal player is behind the expected position. */
 export function getVocalDriftSec(expectedVocalTimeSec: number, actualVocalTimeSec: number): number {
     return expectedVocalTimeSec - actualVocalTimeSec

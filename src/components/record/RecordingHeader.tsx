@@ -42,14 +42,14 @@ export default function RecordingHeader({ mode, language, onLanguageToggle, onSh
             <div className="flex items-center gap-2">
                 <button
                     onClick={() => {
-                        const nextMode = mode === 'freestyle' ? 'thoughts' : mode === 'thoughts' ? 'training' : 'freestyle'
+                        const nextMode = mode === 'freestyle' ? 'thoughts' : 'freestyle'
                         navigate(`/record?mode=${nextMode}`)
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#282828] hover:bg-[#3E3E3E] rounded-full text-xs font-bold transition-all border border-white/5"
                     title={language === 'he' ? 'החלף מצב' : 'Switch Mode'}
                 >
                     <span className="w-2 h-2 rounded-full bg-[#1DB954]"></span>
-                    <span>{mode === 'freestyle' ? (language === 'he' ? 'פריסטייל' : 'Freestyle') : mode === 'thoughts' ? (language === 'he' ? 'מחשבות' : 'Thoughts') : (language === 'he' ? 'אימון' : 'Training')}</span>
+                    <span>{mode === 'freestyle' ? (language === 'he' ? 'פריסטייל' : 'Freestyle') : (language === 'he' ? 'מחשבות' : 'Thoughts')}</span>
                 </button>
                 <button
                     onClick={onShowMicSetup}

@@ -20,7 +20,7 @@ const GROUP_COLORS = [
 interface ReviewSessionModalProps<T extends DbSession> {
     isOpen: boolean
     onClose: () => void
-    onSave: (session: T) => void
+    onSave: (session: T) => void | Promise<void>
     onDiscard: () => void
     data: T
     audioBlob?: Blob | null
@@ -35,6 +35,7 @@ export default function ReviewSessionModal<T extends DbSession = DbSession>({
     // --- State ---
     const [mode, setMode] = useState<'review' | 'annotate' | 'edit_text'>('review');
     const [lyrics, setLyrics] = useState(data.metadata?.lyrics || '');
+    const [isSaving, setIsSaving] = useState(false);
 
     // Sync state with props when data changes (e.g. when opening modal or when transcript updates)
     useEffect(() => {
@@ -295,21 +296,32 @@ export default function ReviewSessionModal<T extends DbSession = DbSession>({
         setSelectedWords(new Set());
     };
 
-    const handleSaveSession = () => {
-        const finalData = { ...data };
-        if (!finalData.metadata) finalData.metadata = {};
+    const handleSaveSession = async () => {
+        if (isSaving) return;
+        setIsSaving(true);
 
-        finalData.metadata.lyrics = lyrics;
-        finalData.metadata.analysis = {
-            correctedLyrics: lyrics,
-            tokens: data.metadata?.analysis?.tokens || [],
-            rhymeSchemes: [],
-            detectedRhymeGroups: localGroups,
-            punchlines: [],
-            flowMetrics: { wpm: 0, density: 'Low' }
-        };
+        const finalData = {
+            ...data,
+            metadata: {
+                ...data.metadata,
+                lyrics,
+                analysis: {
+                    correctedLyrics: lyrics,
+                    tokens: data.metadata?.analysis?.tokens || [],
+                    rhymeSchemes: [],
+                    detectedRhymeGroups: localGroups,
+                    punchlines: [],
+                    flowMetrics: { wpm: 0, density: 'Low' }
+                }
+            }
+        } as T;
 
-        onSave(finalData);
+        try {
+            await onSave(finalData);
+        } catch (error) {
+            console.error('Session save failed', error);
+            setIsSaving(false);
+        }
     };
 
     // --- Render ---
@@ -319,50 +331,50 @@ export default function ReviewSessionModal<T extends DbSession = DbSession>({
     return (
         <Dialog open={isOpen} onClose={onClose} className="relative z-50">
             <div className="fixed inset-0 bg-black/90 backdrop-blur-sm" aria-hidden="true" />
-            <div className="fixed inset-0 flex items-center justify-center p-4">
-                <Dialog.Panel className="w-full max-w-6xl h-[90vh] bg-[#0A0A0A] rounded-3xl overflow-hidden flex flex-col border border-zinc-800 shadow-2xl">
+            <div className="fixed inset-0 flex items-center justify-center p-0 sm:p-4">
+                <Dialog.Panel className="w-full sm:max-w-6xl h-[100dvh] sm:h-[90vh] bg-[#0A0A0A] rounded-none sm:rounded-3xl overflow-hidden flex flex-col border border-zinc-800 shadow-2xl">
 
                     {/* TOP HEADER */}
-                    <div className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 bg-[#111]">
-                        <div className="flex items-center gap-4">
-                            <h2 className="text-xl font-bold text-white tracking-tight">Session Review</h2>
-                            <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-zinc-800">
+                    <div className="border-b border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-[#111] safe-top">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">סיכום הסשן</h2>
+                            <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-zinc-800 overflow-x-auto no-scrollbar">
                                 <button
                                     onClick={() => setMode('review')}
                                     className={clsx("px-3 py-1 rounded-md text-sm font-medium transition-all", mode === 'review' ? "bg-zinc-700 text-white shadow-sm" : "text-zinc-400 hover:text-white")}
                                 >
-                                    Review
+                                        סיכום
                                 </button>
                                 <button
                                     onClick={() => setMode('annotate')}
                                     className={clsx("px-3 py-1 rounded-md text-sm font-medium transition-all", mode === 'annotate' ? "bg-purple-600 text-white shadow-sm" : "text-zinc-400 hover:text-white")}
                                 >
-                                    Annotate
+                                        חרוזים
                                 </button>
                                 <button
                                     onClick={() => setMode('edit_text')}
                                     className={clsx("px-3 py-1 rounded-md text-sm font-medium transition-all", mode === 'edit_text' ? "bg-blue-600 text-white shadow-sm" : "text-zinc-400 hover:text-white")}
                                 >
-                                    Edit Text
+                                        עריכת טקסט
                                 </button>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <button onClick={onDiscard} className="p-2 hover:bg-red-900/20 text-zinc-400 hover:text-red-400 rounded-full transition-colors">
+                        <div className="flex items-center justify-end gap-2">
+                            <button disabled={isSaving} onClick={onDiscard} className="p-2 hover:bg-red-900/20 text-zinc-400 hover:text-red-400 rounded-full transition-colors disabled:opacity-40">
                                 <Trash2 size={20} />
                             </button>
-                            <button onClick={handleSaveSession} className="px-5 py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full transition-colors flex items-center gap-2">
+                            <button disabled={isSaving} onClick={handleSaveSession} className="px-5 py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                                 <Check size={18} />
-                                Save Session
+                                {isSaving ? 'שומר…' : 'שמור סשן'}
                             </button>
                         </div>
                     </div>
 
                     {/* MAIN CONTENT AREA */}
-                    <div className="flex-1 flex overflow-hidden">
+                    <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
 
                         {/* LEFT: WORKBENCH / LYRICS */}
-                        <div className="flex-1 flex flex-col relative bg-[#0A0A0A]">
+                        <div className="min-h-[45vh] md:min-h-0 md:flex-1 flex flex-col relative bg-[#0A0A0A]">
                             {/* Toolbar for Annotation Mode - Fixed at Top of Area */}
                             {mode === 'annotate' && (
                                 <div className="sticky top-0 z-20 flex gap-2 bg-[#1A1A1A]/90 backdrop-blur border-b border-zinc-700 p-3 items-center justify-between px-6">
@@ -389,14 +401,14 @@ export default function ReviewSessionModal<T extends DbSession = DbSession>({
 
                             {mode === 'edit_text' ? (
                                 <textarea
-                                    className="w-full h-full bg-[#111] p-8 text-lg font-mono text-zinc-300 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                                    className="w-full h-full min-h-[45vh] bg-[#111] p-4 sm:p-8 text-lg font-mono text-zinc-300 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                                     value={lyrics}
                                     onChange={(e) => setLyrics(e.target.value)}
                                     placeholder="Type your lyrics here..."
                                     dir="auto"
                                 />
                             ) : (
-                                <div className="flex-1 overflow-y-auto p-8 space-y-6" dir="auto">
+                                <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6" dir="auto">
                                     {structuredLyrics.map((line, lIdx) => (
                                         <div key={line.id} className="flex flex-wrap gap-x-4 gap-y-2 items-start justify-start py-1">
                                             {line.words.map((word, wIdx) => {
@@ -481,7 +493,7 @@ export default function ReviewSessionModal<T extends DbSession = DbSession>({
                         </div>
 
                         {/* RIGHT: SIDEBAR (Groups or Metadata) */}
-                        <div className="w-80 border-l border-zinc-800 bg-[#111] flex flex-col shrink-0">
+                        <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-zinc-800 bg-[#111] flex flex-col shrink-0">
                             {mode === 'annotate' ? (
                                 <div className="flex flex-col h-full">
                                     <div className="p-4 border-b border-zinc-800">

@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import SessionPlayer from '../components/library/SessionPlayer'
 import WritingSessionViewer from '../components/library/WritingSessionViewer'
 import { ChevronLeft } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { sessionRepo } from '../db/sessionRepo'
 
 export default function SessionDetailsPage() {
@@ -12,7 +12,6 @@ export default function SessionDetailsPage() {
 
     // UI State for player (kept local to page now)
     const [isPlaying, setIsPlaying] = useState(false)
-    const [_isBuffering, setIsBuffering] = useState(false)
 
     // Fetch session
     const session = useLiveQuery(
@@ -20,10 +19,12 @@ export default function SessionDetailsPage() {
         [id]
     )
 
+    const handleClose = useCallback(() => navigate('/library'), [navigate])
+    const handlePlayPause = useCallback(() => setIsPlaying(current => !current), [])
+    const handleEnded = useCallback(() => setIsPlaying(false), [])
+
     if (!id) return <div className="p-8 text-center text-subdued">Invalid Session ID</div>
     if (!session) return <div className="p-8 text-center text-subdued">Loading session...</div>
-
-    const handleClose = () => navigate('/library')
 
     // Branch: View for Writing Sessions
     if (session.type === 'writing') {
@@ -73,9 +74,8 @@ export default function SessionDetailsPage() {
                     <SessionPlayer
                         session={session}
                         isPlaying={isPlaying}
-                        onPlayPause={() => setIsPlaying(!isPlaying)}
-                        onEnded={() => setIsPlaying(false)}
-                        onLoadingChange={setIsBuffering}
+                        onPlayPause={handlePlayPause}
+                        onEnded={handleEnded}
                         onClose={handleClose}
                     />
                 </div>

@@ -17,6 +17,8 @@ import { Music, Download } from 'lucide-react'
 import {
     beatTimeFromVocal,
     chooseDriftCorrection,
+    hasPlaybackReachedEnd,
+    normalizePlaybackStart,
     vocalTimeFromBeat,
 } from '../../core/timeline'
 import { createSessionManifest, safeFileStem, vocalFileName } from '../../core/sessionManifest'
@@ -52,6 +54,7 @@ export default function SessionPlayer({
     const lastSourceKeyRef = useRef<string>('')
     const bufferingTimeoutRef = useRef<any>(null)
     const isTransitioningRef = useRef<boolean>(false)
+    const endedNotifiedRef = useRef(false)
 
     // State
     const [currentTime, setCurrentTime] = useState(0)
@@ -240,6 +243,60 @@ export default function SessionPlayer({
         }
     }, [isPlaying, connectEffects])
 
+    const finishPlayback = useCallback(() => {
+        const audio = audioRef.current
+        if (audio) {
+            audio.pause()
+            audio.playbackRate = 1
+            if (Number.isFinite(session.duration) && session.duration > 0) {
+                audio.currentTime = Math.min(session.duration, audio.duration || session.duration)
+            }
+        }
+        youtubeRef.current?.pauseVideo?.()
+        setCurrentTime(session.duration)
+        onTimeUpdate?.(session.duration)
+
+        if (!endedNotifiedRef.current) {
+            endedNotifiedRef.current = true
+            onEnded()
+        }
+    }, [onEnded, onTimeUpdate, session.duration])
+
+    const handleTogglePlayback = useCallback(() => {
+        const audio = audioRef.current
+
+        if (isPlaying) {
+            audio?.pause()
+            youtubeRef.current?.pauseVideo?.()
+            onPlayPause()
+            return
+        }
+
+        endedNotifiedRef.current = false
+        const vocalStartSec = normalizePlaybackStart(audio?.currentTime || 0, session.duration)
+        if (audio) {
+            audio.currentTime = vocalStartSec
+            audio.playbackRate = 1
+            // Keep this inside the tap so iOS allows the vocal channel to play.
+            void audio.play().catch(() => { })
+        }
+
+        if (session.beatId && youtubeRef.current) {
+            const beatStartSec = beatTimeFromVocal(
+                vocalStartSec,
+                session.beatStartTime || 0,
+                syncOffset / 1000,
+            )
+            youtubeRef.current.seekTo(beatStartSec, true)
+            youtubeRef.current.setVolume(beatVolume)
+            // Keep this inside the same tap for mobile YouTube playback.
+            youtubeRef.current.playVideo()
+        }
+
+        setCurrentTime(vocalStartSec)
+        onPlayPause()
+    }, [beatVolume, isPlaying, onPlayPause, session.beatId, session.beatStartTime, session.duration, syncOffset])
+
     // Master Clock & Sync
     useEffect(() => {
         let animationFrame: number
@@ -262,11 +319,10 @@ export default function SessionPlayer({
                 onTimeUpdate?.(targetAudioTime)
 
                 if (audio) {
-                    if (targetAudioTime >= audio.duration) {
-                        if (!audio.paused) {
-                            audio.pause()
-                            isTransitioningRef.current = false
-                        }
+                    if (hasPlaybackReachedEnd(targetAudioTime, session.duration)) {
+                        isTransitioningRef.current = false
+                        finishPlayback()
+                        return
                     } else {
                         if (audio.readyState < 2) return
 
@@ -296,17 +352,22 @@ export default function SessionPlayer({
         }
 
         if (isPlaying) {
+            endedNotifiedRef.current = false
             if (session.beatId && youtubeRef.current) {
-                const vocalStartSec = audioRef.current?.currentTime || 0
+                const vocalStartSec = normalizePlaybackStart(
+                    audioRef.current?.currentTime || 0,
+                    session.duration,
+                )
+                if (audioRef.current) audioRef.current.currentTime = vocalStartSec
                 const beatStartSec = beatTimeFromVocal(vocalStartSec, beatStartTimeSec, syncOffsetSec)
                 youtubeRef.current.seekTo(beatStartSec, true)
                 youtubeRef.current.setVolume(beatVolume)
                 youtubeRef.current.playVideo()
             } else if (!session.beatId && audioRef.current) {
-                // Reset to beginning on first play if near start
-                if (audioRef.current.currentTime < 0.5) {
-                    audioRef.current.currentTime = 0
-                }
+                audioRef.current.currentTime = normalizePlaybackStart(
+                    audioRef.current.currentTime,
+                    session.duration,
+                )
                 audioRef.current.play().catch(() => { })
             }
             loop()
@@ -319,17 +380,19 @@ export default function SessionPlayer({
         }
 
         return () => cancelAnimationFrame(animationFrame)
-    }, [beatVolume, isPlaying, onTimeUpdate, session.beatId, session.beatStartTime, syncOffset])
+    }, [beatVolume, finishPlayback, isPlaying, onTimeUpdate, session.beatId, session.beatStartTime, session.duration, syncOffset])
 
     const handleSeek = useCallback((time: number) => {
-        const beatTimeSec = beatTimeFromVocal(time, session.beatStartTime || 0, syncOffset / 1000)
+        const nextTime = Math.min(session.duration, Math.max(0, time))
+        const beatTimeSec = beatTimeFromVocal(nextTime, session.beatStartTime || 0, syncOffset / 1000)
         if (youtubeRef.current) youtubeRef.current.seekTo(beatTimeSec, true)
         if (audioRef.current) {
-            audioRef.current.currentTime = Math.max(0, time)
+            audioRef.current.currentTime = nextTime
             audioRef.current.playbackRate = 1
         }
-        setCurrentTime(time)
-    }, [session.beatStartTime, syncOffset])
+        endedNotifiedRef.current = false
+        setCurrentTime(nextTime)
+    }, [session.beatStartTime, session.duration, syncOffset])
 
     const handleSyncChange = useCallback((nextOffset: number) => {
         setSyncOffset(nextOffset)
@@ -429,7 +492,7 @@ export default function SessionPlayer({
 
     return (
         <div className="flex flex-col w-full gap-4 bg-[#181818] p-4 rounded-xl border border-[#282828]">
-            <audio ref={audioRef} onEnded={onEnded} crossOrigin="anonymous" />
+            <audio ref={audioRef} onEnded={finishPlayback} crossOrigin="anonymous" />
 
             {/* Player Controls */}
             <PlayerControls
@@ -437,7 +500,7 @@ export default function SessionPlayer({
                 isBuffering={isBuffering}
                 currentTime={currentTime}
                 duration={session.duration}
-                onPlayPause={onPlayPause}
+                onPlayPause={handleTogglePlayback}
                 onClose={onClose}
                 onSeek={handleSeek}
             />
@@ -558,6 +621,18 @@ export default function SessionPlayer({
                         onReady={(e) => {
                             youtubeRef.current = e.target;
                             e.target.setVolume(beatVolume);
+                            if (isPlaying) {
+                                const vocalStartSec = normalizePlaybackStart(
+                                    audioRef.current?.currentTime || 0,
+                                    session.duration,
+                                );
+                                e.target.seekTo(beatTimeFromVocal(
+                                    vocalStartSec,
+                                    session.beatStartTime || 0,
+                                    syncOffset / 1000,
+                                ), true);
+                                e.target.playVideo();
+                            }
                         }}
                         className="w-full h-full"
                         opts={{ height: '100%', width: '100%', playerVars: { playsinline: 1, controls: 1 } }}

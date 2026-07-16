@@ -2,6 +2,7 @@ import { youtubeWatchUrl } from './youtube'
 
 export interface ExportableSession {
     id?: number | string
+    localId?: string
     title: string
     duration: number
     createdAt: Date | string
@@ -56,7 +57,7 @@ export function createSessionManifest(session: ExportableSession, exportedAt = n
         version: 1,
         exportedAt: exportedAt.toISOString(),
         session: {
-            id: session.id ?? null,
+            id: session.localId ?? session.id ?? null,
             title: session.title,
             createdAt: safeIso(session.createdAt),
             durationSec: session.duration,

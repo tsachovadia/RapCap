@@ -62,7 +62,7 @@ export default function FreestylePage() {
 
     // Transcription
     const [isTranscribing, setIsTranscribing] = useState(false)
-    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isTranscribing, language)
+    const { transcript, interimTranscript, segments, wordSegments, resetTranscript } = useTranscription(isTranscribing, language, undefined, duration)
 
     // Beat State
     const [videoId, setVideoId] = useState(DEFAULT_BEAT_ID)

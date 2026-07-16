@@ -17,13 +17,19 @@ import {
     chunkIntoSegments,
     estimatePhraseStart
 } from '../services/transcriptProcessor'
+import { getRecognitionSessionStartMs } from '../core/transcriptionTiming'
 
 /** Default silence threshold in ms - commit interim if no change */
 const DEFAULT_SILENCE_THRESHOLD_MS = 2500
 
 export type TranscriptionStatus = 'unsupported' | 'idle' | 'starting' | 'listening' | 'blocked' | 'error'
 
-export function useTranscription(isRecording: boolean, language: 'he' | 'en' = 'he', silenceThresholdMs: number = DEFAULT_SILENCE_THRESHOLD_MS) {
+export function useTranscription(
+    isRecording: boolean,
+    language: 'he' | 'en' = 'he',
+    silenceThresholdMs: number = DEFAULT_SILENCE_THRESHOLD_MS,
+    recordingElapsedSec: number = 0,
+) {
     const isSupported = isSpeechRecognitionSupported()
     // State
     const [transcript, setTranscript] = useState('')
@@ -44,11 +50,16 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
     const isRestartingRef = useRef(false)
     const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const lastCommittedTextRef = useRef('')
+    const recordingElapsedSecRef = useRef(recordingElapsedSec)
 
     // Sync ref with prop
     useEffect(() => {
         isRecordingRef.current = isRecording
     }, [isRecording])
+
+    useEffect(() => {
+        recordingElapsedSecRef.current = recordingElapsedSec
+    }, [recordingElapsedSec])
 
     // Commit interim transcript as final segment
     const commitInterim = useCallback((reason: string = 'manual') => {
@@ -102,7 +113,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         }, silenceThresholdMs)
 
         return () => clearTimeout(timeout)
-    }, [interimTranscript, isListening, commitInterim])
+    }, [interimTranscript, isListening, commitInterim, silenceThresholdMs])
 
     // Commit on stop
     useEffect(() => {
@@ -117,15 +128,20 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
 
         if (!isSpeechRecognitionSupported()) {
             console.warn('Speech Recognition not supported')
-            setStatus('unsupported')
             return
         }
 
         let isActive = true
+        // Every effect run creates a new recognition result-index namespace.
+        // Clear state from the previous window so pause/resume does not suppress
+        // valid results that begin again at index zero.
+        processedIndexes.current.clear()
+        phraseStartRef.current = 0
+        if (isRecording) lastCommittedTextRef.current = ''
 
         // Cleanup previous
         if (recognitionRef.current) {
-            try { recognitionRef.current.abort() } catch (e) { /* ignore */ }
+            try { recognitionRef.current.abort() } catch { /* ignore */ }
         }
 
         const recognition = createRecognition(
@@ -218,7 +234,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
                             if (!isActive || !isRecordingRef.current) return
                             try {
                                 recognition?.start()
-                            } catch (e) { /* already started */ }
+                            } catch { /* already started */ }
                         }, delay)
                     } else {
                         setIsListening(false)
@@ -245,7 +261,10 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
         // Start if recording
         if (isRecording && recognition) {
             setStatus('starting')
-            startTimeRef.current = Date.now()
+            startTimeRef.current = getRecognitionSessionStartMs(
+                Date.now(),
+                recordingElapsedSecRef.current,
+            )
             try {
                 recognition.start()
             } catch (e) {
@@ -258,7 +277,7 @@ export function useTranscription(isRecording: boolean, language: 'he' | 'en' = '
             if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
             try {
                 recognition?.stop()
-            } catch (e) { /* ignore */ }
+            } catch { /* ignore */ }
             setIsListening(false)
             setStatus('idle')
         }

@@ -5,6 +5,7 @@ describe('session export manifest', () => {
     it('preserves the beat timing, transcript and moments', () => {
         const manifest = createSessionManifest({
             id: 42,
+            localId: 'stable-local-session-id',
             title: 'Night Flow',
             duration: 12.5,
             createdAt: new Date('2026-07-16T10:00:00.000Z'),
@@ -24,6 +25,7 @@ describe('session export manifest', () => {
             startTimeSec: 2.125,
             manualSyncOffsetMs: 50,
         })
+        expect(manifest.session.id).toBe('stable-local-session-id')
         expect(manifest.transcript.text).toBe('בדיקה אחת שתיים')
         expect(manifest.moments).toEqual([3.4])
     })

@@ -23,13 +23,14 @@ import { captureBeatStartTimeSec } from '../core/sessionTiming'
 import { sessionRepo } from '../db/sessionRepo'
 import { useToast } from '../contexts/ToastContext'
 import type { YouTubePlayerHandle } from '../types/youtube'
+import { resolveRecordingMode, type RecordingMode } from '../core/recordingMode'
 
-export type RecordingMode = 'freestyle' | 'thoughts'
+export type { RecordingMode } from '../core/recordingMode'
 export type { FlowState } from '../core/recordingFlow'
 
 export default function RecordPage() {
     const [searchParams] = useSearchParams()
-    const mode = (searchParams.get('mode') as RecordingMode) || 'freestyle'
+    const mode: RecordingMode = resolveRecordingMode(searchParams.get('mode'))
     const navigate = useNavigate()
     const { user } = useAuth()
     const { showToast } = useToast()
@@ -70,7 +71,7 @@ export default function RecordPage() {
         transcriptRef,
         isSupported: isLiveTranscriptionSupported,
         status: transcriptionStatus,
-    } = useTranscription(isTranscribing, language)
+    } = useTranscription(isTranscribing, language, undefined, duration)
 
     // --- Flow State ---
     const [flowState, setFlowState] = useState<FlowState>('idle')
@@ -251,13 +252,9 @@ export default function RecordPage() {
 
     const handleSaveMoment = () => {
         if (flowState !== 'recording') return // Prevent saving moments during pre-roll
-        const now = Date.now()
-        const preciseTime = recordingStartTimeRef.current > 0
-            ? (now - recordingStartTimeRef.current) / 1000
-            : duration
-
-        // Ensure we don't save 0 or negative values if the clock is weird
-        const finalTime = Math.max(0.01, preciseTime)
+        // Recorder duration excludes paused time, so markers stay aligned after
+        // any number of pause/resume cycles.
+        const finalTime = Math.max(0.01, duration)
         setMoments(prev => [...prev, finalTime])
     }
 
@@ -366,6 +363,13 @@ export default function RecordPage() {
             navigate('/library')
         } catch (e) {
             console.error('Failed to save session', e)
+            showToast(
+                language === 'he'
+                    ? 'השמירה נכשלה. ההקלטה עדיין פתוחה — אפשר לנסות שוב.'
+                    : 'Save failed. Your recording is still open, so you can try again.',
+                'error',
+            )
+            throw e
         }
     }
 
