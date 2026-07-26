@@ -25,6 +25,10 @@
           "required": ["setName"],
           "properties": {
             "setName": { "type": "string" },
+            "projectDirectory": { "type": "string" },
+            "setFile": { "type": "string" },
+            "samplesDirectory": { "type": "string" },
+            "sourceAccess": { "const": "read-only" },
             "vocalTrackName": { "type": "string" },
             "referenceTrackName": { "type": "string" },
             "tempo": { "type": ["number", "null"] },
@@ -89,7 +93,11 @@
       "type": "object",
       "required": ["durationMs"],
       "properties": {
-        "clock": { "const": "ableton-set-ms" },
+        "clock": {
+          "enum": ["ableton-set-ms", "ableton-song-beats+approx-ms"]
+        },
+        "originSongBeat": { "type": "number", "minimum": 0 },
+        "tempoAtCapture": { "type": "number", "exclusiveMinimum": 0 },
         "durationMs": { "type": "integer", "minimum": 1 },
         "vocalOffsetMs": { "type": "integer" }
       },
@@ -102,6 +110,25 @@
     "verses": {
       "type": "array",
       "items": { "$ref": "#/$defs/verse" }
+    },
+    "verseCandidates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/verseCandidate" }
+    },
+    "rawCapture": {
+      "$ref": "#/$defs/rawCapture"
+    },
+    "analysis": {
+      "type": "object",
+      "required": ["status", "audioInspected", "transcriptionStatus"],
+      "properties": {
+        "status": { "enum": ["pending", "running", "ready", "failed"] },
+        "audioInspected": { "type": "boolean" },
+        "transcriptionStatus": {
+          "enum": ["not-started", "running", "ready", "failed"]
+        }
+      },
+      "additionalProperties": false
     },
     "assets": {
       "type": "object",
@@ -161,8 +188,13 @@
             "label": { "type": "string" },
             "bpm": { "type": "number", "minimum": 1 },
             "key": { "type": "string" },
-            "source": { "enum": ["locator", "detected", "manual"] },
+            "source": {
+              "enum": ["locator", "detected", "manual", "transport"]
+            },
             "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            ,
+            "startBeat": { "type": "number", "minimum": 0 },
+            "endBeat": { "type": "number", "minimum": 0 }
           },
           "additionalProperties": false
         }
@@ -184,11 +216,129 @@
             "beatBlockIds": {
               "type": "array",
               "items": { "type": "string" }
-            }
+            },
+            "startBeat": { "type": "number", "minimum": 0 },
+            "endBeat": { "type": "number", "minimum": 0 }
           },
           "additionalProperties": false
         }
       ]
+    },
+    "verseCandidate": {
+      "allOf": [
+        { "$ref": "#/$defs/region" },
+        {
+          "type": "object",
+          "required": ["reason", "status", "beatBlockIds"],
+          "properties": {
+            "id": { "type": "string" },
+            "startMs": { "type": "integer" },
+            "endMs": { "type": "integer" },
+            "startBeat": { "type": "number", "minimum": 0 },
+            "endBeat": { "type": "number", "minimum": 0 },
+            "beatBlockIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "reason": {
+              "enum": ["tempo-change", "tempo-stable-span", "transport-seek", "transport-stop"]
+            },
+            "status": { "enum": ["unreviewed", "promoted", "dismissed"] }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "rawCapture": {
+      "type": "object",
+      "required": [
+        "mode",
+        "monitorEnabled",
+        "captureActive",
+        "samplingIntervalMs",
+        "events",
+        "completedSessions"
+      ],
+      "properties": {
+        "mode": { "const": "passive-liveapi" },
+        "monitorEnabled": { "type": "boolean" },
+        "captureActive": { "type": "boolean" },
+        "samplingIntervalMs": { "type": "integer", "minimum": 50 },
+        "checkpoint": { "type": ["string", "null"] },
+        "storageRoot": { "type": "string", "minLength": 1 },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "type",
+              "sessionId",
+              "atSongBeat",
+              "atBeat",
+              "atMs",
+              "tempo",
+              "observedAt",
+              "details"
+            ],
+            "properties": {
+              "id": { "type": "string" },
+              "type": {
+                "enum": [
+                  "transport-start",
+                  "transport-stop",
+                  "tempo-change",
+                  "transport-seek",
+                  "track-state-change"
+                ]
+              },
+              "sessionId": { "type": "string" },
+              "atSongBeat": { "type": "number" },
+              "atBeat": { "type": "number", "minimum": 0 },
+              "atMs": { "type": "integer", "minimum": 0 },
+              "tempo": { "type": "number", "exclusiveMinimum": 0 },
+              "observedAt": { "type": "string", "format": "date-time" },
+              "details": { "type": "object" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "completedSessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "durationMs",
+              "eventStartIndex",
+              "eventEndIndex",
+              "beatBlocks",
+              "verseCandidates",
+              "manualVerses"
+            ],
+            "properties": {
+              "id": { "type": "string" },
+              "durationMs": { "type": "integer", "minimum": 0 },
+              "eventStartIndex": { "type": "integer", "minimum": 0 },
+              "eventEndIndex": { "type": "integer", "minimum": 0 },
+              "beatBlocks": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/beatBlock" }
+              },
+              "verseCandidates": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/verseCandidate" }
+              },
+              "manualVerses": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/verse" }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

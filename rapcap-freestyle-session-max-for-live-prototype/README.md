@@ -7,7 +7,8 @@ This folder does not depend on, import from, or modify the current RapCap app.
 It prototypes the workflow described in
 `2026-07-16-rapcap-lean-mvp-audit`:
 
-1. Ableton/Max emits a session manifest.
+1. A runnable Max Audio Effect device marks the Ableton session and emits a
+   manifest.
 2. Long sessions are divided into labeled beat blocks.
 3. Verse timestamps are aligned to those blocks.
 4. A reviewer edits transcription, rates takes, and navigates the timeline.
@@ -55,6 +56,12 @@ web/             standalone visual prototype
 Implemented:
 
 - metadata-only YouTube reference contract;
+- a genuine `RapCap Freestyle Session.amxd` Max Audio Effect container;
+- stereo audio pass-through (the device does not record or alter audio);
+- capture start/stop, verse in/out, block in/out/type, last-verse rating;
+- passive session capture tied to Live transport, with raw event preservation;
+- automatic tempo-change blocks and separate verse candidates;
+- Live track/locator scan and metadata JSON write from the device;
 - beat/ad/interlude/silence blocks with BPM and key changes;
 - verse-to-block alignment;
 - visual transport and seek;
@@ -71,9 +78,15 @@ Not implemented yet:
 - automatic transcription;
 - Ableton `.als` parsing;
 - persistent storage;
-- a packaged `.amxd` device;
 - waveform extraction;
 - cloud sync or YouTube playback.
 
 See [SPEC.md](./SPEC.md) for the workflow and next gates.
 
+Storage decisions live in [PROJECT-MEMORY.json](./PROJECT-MEMORY.json). The
+Max device build copies that configurable project-owned destination into its
+companion config.
+
+The current integration fixture is the real read-only `Untitled Project`
+layout. See [ACTUAL-SESSION-INTEGRATION.md](./ACTUAL-SESSION-INTEGRATION.md) and
+run `npm run inspect:actual-session` for a metadata-only inspection.

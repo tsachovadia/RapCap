@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "build:m4l": "node scripts/build-max-device.mjs",
+    "inspect:actual-session": "node scripts/inspect-ableton-project.mjs --summary",
+    "fixture:actual-session": "node scripts/inspect-ableton-project.mjs --write-fixture --summary",
+    "test": "npm run build:m4l && node --test",
     "serve": "node scripts/serve.mjs"
   }
 }
-

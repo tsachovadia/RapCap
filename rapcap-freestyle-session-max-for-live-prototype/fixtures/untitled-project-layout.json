@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 1,
+  "fixtureKind": "ableton-project-layout",
+  "access": "read-only",
+  "projectDirectory": "/Users/syrianhammer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Projects/RapCap/RapCap Sessions/sessions/Untitled Project",
+  "set": {
+    "fileName": "Untitled.als",
+    "relativePath": "Untitled.als",
+    "encoding": "gzip-xml",
+    "compressedSizeBytes": 54984,
+    "uncompressedSizeBytes": 1129331,
+    "abletonSchema": {
+      "majorVersion": 5,
+      "minorVersion": "12.0_12402",
+      "creator": "Ableton Live 12.4.2"
+    },
+    "tempoBpm": 120,
+    "locators": [],
+    "tracks": [
+      {
+        "id": "16",
+        "type": "GroupTrack",
+        "effectiveName": "VOCAL BUS",
+        "userName": "VOCAL BUS",
+        "clips": []
+      },
+      {
+        "id": "14",
+        "type": "AudioTrack",
+        "effectiveName": "Vocals",
+        "userName": "Vocals",
+        "clips": []
+      },
+      {
+        "id": "15",
+        "type": "AudioTrack",
+        "effectiveName": "Vocals",
+        "userName": "Vocals",
+        "clips": []
+      },
+      {
+        "id": "19",
+        "type": "GroupTrack",
+        "effectiveName": "GSPLICE",
+        "userName": "GSPLICE",
+        "clips": []
+      },
+      {
+        "id": "18",
+        "type": "AudioTrack",
+        "effectiveName": "RECORD SPLICE",
+        "userName": "RECORD SPLICE",
+        "clips": []
+      },
+      {
+        "id": "17",
+        "type": "MidiTrack",
+        "effectiveName": "6-Splice Bridge",
+        "userName": "",
+        "clips": []
+      },
+      {
+        "id": "22",
+        "type": "GroupTrack",
+        "effectiveName": "GYOUTUBE",
+        "userName": "GYOUTUBE",
+        "clips": []
+      },
+      {
+        "id": "20",
+        "type": "AudioTrack",
+        "effectiveName": "YOUTUBE",
+        "userName": "YOUTUBE",
+        "clips": []
+      },
+      {
+        "id": "21",
+        "type": "AudioTrack",
+        "effectiveName": "RECORD YOUTUBE",
+        "userName": "RECORD YOUTUBE",
+        "clips": [
+          {
+            "name": "RECORD YOUTUBE 2",
+            "currentStartBeat": 0,
+            "currentEndBeat": 1760,
+            "relativeSamplePath": "Samples/Recorded/RECORD YOUTUBE 0002 [2026-07-26 160106].wav",
+            "originalFileSize": 232848080,
+            "defaultDurationSamples": 38808000,
+            "defaultSampleRate": 44100,
+            "referenceHandling": "metadata-only-do-not-copy-or-export"
+          }
+        ]
+      },
+      {
+        "id": "23",
+        "type": "AudioTrack",
+        "effectiveName": "10-Audio",
+        "userName": "",
+        "clips": [
+          {
+            "name": "10-Audio 1",
+            "currentStartBeat": 0,
+            "currentEndBeat": 1752,
+            "relativeSamplePath": "Samples/Recorded/10-Audio 0001 [2026-07-26 160152].wav",
+            "originalFileSize": 115894880,
+            "defaultDurationSamples": 38631600,
+            "defaultSampleRate": 44100,
+            "referenceHandling": "source-owned-read-only"
+          }
+        ]
+      },
+      {
+        "id": "24",
+        "type": "AudioTrack",
+        "effectiveName": "11-Audio",
+        "userName": "",
+        "clips": [
+          {
+            "name": "11-Audio 1",
+            "currentStartBeat": 0,
+            "currentEndBeat": 24,
+            "relativeSamplePath": "Samples/Recorded/11-Audio 0001 [2026-07-26 160832].wav",
+            "originalFileSize": 1587680,
+            "defaultDurationSamples": 529200,
+            "defaultSampleRate": 44100,
+            "referenceHandling": "source-owned-read-only"
+          }
+        ]
+      },
+      {
+        "id": "25",
+        "type": "MidiTrack",
+        "effectiveName": "12-Electric",
+        "userName": "",
+        "clips": []
+      },
+      {
+        "id": "2",
+        "type": "ReturnTrack",
+        "effectiveName": "A-Reverb",
+        "userName": "",
+        "clips": []
+      },
+      {
+        "id": "3",
+        "type": "ReturnTrack",
+        "effectiveName": "B-Compressor | Echo",
+        "userName": "",
+        "clips": []
+      }
+    ]
+  },
+  "samples": {
+    "directory": "Samples",
+    "recordedDirectory": "Samples/Recorded",
+    "fileCount": 13,
+    "nonEmptyWavCount": 7,
+    "emptyWavCount": 0,
+    "inventory": [
+      {
+        "relativePath": "Recorded/10-Audio 0001 [2026-07-26 160152].wav",
+        "extension": ".wav",
+        "sizeBytes": 115894880,
+        "role": "candidate-vocal",
+        "handling": "source-owned-read-only"
+      },
+      {
+        "relativePath": "Recorded/10-Audio 0001 [2026-07-26 160152].wav.asd",
+        "extension": ".asd",
+        "sizeBytes": 474834,
+        "role": "analysis-sidecar",
+        "handling": "metadata-only"
+      },
+      {
+        "relativePath": "Recorded/11-Audio 0001 [2026-07-26 160832].wav",
+        "extension": ".wav",
+        "sizeBytes": 1587680,
+        "role": "candidate-vocal",
+        "handling": "source-owned-read-only"
+      },
+      {
+        "relativePath": "Recorded/11-Audio 0001 [2026-07-26 160832].wav.asd",
+        "extension": ".asd",
+        "sizeBytes": 22366,
+        "role": "analysis-sidecar",
+        "handling": "metadata-only"
+      },
+      {
+        "relativePath": "Recorded/11-Audio 0002 [2026-07-26 161557].wav",
+        "extension": ".wav",
+        "sizeBytes": 1058480,
+        "role": "candidate-vocal",
+        "handling": "source-owned-read-only"
+      },
+      {
+        "relativePath": "Recorded/11-Audio 0002 [2026-07-26 161557].wav.asd",
+        "extension": ".asd",
+        "sizeBytes": 15930,
+        "role": "analysis-sidecar",
+        "handling": "metadata-only"
+      },
+      {
+        "relativePath": "Recorded/11-Audio 0003 [2026-07-26 161609].wav",
+        "extension": ".wav",
+        "sizeBytes": 264680,
+        "role": "candidate-vocal",
+        "handling": "source-owned-read-only"
+      },
+      {
+        "relativePath": "Recorded/11-Audio 0003 [2026-07-26 161609].wav.asd",
+        "extension": ".asd",
+        "sizeBytes": 6410,
+        "role": "analysis-sidecar",
+        "handling": "metadata-only"
+      },
+      {
+        "relativePath": "Recorded/11-Audio 0004 [2026-07-26 161617].wav",
+        "extension": ".wav",
+        "sizeBytes": 491696,
+        "role": "candidate-vocal",
+        "handling": "source-owned-read-only"
+      },
+      {
+        "relativePath": "Recorded/RECORD YOUTUBE 0001 [2026-07-26 160051].wav",
+        "extension": ".wav",
+        "sizeBytes": 2701712,
+        "role": "beat-reference-recording",
+        "handling": "metadata-only-do-not-copy-or-export"
+      },
+      {
+        "relativePath": "Recorded/RECORD YOUTUBE 0001 [2026-07-26 160051].wav.asd",
+        "extension": ".asd",
+        "sizeBytes": 33908,
+        "role": "analysis-sidecar",
+        "handling": "metadata-only"
+      },
+      {
+        "relativePath": "Recorded/RECORD YOUTUBE 0002 [2026-07-26 160106].wav",
+        "extension": ".wav",
+        "sizeBytes": 232848080,
+        "role": "beat-reference-recording",
+        "handling": "metadata-only-do-not-copy-or-export"
+      },
+      {
+        "relativePath": "Recorded/RECORD YOUTUBE 0002 [2026-07-26 160106].wav.asd",
+        "extension": ".asd",
+        "sizeBytes": 799596,
+        "role": "analysis-sidecar",
+        "handling": "metadata-only"
+      }
+    ]
+  },
+  "safety": {
+    "setAndSamplesAreSourceOwned": true,
+    "prototypeMayWriteSource": false,
+    "youtubeReferenceAudioMayBeCopied": false,
+    "youtubeReferenceAudioMayBeExported": false
+  }
+}

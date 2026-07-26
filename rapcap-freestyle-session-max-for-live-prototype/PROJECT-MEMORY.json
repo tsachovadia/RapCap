@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "decision": "RapCap session data is product-owned and lives inside the RapCap project directory.",
+  "status": "final",
+  "updatedAt": "2026-07-26",
+  "storage": {
+    "rootTemplate": "${RAPCAP_PROJECT_DIR}/RapCap Sessions",
+    "resolvedRootMacOS": "/Users/syrianhammer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Projects/RapCap/RapCap Sessions",
+    "configurable": true,
+    "configKey": "storage.resolvedRootMacOS",
+    "subfolders": {
+      "inbox": "inbox",
+      "sessions": "sessions",
+      "exports": "exports",
+      "templates": "templates"
+    },
+    "liveCaptureDestination": "inbox",
+    "reviewedSessionDestination": "sessions",
+    "exportDestination": "exports",
+    "templateDestination": "templates"
+  },
+  "currentSourceOfTruth": {
+    "access": "read-only",
+    "projectDirectory": "/Users/syrianhammer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Projects/RapCap/RapCap Sessions/sessions/Untitled Project",
+    "setFileName": "Untitled.als",
+    "samplesDirectoryName": "Samples",
+    "recordedSamplesSubdirectory": "Samples/Recorded",
+    "rule": "Never alter, move, rename, delete, normalize, or export this set or its samples from the prototype."
+  },
+  "agentRule": "Future agents must read this file before changing RapCap capture, persistence, export, or template paths. Keep the destination configurable and project-owned."
+}

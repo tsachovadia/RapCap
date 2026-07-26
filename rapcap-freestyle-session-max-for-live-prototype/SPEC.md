@@ -22,8 +22,9 @@ The source is an Ableton Live set with:
 - locators marking meaningful changes where available;
 - optional YouTube reference metadata entered by the creator.
 
-The Max bridge scans names and locators, accepts annotations, and emits a JSON
-manifest. It never reads or writes clip audio. The browser may attach a vocal
+The Max Audio Effect scans names and locators, accepts annotations, and emits a
+JSON manifest. It passes stereo audio through unchanged and never reads or
+writes clip audio. The browser may attach a vocal
 file selected by the user for the current tab; the file is not serialized into
 the manifest.
 
@@ -60,6 +61,10 @@ Manual edits replace them with `source: "manual"`.
 6. Filter for rated/keepable takes.
 7. export metadata JSON or hand chosen verses to a future Verse workflow.
 
+The import/export step is not required for capture. The device now opens and
+closes raw sessions automatically with Live's transport and continuously
+publishes the manifest to a Max `Dict`. Review remains a later surface.
+
 ## YouTube compliance boundary
 
 For a `youtube` beat reference:
@@ -85,17 +90,21 @@ This prototype intentionally does not play YouTube.
 
 ## Max for Live scaffold
 
-`max-for-live/rapcap_session_bridge.js` is intended for a Max `[js]` object.
-It can:
+`max-for-live/RapCap Freestyle Session.amxd` is a Max Audio Effect device
+container with `plugin~ → plugout~` stereo pass-through and a companion
+`rapcap_session_bridge.js`. It can:
 
 - scan Live track names and locators;
 - accept YouTube metadata as messages;
-- collect explicit block and verse annotations;
+- start/stop a capture against the Live transport;
+- collect explicit block and verse in/out annotations;
+- rate the most recently completed verse;
 - publish the manifest as a Max `Dict`;
 - write metadata JSON when the creator chooses a path.
 
-It does not touch device audio buffers. A packaged `.amxd` is deferred until
-the message contract is validated in an actual Live/Max environment.
+It does not touch device audio buffers. Max 9.1.4 can parse the artifact
+container; final in-Live behavioral validation still requires loading the
+device onto an Ableton audio track and exercising the LiveAPI callbacks.
 
 ## Next gates
 
@@ -106,9 +115,17 @@ the message contract is validated in an actual Live/Max environment.
 3. Add a split/merge block editor and undo history.
 4. Add a transcription adapter for the vocal track with explicit status.
 5. Persist library manifests and user-owned vocal assets locally.
-6. Package the Max bridge into `.amxd` only after Live version/API validation.
+6. After LiveAPI validation, add a self-contained frozen device or Max Project
+   so the JavaScript companion cannot be separated accidentally.
 
 The next user decision is gate 2: where classification is allowed to inspect a
 reference signal. Both paths must preserve the YouTube metadata-only export
 contract.
 
+## M4L timing limitation in this scaffold
+
+LiveAPI exposes `current_song_time` in beats. The device stores exact relative
+beat positions and also writes approximate milliseconds using the tempo at
+capture start. That approximation drifts when the Live set contains tempo
+automation. The production bridge needs a sampled tempo map or a transport
+adapter that converts every marker against Live's actual tempo timeline.
