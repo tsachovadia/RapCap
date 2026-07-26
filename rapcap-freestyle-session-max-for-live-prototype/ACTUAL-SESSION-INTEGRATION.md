@@ -1,96 +1,90 @@
-# Actual session integration: Untitled Project
+# Actual session integration: 2026-07-26 Freestyle Session 01
 
 ## Source of truth
 
-Read-only project:
+Read-only saved project:
 
 ```text
 RapCap Sessions/
   sessions/
-    Untitled Project/
-      Untitled.als
+    2026-07-26_Freestyle-Session-01 Project/
+      2026-07-26_Freestyle-Session-01.als
       Ableton Project Info/
       Samples/
         Recorded/
 ```
 
-The exact absolute path lives in `PROJECT-MEMORY.json`. The prototype must not
-modify, move, rename, delete, normalize, collect, or export this set or any
-sample beneath it.
+The saved set also references Scene 1 recordings in the sibling read-only
+`Untitled Project/Samples/Recorded` directory. Exact absolute paths live in
+`PROJECT-MEMORY.json`. The prototype must not modify, move, rename, delete,
+normalize, collect, or export either project or any sample beneath them.
 
-## Safely extractable now from the saved project
+## Session View is the grouping model
 
-The `.als` is gzip-compressed XML, so the read-only inspector can derive:
+One horizontal scene row is one freestyle session/take:
+
+- track 9 (`RECORD YOUTUBE`) contains the beat/reference;
+- tracks 10–12 contain matching vocals or additional takes;
+- scene rows 1, 2, and 3 are the current review sessions;
+- rows must never be concatenated into one inferred Arrangement timeline.
+
+The saved ALS proves that track 9, track 10, and track 11 clips occupy scene
+row 1 (`ClipSlot Id 0`). The saved file predates the complete row-2 and row-3
+recordings, so those rows are paired from the user-authoritative row order plus
+identical Ableton recording stamps and exactly matching durations. They should
+be serialized by the next save or captured live before becoming self-contained
+ALS evidence.
+
+## Current scene result
+
+| Scene row | Membership evidence | Reference/vocal alignment | Recorded beat | Bar 1 / Beat 1 candidate |
+| --- | --- | --- | --- | --- |
+| 1 | Saved ClipSlot row 1 | Start-to-start review model; exact launch offset absent | 95.2 BPM for first stable block | 00:30.83 |
+| 2 | Same `163423` stamp and 60.414512 s duration | 0.000 s | 90.9 BPM after mixed opening | 00:29.89 |
+| 3 | Same `165951` stamp and 54.685896 s duration | 0.000 s | 90.9 BPM | 00:01.17 |
+
+The saved Live tempo is 120 BPM and all saved scene tempo fields are 120 BPM.
+That is grid metadata, not proof of the recorded beat tempo. The musical values
+above come from in-memory onset autocorrelation and four-beat phase scoring.
+They are candidates until one short listening pass confirms the bar phase.
+
+Open the presentation at
+`analysis/2026-07-26-freestyle-session-01/index.html`; the same result is
+machine-readable in `analysis.json`. Neither artifact includes audio.
+
+## Safely extractable from saved files
 
 - Ableton schema/creator metadata;
-- track IDs, types, names, and hierarchy hints;
-- saved clip names and beat ranges;
-- saved tempo and locator/cue-point metadata;
-- relative sample references, declared sizes, sample counts, and sample rates;
-- file presence, extension, and byte size under `Samples`;
-- references to devices/presets (for dependency planning).
-
-Current evidence:
-
-- saved tempo: 120 BPM;
-- saved locators: none;
-- `RECORD YOUTUBE` clip: 0–1760 beats, stereo 44.1 kHz/24-bit source,
-  approximately 880 seconds;
-- `10-Audio` clip: 0–1752 beats, mono 44.1 kHz/24-bit source,
-  approximately 876 seconds;
-- shorter mono takes exist under `11-Audio`;
-- current sample inventory: 13 files, including 7 non-empty WAV files and 6
-  Ableton analysis sidecars; no zero-byte WAV remains in the saved project.
-
-During the first filesystem observation while Live was active, three zero-byte
-recording placeholders briefly existed and then disappeared. They are not part
-of the current fixture. This is concrete evidence that polling only the saved
-project cannot preserve transient recording lifecycle events.
-
-All `RECORD YOUTUBE` files are classified
-`metadata-only-do-not-copy-or-export`. The inspector records file metadata but
-does not copy, decode, transcode, mix, or export them.
+- track order, names, and Session View ClipSlot scene rows;
+- saved clip names, start/end beats, and sample references;
+- saved tempo, scene tempo, and locator metadata;
+- WAV duration, channels, sample rate, bit depth, and byte size;
+- paired recording stamps encoded by Ableton in filenames;
+- derived onset/tempo/downbeat timestamps without persisting audio.
 
 ## Requires a running M4L device during future recording
 
-A saved `.als` cannot reconstruct events that were never persisted. The live
-device is required for:
+- exact scene-fire and clip-record start/stop events;
+- the order of launches, seeks, and jumps;
+- track arm/mute state changes;
+- live tempo changes and user beat/verse taps;
+- subsecond offsets for independently recorded tracks 11 and 12;
+- append-only checkpoints before the Live set is saved.
 
-- exact transport start/stop edges during the performance;
-- seek/jump events and their order;
-- tempo changes as they occur, before a save;
-- track arm/mute state changes over time;
-- passive session boundaries and manual verse/block taps;
-- append-only event checkpoints while recording continues;
-- distinguishing raw observations from later derived candidates.
+## Requires later review/analysis
 
-## Requires later analysis, not the live metadata loop
-
-Neither saved XML nor LiveAPI transport metadata can reliably infer:
-
-- beat changes when Live tempo does not change;
-- YouTube ads;
-- musical key changes;
+- listening confirmation of each proposed Bar 1 / Beat 1;
+- ad, intro, silence, beat-change, and key-change labels;
 - vocal activity/verse boundaries;
-- transcription or quality rating.
+- transcription, editing, and ratings.
 
-Those belong in a separate post-capture analysis adapter. It may create
-derived blocks, verse candidates, and transcript segments, but must never
-rewrite the raw event log or source Ableton project.
+Those remain derived annotations. They must never rewrite raw event logs or
+source Ableton projects.
 
-## Commands
+## Command
 
-Read the current layout without writing:
+Inspect the current saved set without writing:
 
 ```bash
 npm run inspect:actual-session
 ```
-
-Regenerate the isolated metadata fixture:
-
-```bash
-npm run fixture:actual-session
-```
-
-The latter writes only `fixtures/untitled-project-layout.json` inside this
-prototype folder.

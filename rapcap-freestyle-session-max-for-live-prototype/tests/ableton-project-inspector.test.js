@@ -16,15 +16,20 @@ test("parses track, clip, tempo, and locator metadata from ALS XML", () => {
       <AudioTrack Id="21">
         <EffectiveName Value="RECORD YOUTUBE" />
         <UserName Value="RECORD YOUTUBE" />
-        <AudioClip Id="1">
-          <CurrentStart Value="0" />
-          <CurrentEnd Value="1760" />
-          <Name Value="Reference" />
-          <RelativePath Value="Samples/Recorded/RECORD YOUTUBE.wav" />
-          <OriginalFileSize Value="232848080" />
-          <DefaultDuration Value="38808000" />
-          <DefaultSampleRate Value="44100" />
-        </AudioClip>
+        <ClipSlot Id="2">
+          <ClipSlot><Value>
+            <AudioClip Id="1">
+              <CurrentStart Value="0" />
+              <CurrentEnd Value="1760" />
+              <Name Value="Reference" />
+              <RelativePath Value="Samples/Recorded/RECORD YOUTUBE.wav" />
+              <OriginalFileSize Value="232848080" />
+              <DefaultDuration Value="38808000" />
+              <DefaultSampleRate Value="44100" />
+            </AudioClip>
+          </Value></ClipSlot>
+          <HasStop Value="true" />
+        </ClipSlot>
       </AudioTrack>
       <Tempo><Manual Value="120" /></Tempo>
       <Locator Id="1"><Name Value="Verse" /><Time Value="64" /></Locator>
@@ -36,21 +41,33 @@ test("parses track, clip, tempo, and locator metadata from ALS XML", () => {
     parsed.tracks[0].clips[0].referenceHandling,
     "metadata-only-do-not-copy-or-export"
   );
+  assert.equal(parsed.tracks[0].trackOrdinal, 1);
+  assert.equal(parsed.tracks[0].clips[0].sessionViewSceneRow, 3);
   assert.deepEqual(parsed.locators, [{ name: "Verse", timeBeat: 64 }]);
 });
 
-test("recognizes the actual Untitled Project layout read-only", async () => {
+test("recognizes the latest saved Session View layout read-only", async () => {
   const inspection = await inspectAbletonProject(
     memory.currentSourceOfTruth.projectDirectory
   );
   assert.equal(inspection.access, "read-only");
-  assert.equal(inspection.set.fileName, "Untitled.als");
+  assert.equal(
+    inspection.set.fileName,
+    "2026-07-26_Freestyle-Session-01.als"
+  );
   assert.equal(inspection.samples.directory, "Samples");
   assert.equal(inspection.safety.prototypeMayWriteSource, false);
+  const referenceTrack = inspection.set.tracks.find(
+    (track) => track.effectiveName === "RECORD YOUTUBE"
+  );
+  assert.equal(referenceTrack.trackOrdinal, 9);
+  assert.equal(referenceTrack.clips[0].sessionViewSceneRow, 1);
   assert.ok(
-    inspection.set.tracks.some(
-      (track) => track.effectiveName === "RECORD YOUTUBE"
-    )
+    inspection.set.tracks
+      .filter((track) => [9, 10, 11].includes(track.trackOrdinal))
+      .every((track) =>
+        track.clips.every((clip) => clip.sessionViewSceneRow === 1)
+      )
   );
   assert.ok(
     inspection.samples.inventory.some(
@@ -60,4 +77,3 @@ test("recognizes the actual Untitled Project layout read-only", async () => {
     )
   );
 });
-

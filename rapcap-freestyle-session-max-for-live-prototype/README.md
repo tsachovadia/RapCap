@@ -70,13 +70,14 @@ Implemented:
 - filterable library card;
 - metadata-only JSON import/export;
 - Max for Live manifest bridge scaffold;
+- read-only Ableton `.als` parsing with Session View scene-row membership;
+- a scene-by-scene analysis presentation for the first real session;
 - focused contract/timeline tests.
 
 Not implemented yet:
 
 - audio classification or BPM/key detection;
 - automatic transcription;
-- Ableton `.als` parsing;
 - persistent storage;
 - waveform extraction;
 - cloud sync or YouTube playback.
@@ -87,6 +88,9 @@ Storage decisions live in [PROJECT-MEMORY.json](./PROJECT-MEMORY.json). The
 Max device build copies that configurable project-owned destination into its
 companion config.
 
-The current integration fixture is the real read-only `Untitled Project`
-layout. See [ACTUAL-SESSION-INTEGRATION.md](./ACTUAL-SESSION-INTEGRATION.md) and
+The current source of truth is the real read-only
+`2026-07-26_Freestyle-Session-01 Project`, including its read-only links to
+Scene 1 samples in `Untitled Project`. See
+[ACTUAL-SESSION-INTEGRATION.md](./ACTUAL-SESSION-INTEGRATION.md), open the
+[scene analysis](./analysis/2026-07-26-freestyle-session-01/index.html), and
 run `npm run inspect:actual-session` for a metadata-only inspection.

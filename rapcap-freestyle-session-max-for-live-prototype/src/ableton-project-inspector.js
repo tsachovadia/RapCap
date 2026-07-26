@@ -64,23 +64,32 @@ async function listFiles(root, directory = root) {
 }
 
 function parseClips(trackXml) {
-  return [...trackXml.matchAll(/<AudioClip\b[^>]*>([\s\S]*?)<\/AudioClip>/g)].map(
-    ([, clipXml]) => {
-      const relativePath = attribute(clipXml, "RelativePath");
-      return {
-        name: attribute(clipXml, "Name"),
-        currentStartBeat: numberAttribute(clipXml, "CurrentStart"),
-        currentEndBeat: numberAttribute(clipXml, "CurrentEnd"),
-        relativeSamplePath: relativePath,
-        originalFileSize: numberAttribute(clipXml, "OriginalFileSize"),
-        defaultDurationSamples: numberAttribute(clipXml, "DefaultDuration"),
-        defaultSampleRate: numberAttribute(clipXml, "DefaultSampleRate"),
-        referenceHandling: /RECORD YOUTUBE/i.test(relativePath || "")
-          ? "metadata-only-do-not-copy-or-export"
-          : "source-owned-read-only"
-      };
-    }
-  );
+  const clips = [];
+  const slotPattern =
+    /<ClipSlot\s+Id="([^"]+)"[^>]*>([\s\S]*?)<\/ClipSlot>\s*<HasStop\b/g;
+  for (const [, slotId, slotXml] of trackXml.matchAll(slotPattern)) {
+    const clipMatch = slotXml.match(
+      /<AudioClip\b[^>]*>([\s\S]*?)<\/AudioClip>/
+    );
+    if (!clipMatch) continue;
+    const clipXml = clipMatch[1];
+    const relativePath = attribute(clipXml, "RelativePath");
+    clips.push({
+      sessionViewSceneId: Number(slotId),
+      sessionViewSceneRow: Number(slotId) + 1,
+      name: attribute(clipXml, "Name"),
+      currentStartBeat: numberAttribute(clipXml, "CurrentStart"),
+      currentEndBeat: numberAttribute(clipXml, "CurrentEnd"),
+      relativeSamplePath: relativePath,
+      originalFileSize: numberAttribute(clipXml, "OriginalFileSize"),
+      defaultDurationSamples: numberAttribute(clipXml, "DefaultDuration"),
+      defaultSampleRate: numberAttribute(clipXml, "DefaultSampleRate"),
+      referenceHandling: /RECORD YOUTUBE/i.test(relativePath || "")
+        ? "metadata-only-do-not-copy-or-export"
+        : "source-owned-read-only"
+    });
+  }
+  return clips;
 }
 
 export function parseAbletonSetXml(xml) {
@@ -91,6 +100,7 @@ export function parseAbletonSetXml(xml) {
     const [, type, opening, trackXml] = match;
     const idMatch = opening.match(/\bId="([^"]+)"/);
     tracks.push({
+      trackOrdinal: tracks.length + 1,
       id: idMatch ? idMatch[1] : null,
       type,
       effectiveName: attribute(trackXml, "EffectiveName"),
@@ -202,4 +212,3 @@ export function summarizeProjectInspection(inspection) {
     emptyWavCount: inspection.samples.emptyWavCount
   };
 }
-

@@ -16,7 +16,7 @@ const projectDirectory =
 const inspection = await inspectAbletonProject(projectDirectory);
 
 if (process.argv.includes("--write-fixture")) {
-  const outputPath = join(root, "fixtures", "untitled-project-layout.json");
+  const outputPath = join(root, "fixtures", "current-project-layout.json");
   await writeFile(outputPath, `${JSON.stringify(inspection, null, 2)}\n`);
   console.error(`Wrote read-only layout fixture: ${outputPath}`);
 }
@@ -25,4 +25,3 @@ const output = process.argv.includes("--summary")
   ? summarizeProjectInspection(inspection)
   : inspection;
 console.log(JSON.stringify(output, null, 2));
-
