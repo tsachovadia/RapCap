@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "id": "rc-demo-night-drive-001",
+  "title": "Night Drive — long freestyle",
+  "createdAt": "2026-07-16T21:24:00.000Z",
+  "source": {
+    "ableton": {
+      "setName": "2026-07-16 Night Drive Freestyle",
+      "vocalTrackName": "Mic — Tsach",
+      "referenceTrackName": "Beat Reference (ephemeral)"
+    }
+  },
+  "beatReference": {
+    "kind": "youtube",
+    "videoId": "9Q2YHgVqpsQ",
+    "url": "https://www.youtube.com/watch?v=9Q2YHgVqpsQ",
+    "title": "Night Drive — beat reference",
+    "channel": "Reference producer",
+    "notes": "Metadata only. No audio is stored or exported."
+  },
+  "timeline": {
+    "clock": "ableton-set-ms",
+    "durationMs": 1540000,
+    "vocalOffsetMs": 240
+  },
+  "beatBlocks": [
+    {
+      "id": "block-01",
+      "type": "beat",
+      "label": "Intro / warm-up",
+      "startMs": 0,
+      "endMs": 198000,
+      "bpm": 86,
+      "key": "F#m",
+      "source": "locator",
+      "confidence": 1
+    },
+    {
+      "id": "block-02",
+      "type": "beat",
+      "label": "Main pocket",
+      "startMs": 198000,
+      "endMs": 482000,
+      "bpm": 86,
+      "key": "F#m",
+      "source": "detected",
+      "confidence": 0.92
+    },
+    {
+      "id": "block-03",
+      "type": "ad",
+      "label": "YouTube ad / skip",
+      "startMs": 482000,
+      "endMs": 527000,
+      "source": "manual",
+      "confidence": 1
+    },
+    {
+      "id": "block-04",
+      "type": "transition",
+      "label": "Beat switch",
+      "startMs": 527000,
+      "endMs": 574000,
+      "bpm": 92,
+      "key": "Am",
+      "source": "locator",
+      "confidence": 1
+    },
+    {
+      "id": "block-05",
+      "type": "beat",
+      "label": "Second pocket",
+      "startMs": 574000,
+      "endMs": 1092000,
+      "bpm": 92,
+      "key": "Am",
+      "source": "detected",
+      "confidence": 0.87
+    },
+    {
+      "id": "block-06",
+      "type": "silence",
+      "label": "Break / notes",
+      "startMs": 1092000,
+      "endMs": 1160000,
+      "source": "manual",
+      "confidence": 1
+    },
+    {
+      "id": "block-07",
+      "type": "beat",
+      "label": "Final run",
+      "startMs": 1160000,
+      "endMs": 1540000,
+      "bpm": 78,
+      "key": "Dm",
+      "source": "detected",
+      "confidence": 0.81
+    }
+  ],
+  "verses": [
+    {
+      "id": "verse-01",
+      "startMs": 224000,
+      "endMs": 291000,
+      "transcript": "אני מחפש את הכיס בתוך הלילה, נותן לקצב להוביל אותי פנימה",
+      "rating": 4,
+      "status": "keep"
+    },
+    {
+      "id": "verse-02",
+      "startMs": 339000,
+      "endMs": 417000,
+      "transcript": "רעיון לא גמור, אבל יש פה שתי שורות ששווה לשמור",
+      "rating": 3,
+      "status": "review"
+    },
+    {
+      "id": "verse-03",
+      "startMs": 548000,
+      "endMs": 631000,
+      "transcript": "The tempo changed, I caught the turn and landed on another frame",
+      "rating": 5,
+      "status": "keep"
+    },
+    {
+      "id": "verse-04",
+      "startMs": 760000,
+      "endMs": 842000,
+      "transcript": "תמלול גולמי לעריכה אחרי הסשן, לא בזמן הזרימה",
+      "rating": 2,
+      "status": "raw"
+    },
+    {
+      "id": "verse-05",
+      "startMs": 1230000,
+      "endMs": 1338000,
+      "transcript": "Last pass, low light, one take that might become the hook",
+      "rating": 4,
+      "status": "review"
+    }
+  ],
+  "assets": {
+    "vocal": {
+      "fileName": null,
+      "mimeType": null,
+      "durationMs": null,
+      "storage": "not-attached"
+    }
+  }
+}
+

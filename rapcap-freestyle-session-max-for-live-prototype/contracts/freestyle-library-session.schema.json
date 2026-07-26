@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rapcap.local/contracts/freestyle-library-session.schema.json",
+  "title": "RapCap Freestyle Library Session",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "beatReference",
+    "timeline",
+    "beatBlocks",
+    "verses"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "properties": {
+        "ableton": {
+          "type": "object",
+          "required": ["setName"],
+          "properties": {
+            "setName": { "type": "string" },
+            "vocalTrackName": { "type": "string" },
+            "referenceTrackName": { "type": "string" },
+            "tempo": { "type": ["number", "null"] },
+            "tracks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["index", "name"],
+                "properties": {
+                  "index": { "type": "integer", "minimum": 0 },
+                  "name": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            },
+            "locators": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "timeSec"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "timeSec": { "type": "number", "minimum": 0 }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "beatReference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "videoId", "url"],
+          "properties": {
+            "kind": { "const": "youtube" },
+            "videoId": { "type": "string" },
+            "url": { "type": "string", "format": "uri" },
+            "title": { "type": "string" },
+            "channel": { "type": "string" },
+            "notes": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "assetId", "rightsConfirmed"],
+          "properties": {
+            "kind": { "const": "localLicensed" },
+            "assetId": { "type": "string" },
+            "rightsConfirmed": { "const": true }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "timeline": {
+      "type": "object",
+      "required": ["durationMs"],
+      "properties": {
+        "clock": { "const": "ableton-set-ms" },
+        "durationMs": { "type": "integer", "minimum": 1 },
+        "vocalOffsetMs": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "beatBlocks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/beatBlock" }
+    },
+    "verses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/verse" }
+    },
+    "assets": {
+      "type": "object",
+      "properties": {
+        "vocal": {
+          "type": "object",
+          "properties": {
+            "fileName": { "type": ["string", "null"] },
+            "mimeType": { "type": ["string", "null"] },
+            "durationMs": { "type": ["integer", "null"], "minimum": 0 },
+            "storage": {
+              "enum": ["not-attached", "browser-memory-only", "local-library"]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "export": {
+      "type": "object",
+      "required": ["kind", "excluded"],
+      "properties": {
+        "kind": { "const": "metadata-only" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "excluded": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "region": {
+      "type": "object",
+      "required": ["id", "startMs", "endMs"],
+      "properties": {
+        "id": { "type": "string" },
+        "startMs": { "type": "integer", "minimum": 0 },
+        "endMs": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "beatBlock": {
+      "allOf": [
+        { "$ref": "#/$defs/region" },
+        {
+          "type": "object",
+          "required": ["type", "label"],
+          "properties": {
+            "id": { "type": "string" },
+            "startMs": { "type": "integer" },
+            "endMs": { "type": "integer" },
+            "type": {
+              "enum": ["beat", "ad", "transition", "silence", "unknown"]
+            },
+            "label": { "type": "string" },
+            "bpm": { "type": "number", "minimum": 1 },
+            "key": { "type": "string" },
+            "source": { "enum": ["locator", "detected", "manual"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "verse": {
+      "allOf": [
+        { "$ref": "#/$defs/region" },
+        {
+          "type": "object",
+          "required": ["transcript", "rating", "status"],
+          "properties": {
+            "id": { "type": "string" },
+            "startMs": { "type": "integer" },
+            "endMs": { "type": "integer" },
+            "transcript": { "type": "string" },
+            "rating": { "type": "integer", "minimum": 0, "maximum": 5 },
+            "status": { "enum": ["raw", "review", "keep", "discard"] },
+            "beatBlockIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

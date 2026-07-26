@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="RapCap metadata-first Ableton freestyle session prototype"
+    />
+    <title>RapCap Session Atlas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="grain"></div>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="RapCap Session Atlas">
+        <span class="brand-mark">RC</span>
+        <span>SESSION ATLAS <small>Max for Live lab</small></span>
+      </a>
+      <div class="top-actions">
+        <label class="button ghost">
+          Import manifest
+          <input id="manifest-input" type="file" accept="application/json" />
+        </label>
+        <button class="button primary" id="export-button">Export metadata</button>
+      </div>
+    </header>
+
+    <main>
+      <aside class="library-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Library</p>
+            <h1>Freestyle sets</h1>
+          </div>
+          <span class="count" id="session-count">01</span>
+        </div>
+
+        <div class="filter-row">
+          <button class="filter active" data-filter="all">All</button>
+          <button class="filter" data-filter="keep">Keep</button>
+          <button class="filter" data-filter="rated4">4★+</button>
+        </div>
+
+        <article class="session-card active">
+          <div class="session-art">
+            <span class="orbit orbit-one"></span>
+            <span class="orbit orbit-two"></span>
+            <span class="session-index">01</span>
+          </div>
+          <div class="session-card-copy">
+            <span class="status-dot"></span>
+            <h2 id="card-title">Loading session…</h2>
+            <p id="card-meta">Ableton metadata manifest</p>
+            <div class="mini-stats">
+              <span id="card-duration">—</span>
+              <span id="card-verses">— verses</span>
+            </div>
+          </div>
+        </article>
+
+        <div class="boundary-note">
+          <span class="boundary-icon">YT</span>
+          <div>
+            <strong>Reference, not an asset</strong>
+            <p>YouTube audio is never imported, stored, mixed, or exported.</p>
+          </div>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <div class="session-header">
+          <div>
+            <p class="eyebrow">Open session</p>
+            <h2 id="session-title">—</h2>
+            <p class="session-source" id="session-source">—</p>
+          </div>
+          <a
+            id="youtube-link"
+            class="reference-chip"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span class="reference-play">▶</span>
+            <span>
+              <small>BEAT REFERENCE</small>
+              <strong id="beat-title">—</strong>
+            </span>
+            <span class="external">↗</span>
+          </a>
+        </div>
+
+        <section class="transport-panel">
+          <div class="transport">
+            <button id="play-button" class="play-button" aria-label="Play">
+              <span id="play-icon">▶</span>
+            </button>
+            <div class="time-display">
+              <strong id="current-time">0:00</strong>
+              <span>/</span>
+              <span id="total-time">0:00</span>
+            </div>
+            <label class="vocal-loader">
+              <span>＋ Load local vocal</span>
+              <input id="vocal-input" type="file" accept="audio/*" />
+            </label>
+            <span id="vocal-status" class="vocal-status">visual preview</span>
+          </div>
+
+          <div id="timeline" class="timeline" role="slider" tabindex="0">
+            <div id="ruler" class="ruler"></div>
+            <div id="blocks-track" class="blocks-track"></div>
+            <div id="verses-track" class="verses-track"></div>
+            <div id="playhead" class="playhead"><i></i></div>
+          </div>
+
+          <div class="legend">
+            <span><i class="legend-beat"></i>Beat</span>
+            <span><i class="legend-ad"></i>Ad</span>
+            <span><i class="legend-transition"></i>Change</span>
+            <span><i class="legend-silence"></i>Silence</span>
+            <span class="legend-verse"><i></i>Verse</span>
+          </div>
+        </section>
+
+        <div class="review-grid">
+          <section class="panel block-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Beat map</p>
+                <h3>Blocks & changes</h3>
+              </div>
+              <span class="panel-count" id="block-count">0</span>
+            </div>
+            <div id="block-list" class="block-list"></div>
+          </section>
+
+          <section class="panel verse-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Review</p>
+                <h3>Verses & transcript</h3>
+              </div>
+              <span class="panel-count" id="verse-count">0</span>
+            </div>
+            <div class="verse-toolbar">
+              <label>
+                Show
+                <select id="verse-filter">
+                  <option value="all">All takes</option>
+                  <option value="keep">Keep only</option>
+                  <option value="rated4">4 stars and up</option>
+                </select>
+              </label>
+              <p id="aligned-summary">—</p>
+            </div>
+            <div id="verse-list" class="verse-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <audio id="vocal-audio"></audio>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
+
