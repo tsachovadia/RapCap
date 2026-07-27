@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "analysisId": "2026-07-26-freestyle-session-01",
+  "createdAt": "2026-07-27T10:25:00+03:00",
+  "source": {
+    "access": "read-only",
+    "projectDirectory": "/Users/syrianhammer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Projects/RapCap/RapCap Sessions/sessions/2026-07-26_Freestyle-Session-01 Project",
+    "setFile": "2026-07-26_Freestyle-Session-01.als",
+    "setSavedAt": "2026-07-27T10:03:41+03:00",
+    "setTempoBpm": 93,
+    "savedLocators": 0,
+    "sessionViewSceneCount": 11,
+    "youtubeReferenceHandling": "metadata-and-derived-timestamps-only-do-not-copy-or-export-audio"
+  },
+  "groupingModel": {
+    "view": "session",
+    "rule": "One horizontal Session View scene row is one freestyle session/take.",
+    "referenceTrackOrdinal": 9,
+    "vocalTrackOrdinals": [
+      10,
+      11,
+      12
+    ],
+    "neverTreatAs": "one-continuous-arrangement-timeline"
+  },
+  "scenes": [
+    {
+      "sceneRow": 1,
+      "membershipStatus": "saved-clip-slot-confirmed",
+      "membershipEvidence": "The saved ALS places track 9, track 10, and track 11 clips in ClipSlot Id 0.",
+      "reference": {
+        "trackOrdinal": 9,
+        "trackName": "RECORD YOUTUBE",
+        "relativeSamplePath": "../Untitled Project/Samples/Recorded/RECORD YOUTUBE 0002 [2026-07-26 160106].wav",
+        "durationSeconds": 880,
+        "channels": 2,
+        "sampleRateHz": 44100,
+        "bitsPerSample": 24
+      },
+      "vocals": [
+        {
+          "trackOrdinal": 10,
+          "trackName": "10-Audio",
+          "relativeSamplePath": "../Untitled Project/Samples/Recorded/10-Audio 0001 [2026-07-26 160152].wav",
+          "durationSeconds": 876,
+          "clipStartBeat": 0
+        },
+        {
+          "trackOrdinal": 11,
+          "trackName": "11-Audio",
+          "relativeSamplePath": "../Untitled Project/Samples/Recorded/11-Audio 0001 [2026-07-26 160832].wav",
+          "durationSeconds": 12,
+          "clipStartBeat": 0
+        }
+      ],
+      "musicalAnalysis": {
+        "scope": "first stable beat block, not the full 14:40 reference",
+        "analysisWindowSeconds": [
+          28.5,
+          88
+        ],
+        "tempoBpmEstimate": 95.2,
+        "tempoConfidence": "medium-high",
+        "bar1Beat1SecondsEstimate": 30.83,
+        "downbeatConfidence": "medium",
+        "note": "A pickup/transition is audible in the derived onset features from about 28.3 seconds; 30.83 seconds is the first full-strength four-beat-grid downbeat candidate."
+      },
+      "alignment": {
+        "reviewOffsetSeconds": 0,
+        "confidence": "row-membership-high-subsecond-low",
+        "basis": "All saved row-1 clips have CurrentStart 0, but the ALS has no historical launch event timestamps.",
+        "manualConfirmationNeeded": true
+      }
+    },
+    {
+      "sceneRow": 2,
+      "membershipStatus": "saved-clip-slot-confirmed",
+      "membershipEvidence": "The latest saved ALS places the reference and matching vocal clips in ClipSlot Id 1 (Session View row 2). Their recording stamp and duration also match.",
+      "reference": {
+        "trackOrdinal": 9,
+        "trackName": "RECORD YOUTUBE",
+        "relativeSamplePath": "Samples/Recorded/RECORD YOUTUBE 0003 [2026-07-26 163423].wav",
+        "durationSeconds": 60.414512,
+        "channels": 2,
+        "sampleRateHz": 44100,
+        "bitsPerSample": 24
+      },
+      "vocals": [
+        {
+          "trackOrdinal": 10,
+          "trackName": "10-Audio",
+          "relativeSamplePath": "Samples/Recorded/10-Audio 0002 [2026-07-26 163423].wav",
+          "durationSeconds": 60.414512
+        }
+      ],
+      "musicalAnalysis": {
+        "scope": "first stable beat block after mixed/pre-beat material",
+        "analysisWindowSeconds": [
+          29,
+          59.5
+        ],
+        "tempoBpmEstimate": 90.9,
+        "tempoConfidence": "high",
+        "bar1Beat1SecondsEstimate": 29.89,
+        "downbeatConfidence": "medium",
+        "note": "The first roughly 29 seconds contain changing or non-stable material; do not force them onto the later beat grid."
+      },
+      "alignment": {
+        "reviewOffsetSeconds": 0,
+        "confidence": "high-for-file-start",
+        "basis": "Reference and vocal filenames have the same recording stamp and their sample-derived durations are exactly equal.",
+        "manualConfirmationNeeded": false
+      }
+    },
+    {
+      "sceneRow": 3,
+      "membershipStatus": "saved-clip-slot-confirmed",
+      "membershipEvidence": "The latest saved ALS places the reference and matching vocal clips in ClipSlot Id 2 (Session View row 3). Their recording stamp and duration also match.",
+      "reference": {
+        "trackOrdinal": 9,
+        "trackName": "RECORD YOUTUBE",
+        "relativeSamplePath": "Samples/Recorded/RECORD YOUTUBE 0004 [2026-07-26 165951].wav",
+        "durationSeconds": 54.685896,
+        "channels": 2,
+        "sampleRateHz": 44100,
+        "bitsPerSample": 24
+      },
+      "vocals": [
+        {
+          "trackOrdinal": 10,
+          "trackName": "10-Audio",
+          "relativeSamplePath": "Samples/Recorded/10-Audio 0003 [2026-07-26 165951].wav",
+          "durationSeconds": 54.685896
+        }
+      ],
+      "musicalAnalysis": {
+        "scope": "stable beat across the captured scene",
+        "analysisWindowSeconds": [
+          2,
+          53
+        ],
+        "tempoBpmEstimate": 90.9,
+        "tempoConfidence": "high",
+        "bar1Beat1SecondsEstimate": 1.17,
+        "downbeatConfidence": "medium-high",
+        "note": "A weaker pickup beat is present near 0.51 seconds; the first accented four-beat-grid downbeat candidate is 1.17 seconds."
+      },
+      "alignment": {
+        "reviewOffsetSeconds": 0,
+        "confidence": "high-for-file-start",
+        "basis": "Reference and vocal filenames have the same recording stamp and their sample-derived durations are exactly equal.",
+        "manualConfirmationNeeded": false
+      }
+    }
+  ],
+  "method": {
+    "savedFacts": [
+      "ALS gzip/XML metadata, track order, ClipSlot scene IDs, clip starts, durations, sample paths, set tempo, and locators",
+      "WAV container duration, channels, sample rate, and bit depth",
+      "paired recording timestamps embedded in Ableton filenames"
+    ],
+    "derivedFeatures": [
+      "Downsampled in-memory onset-strength analysis; no audio was written into the prototype",
+      "Tempo autocorrelation over the declared stable-beat windows",
+      "Four-beat phase scoring for downbeat candidates"
+    ],
+    "notClaimed": [
+      "The 120 BPM Live set tempo is not claimed as the recorded beat tempo",
+      "No key, ad, transcript, or lyrical-quality label is asserted",
+      "No YouTube or local reference audio is copied, exported, embedded, or bundled"
+    ]
+  },
+  "needsManualOrLiveCapture": [
+    "Listen once at each proposed downbeat to confirm the musical bar phase before committing a marker.",
+    "Capture scene-fire and clip-record start times live for exact subsecond alignment, especially for independently recorded overdubs on tracks 11 and 12.",
+    "Run later analysis per scene for ads, beat/key changes, verse boundaries, transcription, and ratings without modifying the raw recordings."
+  ]
+}
