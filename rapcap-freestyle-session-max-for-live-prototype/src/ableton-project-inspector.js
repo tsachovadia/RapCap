@@ -196,6 +196,7 @@ export function summarizeProjectInspection(inspection) {
   const clips = inspection.set.tracks.flatMap((track) =>
     track.clips.map((clip) => ({
       trackId: track.id,
+      trackOrdinal: track.trackOrdinal,
       trackName: track.effectiveName,
       ...clip
     }))

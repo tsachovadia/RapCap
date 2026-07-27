@@ -1,163 +1,260 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RapCap · 2026-07-26 Freestyle Session 01</title>
+    <title>RapCap — דוח סשן פשוט</title>
     <style>
       :root {
         color-scheme: dark;
-        --paper: #10110f;
-        --panel: #181a17;
-        --line: #34382f;
-        --ink: #f4f0e6;
-        --muted: #a9ad9e;
-        --acid: #d9ff4f;
-        --violet: #a58cff;
-        --cyan: #54d8d0;
-        --warn: #ffc86b;
+        --bg: #0e0f0d;
+        --card: #171915;
+        --line: #34382e;
+        --text: #f6f3e9;
+        --muted: #aeb3a2;
+        --green: #d8ff4f;
+        --purple: #b39aff;
+        --orange: #ffc76a;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        background:
-          radial-gradient(circle at 85% 0%, #273214 0, transparent 32rem),
-          var(--paper);
-        color: var(--ink);
-        font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        color: var(--text);
+        background: radial-gradient(circle at 90% 0, #293516 0, transparent 32rem), var(--bg);
+        font-family: Arial, system-ui, sans-serif;
       }
-      main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 80px; }
-      h1, h2, p { margin-top: 0; }
-      h1 { max-width: 820px; font: 700 clamp(34px, 7vw, 72px)/0.98 system-ui; letter-spacing: -0.055em; }
-      h2 { font: 700 22px/1.2 system-ui; letter-spacing: -0.02em; }
-      .eyebrow, .tag { text-transform: uppercase; letter-spacing: .11em; font-size: 11px; font-weight: 800; }
-      .eyebrow { color: var(--acid); margin-bottom: 18px; }
-      .lede { max-width: 780px; color: #d4d6cc; font: 18px/1.55 system-ui; }
-      .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 30px 0 44px; }
-      .fact, .scene, .boundary { border: 1px solid var(--line); background: color-mix(in srgb, var(--panel), transparent 7%); border-radius: 14px; }
-      .fact { padding: 18px; }
-      .fact strong { display: block; color: var(--acid); font: 750 28px/1 system-ui; margin-bottom: 7px; }
-      .fact span { color: var(--muted); font-size: 12px; }
-      .scene { padding: 24px; margin: 16px 0; }
-      .scene-head { display: flex; gap: 20px; align-items: start; justify-content: space-between; }
-      .scene-no { color: var(--acid); font: 800 38px/1 system-ui; }
-      .tag { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 9px; color: var(--muted); }
-      .tag.saved { color: var(--acid); border-color: #5c6c27; }
-      .tag.paired { color: var(--warn); border-color: #745b2f; }
-      .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 22px 0; }
-      .metric { padding: 12px 14px; border-left: 2px solid var(--line); }
-      .metric b { display: block; font: 750 24px/1.1 system-ui; }
-      .metric small { color: var(--muted); }
-      .tracks { position: relative; margin: 23px 0 13px; }
-      .track { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 12px; margin: 8px 0; }
-      .track-label { color: var(--muted); font-size: 12px; text-align: right; }
-      .rail { position: relative; height: 34px; border-radius: 7px; overflow: hidden; background: #0d0e0c; border: 1px solid var(--line); }
-      .fill { height: 100%; min-width: 3px; background: linear-gradient(90deg, #4e6f59, var(--cyan)); }
-      .fill.vocal { background: linear-gradient(90deg, #5e4d8c, var(--violet)); }
-      .intro { position: absolute; inset: 0 auto 0 0; background: repeating-linear-gradient(135deg, #3d3523, #3d3523 6px, #211e17 6px, #211e17 12px); opacity: .95; }
-      .downbeat { position: absolute; top: -3px; bottom: -3px; width: 3px; background: var(--acid); box-shadow: 0 0 0 1px #10110f, 0 0 12px var(--acid); z-index: 2; }
-      .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-left: 120px; }
-      .note { color: #c5c8ba; font-size: 13px; margin: 16px 0 0; }
-      .boundary { padding: 22px; margin-top: 36px; }
-      .boundary ul { margin: 12px 0 0; padding-left: 20px; color: #c5c8ba; }
-      code { color: var(--acid); overflow-wrap: anywhere; }
-      footer { color: var(--muted); margin-top: 32px; font-size: 12px; }
-      @media (max-width: 720px) {
-        .facts, .metrics { grid-template-columns: 1fr; }
-        .scene-head { display: block; }
-        .tag { margin-top: 12px; }
-        .track { grid-template-columns: 72px 1fr; }
-        .axis { margin-left: 84px; }
+      main { width: min(900px, calc(100% - 28px)); margin: auto; padding: 36px 0 72px; }
+      h1 { margin: 8px 0 14px; font-size: clamp(38px, 8vw, 68px); line-height: .98; letter-spacing: -.05em; }
+      h2 { margin: 0 0 8px; font-size: 25px; }
+      p { margin: 0; line-height: 1.6; }
+      .eyebrow { color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+      .intro { max-width: 680px; color: #d4d7cc; font-size: 19px; }
+      .device, .scene, .what {
+        margin-top: 24px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: color-mix(in srgb, var(--card), transparent 5%);
+      }
+      .device { border-color: #617328; box-shadow: inset 0 0 0 1px #263111; }
+      .device-top, .scene-top, .actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .yes { color: var(--green); font-weight: 900; font-size: 15px; }
+      .button {
+        appearance: none;
+        border: 1px solid #59604d;
+        border-radius: 999px;
+        background: #252821;
+        color: var(--text);
+        padding: 10px 15px;
+        font: inherit;
+        font-weight: 750;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .button:hover, .button:focus-visible { border-color: var(--green); outline: none; }
+      .button.primary { background: var(--green); border-color: var(--green); color: #11130d; }
+      .device-note, .small { margin-top: 12px; color: var(--muted); font-size: 13px; }
+      .what ol { margin: 12px 0 0; padding-right: 22px; line-height: 1.9; color: #d8dbd0; }
+      .scene-number { color: var(--green); font-size: 40px; line-height: 1; font-weight: 900; }
+      .status { color: var(--muted); font-size: 12px; }
+      .numbers {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin: 18px 0;
+      }
+      .number { border-right: 2px solid var(--line); padding: 8px 12px; }
+      .number b { display: block; font-size: 24px; }
+      .number span { color: var(--muted); font-size: 12px; }
+      audio { width: 100%; margin: 15px 0 8px; }
+      .words-title { margin: 20px 0 8px; font-weight: 850; }
+      .words {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        min-height: 46px;
+        padding: 14px;
+        border-radius: 13px;
+        background: #10120f;
+        border: 1px solid #2b2e27;
+      }
+      .word {
+        appearance: none;
+        border: 1px solid #4b5143;
+        border-radius: 8px;
+        background: #22251f;
+        color: var(--text);
+        padding: 6px 9px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .word:hover, .word:focus-visible { border-color: var(--purple); outline: none; }
+      .word.active { background: var(--purple); border-color: var(--purple); color: #15111e; }
+      .word.uncertain { color: #b8b9b2; border-style: dashed; }
+      .warning { color: var(--orange); font-size: 12px; margin-top: 8px; }
+      .simple-result { color: #d7dacd; margin-top: 9px; }
+      footer { margin-top: 30px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+      @media (max-width: 650px) {
+        .numbers { grid-template-columns: 1fr; }
+        .number { border-right: 0; border-bottom: 1px solid var(--line); }
       }
     </style>
   </head>
   <body>
     <main>
-      <div class="eyebrow">RapCap / read-only session analysis</div>
-      <h1>Three scene rows. Three takes. Never one long timeline.</h1>
-      <p class="lede">
-        This view groups the latest freestyle material exactly as Ableton
-        Session View works: track 9 supplies the reference, and later tracks
-        hold the matching vocal takes. Markers below are analysis candidates;
-        the source set and audio were not changed or copied.
+      <div class="eyebrow">RAPCAP · הדוח הפשוט</div>
+      <h1>מה הקלטתי, איפה הביט, ואיפה המילים שלי?</h1>
+      <p class="intro">
+        כל שורה ב‑Session View היא סשן נפרד. מצאתי שלושה סשנים,
+        חיברתי בכל אחד את הקול שלך להקלטת הביט, וסימנתי נקודת התחלה מוצעת.
       </p>
 
-      <section class="facts">
-        <div class="fact"><strong>120</strong><span>Live set BPM — grid metadata, not the recorded beat</span></div>
-        <div class="fact"><strong>3</strong><span>authoritative scene rows in the review model</span></div>
-        <div class="fact"><strong>0</strong><span>saved locators in the current ALS</span></div>
+      <section class="device">
+        <div class="device-top">
+          <div>
+            <div class="yes">כן — יש מכשיר Max for Live אמיתי</div>
+            <h2>RapCap Freestyle Session.amxd</h2>
+          </div>
+          <a class="button primary" href="../../max-for-live/RapCap%20Freestyle%20Session.amxd">פתח את המכשיר</a>
+        </div>
+        <p class="device-note">
+          הדוח הזה הוא מסך צפייה, לא המכשיר עצמו. את קובץ ה‑AMXD גוררים לערוץ Audio ב‑Ableton.
+          כרגע הוא אוסף אירועי סשן וסימונים בלי לעצור את ההקלטה; הוא עדיין לא מתמלל ולא מזהה ביט אוטומטית בזמן אמת.
+        </p>
       </section>
 
-      <section class="scene">
-        <div class="scene-head">
-          <div><div class="scene-no">01</div><h2>Long freestyle session</h2></div>
-          <span class="tag saved">saved clip slots confirmed</span>
-        </div>
-        <div class="metrics">
-          <div class="metric"><b>95.2 BPM</b><small>first stable beat block</small></div>
-          <div class="metric"><b>00:30.83</b><small>Bar 1 / Beat 1 candidate</small></div>
-          <div class="metric"><b>00:00</b><small>review alignment; launch timing needs confirmation</small></div>
-        </div>
-        <div class="tracks">
-          <div class="track"><span class="track-label">T9 reference</span><div class="rail"><div class="fill" style="width:100%"></div><i class="downbeat" style="left:3.503%"></i></div></div>
-          <div class="track"><span class="track-label">T10 vocal</span><div class="rail"><div class="fill vocal" style="width:99.545%"></div><i class="downbeat" style="left:3.503%"></i></div></div>
-          <div class="track"><span class="track-label">T11 take</span><div class="rail"><div class="fill vocal" style="width:1.364%"></div></div></div>
-        </div>
-        <div class="axis"><span>00:00</span><span>14:40</span></div>
-        <p class="note">The first stable block has a pickup/transition from about 00:28.3. The first full-strength downbeat candidate is 00:30.83. The whole 14:40 file does not share one tempo.</p>
+      <section class="what">
+        <h2>מה עשיתי בפועל?</h2>
+        <ol>
+          <li>קראתי את קובץ ה‑Ableton בלי לשנות אותו.</li>
+          <li>קיבצתי הקלטות לפי שורות 1, 2 ו‑3 ב‑Session View.</li>
+          <li>הערכתי BPM ונקודת “בר 1, ביט 1”, וחיברתי נגן לקול שלך בלבד.</li>
+        </ol>
       </section>
 
-      <section class="scene">
-        <div class="scene-head">
-          <div><div class="scene-no">02</div><h2>Matched 60-second capture</h2></div>
-          <span class="tag paired">paired files · ALS not resaved</span>
+      <section class="scene" data-scene="scene1">
+        <div class="scene-top">
+          <div><div class="scene-number">01</div><h2>הסשן הארוך</h2></div>
+          <div class="status">השורה שמורה בתוך קובץ Ableton</div>
         </div>
-        <div class="metrics">
-          <div class="metric"><b>90.9 BPM</b><small>stable block after mixed material</small></div>
-          <div class="metric"><b>00:29.89</b><small>Bar 1 / Beat 1 candidate</small></div>
-          <div class="metric"><b>00:00</b><small>exact file-start pairing</small></div>
+        <div class="numbers">
+          <div class="number"><b>95.2</b><span>BPM של קטע הביט הראשון</span></div>
+          <div class="number"><b>00:30.83</b><span>התחלת הביט המוצעת</span></div>
+          <div class="number"><b>14:40</b><span>אורך הקלטת הביט</span></div>
         </div>
-        <div class="tracks">
-          <div class="track"><span class="track-label">T9 reference</span><div class="rail"><div class="fill" style="width:100%"></div><div class="intro" style="width:48.38%"></div><i class="downbeat" style="left:49.475%"></i></div></div>
-          <div class="track"><span class="track-label">T10 vocal</span><div class="rail"><div class="fill vocal" style="width:100%"></div><i class="downbeat" style="left:49.475%"></i></div></div>
+        <p class="simple-result">במילים פשוטות: יש פתיחה של כחצי דקה, ואז הביט מתייצב.</p>
+        <div class="actions">
+          <button class="button" data-action="play">▶ נגן את קטע הקול</button>
+          <button class="button" data-action="restart">↶ מההתחלה</button>
         </div>
-        <div class="axis"><span>00:00</span><span>01:00.41</span></div>
-        <p class="note">Both files carry the same Ableton recording stamp and exactly the same 60.414512-second duration. The first ~29 seconds should remain a separate mixed/pre-beat region until listened to and labeled.</p>
+        <audio controls preload="metadata"></audio>
+        <div class="words-title">המילים שלך — לחץ על מילה כדי לשמוע אותה</div>
+        <div class="words" aria-label="תמלול לחיץ"></div>
+        <p class="warning">זה תמלול אוטומטי של הטייק הקצר בערוץ 11, ולכן חלק מהמילים כנראה שגויות.</p>
       </section>
 
-      <section class="scene">
-        <div class="scene-head">
-          <div><div class="scene-no">03</div><h2>Clean matched beat capture</h2></div>
-          <span class="tag paired">paired files · ALS not resaved</span>
+      <section class="scene" data-scene="scene2">
+        <div class="scene-top">
+          <div><div class="scene-number">02</div><h2>הסשן של הדקה</h2></div>
+          <div class="status">השורה שמורה בתוך קובץ Ableton</div>
         </div>
-        <div class="metrics">
-          <div class="metric"><b>90.9 BPM</b><small>stable across the scene</small></div>
-          <div class="metric"><b>00:01.17</b><small>Bar 1 / Beat 1 candidate</small></div>
-          <div class="metric"><b>00:00</b><small>exact file-start pairing</small></div>
+        <div class="numbers">
+          <div class="number"><b>90.9</b><span>BPM</span></div>
+          <div class="number"><b>00:29.89</b><span>התחלת הביט המוצעת</span></div>
+          <div class="number"><b>01:00</b><span>אורך הסשן</span></div>
         </div>
-        <div class="tracks">
-          <div class="track"><span class="track-label">T9 reference</span><div class="rail"><div class="fill" style="width:100%"></div><i class="downbeat" style="left:2.139%"></i></div></div>
-          <div class="track"><span class="track-label">T10 vocal</span><div class="rail"><div class="fill vocal" style="width:100%"></div><i class="downbeat" style="left:2.139%"></i></div></div>
+        <p class="simple-result">במילים פשוטות: בחצי הראשון החומר משתנה; הביט היציב נכנס בערך אחרי 30 שניות.</p>
+        <div class="actions">
+          <button class="button" data-action="play">▶ נגן את הקול שלי</button>
+          <button class="button" data-action="downbeat">◎ קפוץ להתחלת הביט</button>
+          <button class="button" data-action="restart">↶ מההתחלה</button>
         </div>
-        <div class="axis"><span>00:00</span><span>00:54.69</span></div>
-        <p class="note">A weaker pickup lands near 00:00.51; the first accented four-beat-grid downbeat candidate is 00:01.17. Both files are exactly 54.685896 seconds.</p>
+        <audio controls preload="metadata"></audio>
+        <div class="words-title">המילים שלך — לחץ על מילה</div>
+        <div class="words" aria-label="תמלול לחיץ"></div>
+        <p class="warning">זה תמלול אוטומטי ראשוני, לא טקסט מאושר.</p>
       </section>
 
-      <section class="boundary">
-        <h2>What is known vs. what still needs ears or live capture</h2>
-        <ul>
-          <li><strong>Known now:</strong> saved row-1 membership, track order, WAV properties, paired file starts/durations for rows 2–3, set tempo, and absence of saved locators.</li>
-          <li><strong>Confirm once by listening:</strong> each proposed Bar 1 / Beat 1 phase and whether Scene 2's opening region is an ad, intro, or another beat block.</li>
-          <li><strong>Capture live next time:</strong> scene-fire time, clip record-start time, independently recorded T11/T12 offsets, and beat-change taps while recording continues.</li>
-          <li><strong>Safety:</strong> no reference audio is embedded here. Only metadata and derived timestamps are retained.</li>
-        </ul>
+      <section class="scene" data-scene="scene3">
+        <div class="scene-top">
+          <div><div class="scene-number">03</div><h2>הסשן הנקי</h2></div>
+          <div class="status">השורה שמורה בתוך קובץ Ableton</div>
+        </div>
+        <div class="numbers">
+          <div class="number"><b>90.9</b><span>BPM</span></div>
+          <div class="number"><b>00:01.17</b><span>התחלת הביט המוצעת</span></div>
+          <div class="number"><b>00:55</b><span>אורך הסשן</span></div>
+        </div>
+        <p class="simple-result">במילים פשוטות: זה הסשן הכי נקי — הביט נכנס כמעט מיד.</p>
+        <div class="actions">
+          <button class="button" data-action="play">▶ נגן את הקול שלי</button>
+          <button class="button" data-action="downbeat">◎ קפוץ להתחלת הביט</button>
+          <button class="button" data-action="restart">↶ מההתחלה</button>
+        </div>
+        <audio controls preload="metadata"></audio>
+        <div class="words-title">המילים שלך — לחץ על מילה</div>
+        <div class="words" aria-label="תמלול לחיץ"></div>
+        <p class="warning">זה תמלול אוטומטי ראשוני, לא טקסט מאושר.</p>
       </section>
 
       <footer>
-        Source:
-        <code>RapCap Sessions/sessions/2026-07-26_Freestyle-Session-01 Project/2026-07-26_Freestyle-Session-01.als</code>
-        · saved 2026-07-26 16:34:23 +03:00
+        לא הועתק לכאן אודיו של YouTube או של הביט. הנגנים פותחים ישירות את קובצי הקול שלך מתוך תיקיית הפרויקט המקומית.
+        נקודות הביט הן הצעות שצריך לאשר פעם אחת בהאזנה.
       </footer>
     </main>
+
+    <script src="./transcript-draft.js"></script>
+    <script>
+      const scenes = window.RAPCAP_TRANSCRIPTS;
+
+      document.querySelectorAll("[data-scene]").forEach((card) => {
+        const scene = scenes[card.dataset.scene];
+        const audio = card.querySelector("audio");
+        const wordsBox = card.querySelector(".words");
+        audio.src = scene.audioUrl;
+
+        scene.words.forEach((item, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `word${item.confidence < 0.55 ? " uncertain" : ""}`;
+          button.textContent = item.word;
+          button.dataset.index = index;
+          button.title = `נגן מ־${item.start.toFixed(2)} שניות`;
+          button.addEventListener("click", () => {
+            audio.currentTime = item.start;
+            audio.play();
+          });
+          wordsBox.appendChild(button);
+        });
+
+        card.querySelector('[data-action="play"]').addEventListener("click", () => audio.play());
+        card.querySelector('[data-action="restart"]').addEventListener("click", () => {
+          audio.currentTime = 0;
+          audio.play();
+        });
+        const downbeatButton = card.querySelector('[data-action="downbeat"]');
+        if (downbeatButton) {
+          downbeatButton.addEventListener("click", () => {
+            audio.currentTime = scene.downbeat;
+            audio.play();
+          });
+        }
+
+        audio.addEventListener("timeupdate", () => {
+          const current = scene.words.findIndex(
+            (item) => audio.currentTime >= item.start && audio.currentTime < item.end
+          );
+          wordsBox.querySelectorAll(".word").forEach((button, index) => {
+            button.classList.toggle("active", index === current);
+          });
+        });
+      });
+    </script>
   </body>
 </html>

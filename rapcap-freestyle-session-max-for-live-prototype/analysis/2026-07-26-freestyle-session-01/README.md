@@ -1,7 +1,19 @@
 # 2026-07-26 freestyle session analysis
 
-Open `index.html` for the scene-by-scene presentation. `analysis.json` is the
-machine-readable result.
+Open `index.html` for the simple Hebrew scene-by-scene presentation.
+`analysis.json` is the detailed machine-readable result.
+
+The simple presentation includes:
+
+- a direct link to the real Max for Live `.amxd` artifact;
+- a local vocal player for each scene;
+- draft word-level Hebrew transcription;
+- clickable words that seek the matching local vocal recording;
+- plain-language BPM and proposed downbeat summaries.
+
+`transcript-draft.js` contains timestamps and draft text only. It does not
+contain audio. Low-confidence words are shown with a dashed outline and should
+be edited after listening.
 
 The analysis is deliberately Session View-first:
 

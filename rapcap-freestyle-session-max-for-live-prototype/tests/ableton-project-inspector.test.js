@@ -58,17 +58,24 @@ test("recognizes the latest saved Session View layout read-only", async () => {
   assert.equal(inspection.samples.directory, "Samples");
   assert.equal(inspection.safety.prototypeMayWriteSource, false);
   const referenceTrack = inspection.set.tracks.find(
-    (track) => track.effectiveName === "RECORD YOUTUBE"
+    (track) => track.trackOrdinal === 9
+  );
+  const vocalTracks = inspection.set.tracks.filter((track) =>
+    [11, 12].includes(track.trackOrdinal)
   );
   assert.equal(referenceTrack.trackOrdinal, 9);
-  assert.equal(referenceTrack.clips[0].sessionViewSceneRow, 1);
-  assert.ok(
-    inspection.set.tracks
-      .filter((track) => [9, 10, 11].includes(track.trackOrdinal))
-      .every((track) =>
-        track.clips.every((clip) => clip.sessionViewSceneRow === 1)
+  for (const sceneRow of [1, 2, 3]) {
+    assert.ok(
+      referenceTrack.clips.some(
+        (clip) => clip.sessionViewSceneRow === sceneRow
       )
-  );
+    );
+    assert.ok(
+      vocalTracks.some((track) =>
+        track.clips.some((clip) => clip.sessionViewSceneRow === sceneRow)
+      )
+    );
+  }
   assert.ok(
     inspection.samples.inventory.some(
       (sample) =>

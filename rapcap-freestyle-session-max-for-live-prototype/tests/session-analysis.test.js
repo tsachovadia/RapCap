@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
+import vm from "node:vm";
 
 const analysisUrl = new URL(
   "../analysis/2026-07-26-freestyle-session-01/",
@@ -26,8 +27,11 @@ test("saved evidence and derived musical estimates remain distinct", () => {
     analysis.scenes[0].membershipStatus,
     "saved-clip-slot-confirmed"
   );
-  assert.match(analysis.scenes[1].membershipStatus, /unsaved-in-als/);
-  assert.match(analysis.scenes[2].membershipStatus, /unsaved-in-als/);
+  assert.ok(
+    analysis.scenes.every(
+      (scene) => scene.membershipStatus === "saved-clip-slot-confirmed"
+    )
+  );
   assert.deepEqual(
     analysis.scenes.map(
       (scene) => scene.musicalAnalysis.tempoBpmEstimate
@@ -47,7 +51,12 @@ test("saved evidence and derived musical estimates remain distinct", () => {
 
 test("analysis artifact contains no bundled audio", async () => {
   const files = await readdir(analysisUrl);
-  assert.deepEqual(files.sort(), ["README.md", "analysis.json", "index.html"]);
+  assert.deepEqual(files.sort(), [
+    "README.md",
+    "analysis.json",
+    "index.html",
+    "transcript-draft.js"
+  ]);
   assert.ok(
     files.every(
       (file) => !/\.(wav|aif|aiff|mp3|m4a|flac|ogg)$/i.test(file)
@@ -56,5 +65,28 @@ test("analysis artifact contains no bundled audio", async () => {
   assert.match(
     analysis.source.youtubeReferenceHandling,
     /do-not-copy-or-export-audio/
+  );
+});
+
+test("simple report exposes the M4L device and clickable timed words", async () => {
+  const html = await readFile(new URL("index.html", analysisUrl), "utf8");
+  assert.match(html, /RapCap%20Freestyle%20Session\.amxd/);
+  assert.match(html, /המילים שלך — לחץ על מילה/);
+
+  const transcriptSource = await readFile(
+    new URL("transcript-draft.js", analysisUrl),
+    "utf8"
+  );
+  const context = { window: {} };
+  vm.runInNewContext(transcriptSource, context);
+  const transcripts = context.window.RAPCAP_TRANSCRIPTS;
+  assert.deepEqual(Object.keys(transcripts), ["scene1", "scene2", "scene3"]);
+  assert.ok(
+    Object.values(transcripts).every(
+      (scene) =>
+        scene.audioUrl.startsWith("file:///") &&
+        scene.words.length > 0 &&
+        scene.words.every((word) => word.start >= 0 && word.end >= word.start)
+    )
   );
 });

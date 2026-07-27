@@ -28,25 +28,22 @@ One horizontal scene row is one freestyle session/take:
 - scene rows 1, 2, and 3 are the current review sessions;
 - rows must never be concatenated into one inferred Arrangement timeline.
 
-The saved ALS proves that track 9, track 10, and track 11 clips occupy scene
-row 1 (`ClipSlot Id 0`). The saved file predates the complete row-2 and row-3
-recordings, so those rows are paired from the user-authoritative row order plus
-identical Ableton recording stamps and exactly matching durations. They should
-be serialized by the next save or captured live before becoming self-contained
-ALS evidence.
+The latest ALS save (2026-07-27 10:03:41 +03:00) serializes rows 1, 2, and 3.
+Track 9 contains the three reference clips; the matching vocal clips are on
+later tracks, including tracks 11 and 12. File timestamps and durations provide
+an additional pairing check.
 
 ## Current scene result
 
 | Scene row | Membership evidence | Reference/vocal alignment | Recorded beat | Bar 1 / Beat 1 candidate |
 | --- | --- | --- | --- | --- |
 | 1 | Saved ClipSlot row 1 | Start-to-start review model; exact launch offset absent | 95.2 BPM for first stable block | 00:30.83 |
-| 2 | Same `163423` stamp and 60.414512 s duration | 0.000 s | 90.9 BPM after mixed opening | 00:29.89 |
-| 3 | Same `165951` stamp and 54.685896 s duration | 0.000 s | 90.9 BPM | 00:01.17 |
+| 2 | Saved ClipSlot row 2; same `163423` stamp and duration | 0.000 s | 90.9 BPM after mixed opening | 00:29.89 |
+| 3 | Saved ClipSlot row 3; same `165951` stamp and duration | 0.000 s | 90.9 BPM | 00:01.17 |
 
-The saved Live tempo is 120 BPM and all saved scene tempo fields are 120 BPM.
-That is grid metadata, not proof of the recorded beat tempo. The musical values
+The latest saved Live tempo is 93 BPM. That is the set grid; the musical values
 above come from in-memory onset autocorrelation and four-beat phase scoring.
-They are candidates until one short listening pass confirms the bar phase.
+They remain candidates until one short listening pass confirms the bar phase.
 
 Open the presentation at
 `analysis/2026-07-26-freestyle-session-01/index.html`; the same result is

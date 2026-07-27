@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "analysisId": "2026-07-26-freestyle-session-01",
-  "createdAt": "2026-07-26T17:38:02+03:00",
+  "createdAt": "2026-07-27T10:25:00+03:00",
   "source": {
     "access": "read-only",
     "projectDirectory": "/Users/syrianhammer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Projects/RapCap/RapCap Sessions/sessions/2026-07-26_Freestyle-Session-01 Project",
     "setFile": "2026-07-26_Freestyle-Session-01.als",
-    "setSavedAt": "2026-07-26T16:34:23+03:00",
-    "setTempoBpm": 120,
+    "setSavedAt": "2026-07-27T10:03:41+03:00",
+    "setTempoBpm": 93,
     "savedLocators": 0,
-    "sessionViewSceneCount": 8,
+    "sessionViewSceneCount": 11,
     "youtubeReferenceHandling": "metadata-and-derived-timestamps-only-do-not-copy-or-export-audio"
   },
   "groupingModel": {
@@ -74,8 +74,8 @@
     },
     {
       "sceneRow": 2,
-      "membershipStatus": "user-authoritative-row-filesystem-pair-unsaved-in-als",
-      "membershipEvidence": "The next complete track-9/track-10 pair has the identical recording stamp 2026-07-26 163423 and identical duration.",
+      "membershipStatus": "saved-clip-slot-confirmed",
+      "membershipEvidence": "The latest saved ALS places the reference and matching vocal clips in ClipSlot Id 1 (Session View row 2). Their recording stamp and duration also match.",
       "reference": {
         "trackOrdinal": 9,
         "trackName": "RECORD YOUTUBE",
@@ -114,8 +114,8 @@
     },
     {
       "sceneRow": 3,
-      "membershipStatus": "user-authoritative-row-filesystem-pair-unsaved-in-als",
-      "membershipEvidence": "The following complete track-9/track-10 pair has the identical recording stamp 2026-07-26 165951 and identical duration.",
+      "membershipStatus": "saved-clip-slot-confirmed",
+      "membershipEvidence": "The latest saved ALS places the reference and matching vocal clips in ClipSlot Id 2 (Session View row 3). Their recording stamp and duration also match.",
       "reference": {
         "trackOrdinal": 9,
         "trackName": "RECORD YOUTUBE",
@@ -172,7 +172,6 @@
   },
   "needsManualOrLiveCapture": [
     "Listen once at each proposed downbeat to confirm the musical bar phase before committing a marker.",
-    "Save the Live set or capture LiveAPI clip-slot events so scene rows 2 and 3 become serialized evidence rather than filesystem pairing evidence.",
     "Capture scene-fire and clip-record start times live for exact subsecond alignment, especially for independently recorded overdubs on tracks 11 and 12.",
     "Run later analysis per scene for ads, beat/key changes, verse boundaries, transcription, and ratings without modifying the raw recordings."
   ]
